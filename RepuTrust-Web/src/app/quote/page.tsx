@@ -1,5 +1,6 @@
 "use client";
 
+import Footer from "@/components/common/Footer";
 import Header from "@/components/common/Header";
 import { useRouter } from "next/navigation";
 
@@ -83,7 +84,7 @@ export default function QuotePage() {
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
+              gridTemplateColumns: "repeat(auto-fit, minmax(min(260px, 100%), 1fr))",
               gap: "1.5rem",
               marginBottom: "3rem",
             }}
@@ -100,11 +101,11 @@ export default function QuotePage() {
                   gap: "1.5rem",
                   position: "relative",
                   backgroundColor: plan.highlight
-                    ? "rgba(78,205,196,0.06)"
-                    : "rgba(255,255,255,0.03)",
+                    ? "rgba(68,121,218,0.06)"
+                    : "var(--color-surface)",
                   border: plan.highlight
-                    ? "1px solid rgba(78,205,196,0.4)"
-                    : "1px solid rgba(255,255,255,0.08)",
+                    ? "1px solid rgba(68,121,218,0.35)"
+                    : "1px solid var(--color-border)",
                 }}
               >
                 {plan.highlight && (
@@ -114,8 +115,8 @@ export default function QuotePage() {
                       top: "-0.75rem",
                       left: "50%",
                       transform: "translateX(-50%)",
-                      backgroundColor: "#4ECDC4",
-                      color: "#000",
+                      backgroundColor: "var(--color-primary)",
+                      color: "#fff",
                       fontSize: "0.6875rem",
                       fontWeight: 700,
                       padding: "0.2rem 0.875rem",
@@ -144,7 +145,7 @@ export default function QuotePage() {
                     style={{
                       fontSize: "2rem",
                       fontWeight: 800,
-                      color: plan.highlight ? "#4ECDC4" : "var(--color-foreground)",
+                      color: plan.highlight ? "var(--color-primary)" : "var(--color-foreground)",
                       marginBottom: "0.5rem",
                       lineHeight: 1,
                     }}
@@ -168,7 +169,7 @@ export default function QuotePage() {
                         color: "var(--color-foreground)",
                       }}
                     >
-                      <span style={{ color: "#4ECDC4", flexShrink: 0, marginTop: "0.05rem" }}>✓</span>
+                      <span style={{ color: "var(--color-primary)", flexShrink: 0, marginTop: "0.05rem" }}>✓</span>
                       {f}
                     </li>
                   ))}
@@ -185,9 +186,9 @@ export default function QuotePage() {
                           fontWeight: 700,
                           padding: "0.75rem",
                           borderRadius: "0.5rem",
-                          border: "1px solid rgba(78,205,196,0.4)",
+                          border: "1px solid rgba(68,121,218,0.35)",
                           backgroundColor: "transparent",
-                          color: "#4ECDC4",
+                          color: "var(--color-primary)",
                           cursor: "pointer",
                           transition: "all 0.3s",
                           fontSize: "0.9375rem",
@@ -203,25 +204,7 @@ export default function QuotePage() {
         </div>
       </main>
 
-      <footer
-        style={{
-          padding: "2rem 1.5rem",
-          borderTop: "1px solid rgba(255,255,255,0.08)",
-          backgroundColor: "var(--color-surface)",
-        }}
-      >
-        <div
-          style={{
-            maxWidth: "72rem",
-            margin: "0 auto",
-            textAlign: "center",
-            color: "var(--color-muted)",
-            fontSize: "0.875rem",
-          }}
-        >
-          <p>&copy; 2025 RepuTrust. All rights reserved.</p>
-        </div>
-      </footer>
+      <Footer />
     </div>
   );
 }

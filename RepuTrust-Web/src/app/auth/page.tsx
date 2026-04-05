@@ -2,13 +2,14 @@
 
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import Footer from "@/components/common/Footer";
 import Header from "@/components/common/Header";
 
 // 5 steps: 1=account, 2=otp, 3=information, 4=linkedin, 5=notifications
 type Step = 1 | 2 | 3 | 4 | 5;
 
 const MOCK_PROFILES = [
-  { initials: "JD", bg: "linear-gradient(135deg, #4ECDC4, #2BABA0)", name: "John Doe", title: "CEO · London, UK" },
+  { initials: "JD", bg: "linear-gradient(135deg, #4479DA, #48D4B8)", name: "John Doe", title: "CEO · London, UK" },
   { initials: "JD", bg: "linear-gradient(135deg, #7B6CF6, #5A4BD1)", name: "Jonathan Davies", title: "Financial Analyst · New York, US" },
   { initials: "JD", bg: "linear-gradient(135deg, #FF8C42, #E06A1A)", name: "James Douglas", title: "Marketing Director · Berlin, DE" },
 ];
@@ -31,8 +32,8 @@ const inputStyle: React.CSSProperties = {
   width: "100%",
   padding: "0.625rem 1rem",
   borderRadius: "0.5rem",
-  border: "1px solid rgba(255,255,255,0.1)",
-  backgroundColor: "rgba(13,17,23,0.6)",
+  border: "1px solid var(--color-border)",
+  backgroundColor: "#ffffff",
   color: "var(--color-foreground)",
   outline: "none",
   boxSizing: "border-box",
@@ -63,7 +64,7 @@ function Shell({ step, children }: { step: number; children: React.ReactNode }) 
                   key={i}
                   style={{
                     flex: 1, height: "0.3rem", borderRadius: "9999px",
-                    backgroundColor: i < step ? "#4ECDC4" : "rgba(255,255,255,0.1)",
+                    backgroundColor: i < step ? "var(--color-primary)" : "rgba(15,23,42,0.06)",
                     transition: "background-color 0.3s",
                   }}
                 />
@@ -73,11 +74,7 @@ function Shell({ step, children }: { step: number; children: React.ReactNode }) 
           </div>
         </div>
       </main>
-      <footer style={{ padding: "2rem 1.5rem", borderTop: "1px solid rgba(255,255,255,0.08)", backgroundColor: "var(--color-surface)" }}>
-        <div style={{ maxWidth: "72rem", margin: "0 auto", textAlign: "center", color: "var(--color-muted)", fontSize: "0.875rem" }}>
-          <p>&copy; 2025 RepuTrust. All rights reserved.</p>
-        </div>
-      </footer>
+      <Footer />
     </div>
   );
 }
@@ -210,10 +207,10 @@ export default function AuthPage() {
           </button>
         </form>
 
-        <div style={{ marginTop: "1.5rem", paddingTop: "1.5rem", borderTop: "1px solid rgba(255,255,255,0.1)" }}>
+        <div style={{ marginTop: "1.5rem", paddingTop: "1.5rem", borderTop: "1px solid var(--color-border)" }}>
           <button
             onClick={advance}
-            style={{ width: "100%", padding: "0.625rem 1rem", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "0.5rem", backgroundColor: "transparent", color: "var(--color-foreground)", cursor: "pointer", fontWeight: 500, fontSize: "0.9375rem" }}
+            style={{ width: "100%", padding: "0.625rem 1rem", border: "1px solid var(--color-border)", borderRadius: "0.5rem", backgroundColor: "transparent", color: "var(--color-foreground)", cursor: "pointer", fontWeight: 500, fontSize: "0.9375rem" }}
           >
             Continue with LinkedIn
           </button>
@@ -221,7 +218,7 @@ export default function AuthPage() {
 
         <p style={{ textAlign: "center", marginTop: "1.25rem", color: "var(--color-muted)", fontSize: "0.875rem" }}>
           Already have an account?{" "}
-          <a href="/login" style={{ color: "#4ECDC4", fontWeight: 500, textDecoration: "none" }}>Sign in</a>
+          <a href="/login" style={{ color: "var(--color-primary)", fontWeight: 500, textDecoration: "none" }}>Sign in</a>
         </p>
       </Shell>
     );
@@ -234,8 +231,8 @@ export default function AuthPage() {
     return (
       <Shell step={step}>
         <div style={{ textAlign: "center", marginBottom: "1.75rem" }}>
-          <div style={{ width: "3.5rem", height: "3.5rem", borderRadius: "50%", backgroundColor: "rgba(78,205,196,0.1)", border: "1px solid rgba(78,205,196,0.25)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 1.25rem" }}>
-            <svg width="22" height="22" fill="none" stroke="#4ECDC4" viewBox="0 0 24 24">
+          <div style={{ width: "3.5rem", height: "3.5rem", borderRadius: "50%", backgroundColor: "rgba(68,121,218,0.08)", border: "1px solid rgba(68,121,218,0.22)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 1.25rem" }}>
+            <svg width="22" height="22" fill="none" stroke="var(--color-primary)" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
             </svg>
           </div>
@@ -261,18 +258,18 @@ export default function AuthPage() {
               onChange={(e) => handleOtpChange(i, e.target.value)}
               onKeyDown={(e) => handleOtpKey(i, e)}
               style={{
-                width: "3rem",
-                height: "3.5rem",
+                width: "min(3rem, 13vw)",
+                height: "min(3.5rem, 14vw)",
                 textAlign: "center",
-                fontSize: "1.5rem",
+                fontSize: "clamp(1rem, 4vw, 1.5rem)",
                 fontWeight: 700,
                 borderRadius: "0.5rem",
-                border: `1px solid ${digit ? "#4ECDC4" : "rgba(255,255,255,0.1)"}`,
-                backgroundColor: "rgba(13,17,23,0.6)",
+                border: `1px solid ${digit ? "var(--color-primary)" : "var(--color-border)"}`,
+                backgroundColor: "#ffffff",
                 color: "var(--color-foreground)",
                 outline: "none",
                 transition: "border-color 0.2s",
-                caretColor: "#4ECDC4",
+                caretColor: "var(--color-primary)",
               }}
             />
           ))}
@@ -294,7 +291,7 @@ export default function AuthPage() {
           Didn&apos;t receive it?{" "}
           <button
             onClick={() => setOtp(["", "", "", "", "", ""])}
-            style={{ color: "#4ECDC4", fontWeight: 500, background: "none", border: "none", cursor: "pointer", fontSize: "0.875rem", padding: 0 }}
+            style={{ color: "var(--color-primary)", fontWeight: 500, background: "none", border: "none", cursor: "pointer", fontSize: "0.875rem", padding: 0 }}
           >
             Resend code
           </button>
@@ -320,20 +317,20 @@ export default function AuthPage() {
             <label style={{ cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: "0.5rem" }}>
               <div style={{
                 width: "5rem", height: "5rem", borderRadius: "50%",
-                border: `2px dashed ${avatar ? "#4ECDC4" : "rgba(255,255,255,0.2)"}`,
-                backgroundColor: "rgba(13,17,23,0.6)",
+                border: `2px dashed ${avatar ? "var(--color-primary)" : "rgba(148,163,184,0.5)"}`,
+                backgroundColor: "#ffffff",
                 display: "flex", alignItems: "center", justifyContent: "center",
                 overflow: "hidden", transition: "border-color 0.2s",
               }}>
                 {avatar ? (
                   <img src={avatar} alt="Profile" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                 ) : (
-                  <svg width="28" height="28" fill="none" stroke="rgba(255,255,255,0.3)" viewBox="0 0 24 24">
+                  <svg width="28" height="28" fill="none" stroke="rgba(100,116,139,0.5)" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                   </svg>
                 )}
               </div>
-              <span style={{ fontSize: "0.8125rem", color: "#4ECDC4", fontWeight: 500 }}>
+              <span style={{ fontSize: "0.8125rem", color: "var(--color-primary)", fontWeight: 500 }}>
                 {avatar ? "Change photo" : "Upload photo"}
               </span>
               <input
@@ -359,15 +356,15 @@ export default function AuthPage() {
             <select
               value={nationality}
               onChange={(e) => setNationality(e.target.value)}
-              style={{ ...inputStyle, appearance: "none", WebkitAppearance: "none", paddingRight: "2.5rem", color: nationality ? "var(--color-foreground)" : "rgba(255,255,255,0.35)" }}
+              style={{ ...inputStyle, appearance: "none", WebkitAppearance: "none", paddingRight: "2.5rem", color: nationality ? "var(--color-foreground)" : "var(--color-muted)" }}
               required
             >
               <option value="" disabled hidden>Nationality</option>
               {NATIONALITIES.map((n) => (
-                <option key={n} value={n} style={{ backgroundColor: "#0D1117", color: "var(--color-foreground)" }}>{n}</option>
+                <option key={n} value={n} style={{ backgroundColor: "#ffffff", color: "var(--color-foreground)" }}>{n}</option>
               ))}
             </select>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.4)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(100,116,139,0.6)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
               style={{ position: "absolute", right: "1rem", top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }}>
               <polyline points="6 9 12 15 18 9" />
             </svg>
@@ -377,13 +374,13 @@ export default function AuthPage() {
             type="date"
             value={dob}
             onChange={(e) => setDob(e.target.value)}
-            style={{ ...inputStyle, colorScheme: "dark", color: dob ? "var(--color-foreground)" : "rgba(255,255,255,0.35)" }}
+            style={{ ...inputStyle, colorScheme: "light", color: dob ? "var(--color-foreground)" : "var(--color-muted)" }}
           />
 
           <div style={{ position: "relative" }}>
             <input type="text" value={keywords} onChange={(e) => setKeywords(e.target.value)} style={{ ...inputStyle, paddingRight: "2.75rem" }} placeholder="Keywords" required />
             <div title="Add terms that might appear alongside your name in negative content, e.g. fraud, bankruptcy, scam"
-              style={{ position: "absolute", right: "0.875rem", top: "50%", transform: "translateY(-50%)", cursor: "help", color: "rgba(255,255,255,0.4)", display: "flex" }}>
+              style={{ position: "absolute", right: "0.875rem", top: "50%", transform: "translateY(-50%)", cursor: "help", color: "var(--color-muted)", display: "flex" }}>
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <circle cx="12" cy="12" r="10" /><line x1="12" y1="16" x2="12" y2="12" /><line x1="12" y1="8" x2="12.01" y2="8" />
               </svg>
@@ -392,14 +389,14 @@ export default function AuthPage() {
 
           <label style={{ display: "flex", alignItems: "flex-start", gap: "0.75rem", cursor: "pointer", marginTop: "0.25rem" }}>
             <input type="checkbox" checked={termsAccepted} onChange={(e) => setTermsAccepted(e.target.checked)}
-              style={{ width: "1rem", height: "1rem", accentColor: "#4ECDC4", marginTop: "0.15rem", flexShrink: 0 }} required />
+              style={{ width: "1rem", height: "1rem", accentColor: "var(--color-primary)", marginTop: "0.15rem", flexShrink: 0 }} required />
             <span style={{ fontSize: "0.8125rem", color: "var(--color-muted)", lineHeight: 1.55 }}>
               By clicking Verify, you agree to our{" "}
-              <a href="#" style={{ color: "#4ECDC4", textDecoration: "none" }}>Terms</a>.{" "}
+              <a href="#" style={{ color: "var(--color-primary)", textDecoration: "none" }}>Terms</a>.{" "}
               Learn how we collect, use and share your data in our{" "}
-              <a href="#" style={{ color: "#4ECDC4", textDecoration: "none" }}>Privacy Policy</a>{" "}
+              <a href="#" style={{ color: "var(--color-primary)", textDecoration: "none" }}>Privacy Policy</a>{" "}
               and how we use cookies in our{" "}
-              <a href="#" style={{ color: "#4ECDC4", textDecoration: "none" }}>Cookies Policy</a>.
+              <a href="#" style={{ color: "var(--color-primary)", textDecoration: "none" }}>Cookies Policy</a>.
             </span>
           </label>
 
@@ -442,7 +439,7 @@ export default function AuthPage() {
         <div style={{ display: "flex", gap: "0.75rem" }}>
           <button
             onClick={() => setProfileIndex((i) => (i + 1) % MOCK_PROFILES.length)}
-            style={{ flex: 1, padding: "0.75rem", borderRadius: "9999px", border: "1px solid rgba(255,255,255,0.15)", backgroundColor: "transparent", color: "var(--color-foreground)", fontWeight: 700, fontSize: "0.9375rem", cursor: "pointer", letterSpacing: "0.05em" }}
+            style={{ flex: 1, padding: "0.75rem", borderRadius: "9999px", border: "1px solid var(--color-border)", backgroundColor: "transparent", color: "var(--color-foreground)", fontWeight: 700, fontSize: "0.9375rem", cursor: "pointer", letterSpacing: "0.05em" }}
           >
             NO
           </button>
@@ -459,8 +456,8 @@ export default function AuthPage() {
   return (
     <Shell step={step}>
       <div style={{ textAlign: "center", marginBottom: "1.75rem" }}>
-        <div style={{ width: "3.5rem", height: "3.5rem", borderRadius: "50%", backgroundColor: "rgba(78,205,196,0.1)", border: "1px solid rgba(78,205,196,0.25)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 1.25rem" }}>
-          <svg width="22" height="22" fill="none" stroke="#4ECDC4" viewBox="0 0 24 24">
+        <div style={{ width: "3.5rem", height: "3.5rem", borderRadius: "50%", backgroundColor: "rgba(68,121,218,0.08)", border: "1px solid rgba(68,121,218,0.22)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 1.25rem" }}>
+          <svg width="22" height="22" fill="none" stroke="var(--color-primary)" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
           </svg>
         </div>
@@ -474,11 +471,11 @@ export default function AuthPage() {
 
       {notifStatus === "idle" && (
         <>
-          <div style={{ borderRadius: "0.75rem", backgroundColor: "rgba(78,205,196,0.05)", border: "1px solid rgba(78,205,196,0.15)", padding: "1.25rem", marginBottom: "1.5rem" }}>
+          <div style={{ borderRadius: "0.75rem", backgroundColor: "rgba(68,121,218,0.05)", border: "1px solid rgba(68,121,218,0.15)", padding: "1.25rem", marginBottom: "1.5rem" }}>
             <ul style={{ display: "flex", flexDirection: "column", gap: "0.625rem", margin: 0, padding: 0, listStyle: "none" }}>
               {["New critical links detected", "ReputScore is ready", "Removal request resolved"].map((item) => (
                 <li key={item} style={{ display: "flex", alignItems: "center", gap: "0.625rem", fontSize: "0.875rem", color: "var(--color-foreground)" }}>
-                  <span style={{ color: "#4ECDC4", flexShrink: 0 }}>✓</span> {item}
+                  <span style={{ color: "var(--color-primary)", flexShrink: 0 }}>✓</span> {item}
                 </li>
               ))}
             </ul>
@@ -493,7 +490,7 @@ export default function AuthPage() {
           </button>
           <button
             onClick={goToDashboard}
-            style={{ width: "100%", fontWeight: 500, padding: "0.75rem", borderRadius: "9999px", border: "1px solid rgba(255,255,255,0.1)", backgroundColor: "transparent", color: "var(--color-muted)", cursor: "pointer", fontSize: "0.9375rem" }}
+            style={{ width: "100%", fontWeight: 500, padding: "0.75rem", borderRadius: "9999px", border: "1px solid var(--color-border)", backgroundColor: "transparent", color: "var(--color-muted)", cursor: "pointer", fontSize: "0.9375rem" }}
           >
             Skip for now
           </button>
@@ -521,7 +518,7 @@ export default function AuthPage() {
           <div style={{ textAlign: "center", padding: "1rem 0", marginBottom: "1.75rem" }}>
             <p style={{ color: "var(--color-muted)", fontSize: "0.875rem", lineHeight: 1.6 }}>
               Notifications were blocked. You&apos;re already signed in — you can enable them any time from your browser settings or under{" "}
-              <a href="/settings" style={{ color: "#4ECDC4", textDecoration: "none" }}>Settings</a>.
+              <a href="/settings" style={{ color: "var(--color-primary)", textDecoration: "none" }}>Settings</a>.
             </p>
           </div>
           <button onClick={goToDashboard} className="glow-button"

@@ -1,121 +1,240 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 
 export default function Header() {
   const router = useRouter();
   const [isAuthed, setIsAuthed] = useState(false);
+  const [scrolled, setScrolled] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
 
   useEffect(() => {
     try {
       setIsAuthed(localStorage.getItem("reput_authed") === "true");
     } catch {}
+
+    const onScroll = () => setScrolled(window.scrollY > 8);
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
+  // Close drawer on route change / resize
+  useEffect(() => {
+    if (!drawerOpen) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setDrawerOpen(false); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [drawerOpen]);
+
   const signOut = () => {
-    try {
-      localStorage.clear();
-    } catch {}
+    try { localStorage.clear(); } catch {}
     setIsAuthed(false);
+    setDrawerOpen(false);
     window.dispatchEvent(new Event("reput-auth-change"));
     router.push("/");
   };
 
+  const close = () => setDrawerOpen(false);
+
+  const navLinkStyle: React.CSSProperties = {
+    color: "var(--color-muted)",
+    fontSize: "0.875rem",
+    fontWeight: 500,
+    textDecoration: "none",
+    transition: "color 0.2s",
+  };
+
+  const drawerLinkStyle: React.CSSProperties = {
+    display: "block",
+    padding: "0.75rem 0",
+    fontSize: "0.875rem",
+    fontWeight: 500,
+    color: "var(--color-muted)",
+    textDecoration: "none",
+    transition: "color 0.2s",
+  };
+
   return (
-    <header
-      style={{
-        backgroundColor: "rgba(10, 14, 26, 0.85)",
-        backdropFilter: "blur(12px)",
-        WebkitBackdropFilter: "blur(12px)",
-        borderBottom: "1px solid rgba(255,255,255,0.08)",
-        position: "fixed",
-        top: 0,
-        left: 0,
-        right: 0,
-        width: "100%",
-        zIndex: 50,
-      }}
-    >
-      <nav
+    <>
+      <header
         style={{
-          margin: "0 auto",
-          height: "4.5rem",
-          padding: "0 2rem",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
+          position: "fixed",
+          top: 0, left: 0, right: 0,
+          width: "100%",
+          zIndex: 50,
+          backgroundColor: scrolled ? "rgba(255,255,255,0.72)" : "rgba(255,255,255,0.85)",
+          backdropFilter: "saturate(180%) blur(20px)",
+          WebkitBackdropFilter: "saturate(180%) blur(20px)",
+          borderBottom: scrolled ? "1px solid rgba(0,0,0,0.08)" : "1px solid rgba(0,0,0,0.04)",
+          transition: "background-color 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease",
+          boxShadow: scrolled ? "0 1px 24px rgba(0,0,0,0.06)" : "none",
         }}
       >
-        {/* Logo */}
-        <Link href="/" style={{ display: "flex", alignItems: "center", flexShrink: 0 }}>
-          <Image
-            src="/images/logo-white.png"
-            alt="RepuTrust Logo"
-            width={220}
-            height={66}
-            style={{ height: "2rem", width: "auto" }}
-            priority
-          />
-        </Link>
-
-        {/* Right side */}
-        <div style={{ display: "flex", alignItems: "center", gap: "2rem" }}>
-          {isAuthed && (
-            <Link
-              href="/dashboard"
-              className="header-nav-link"
-              style={{ color: "var(--color-muted)", fontSize: "0.875rem", fontWeight: 500, textDecoration: "none", transition: "color 0.2s" }}
-            >
-              Scanner
-            </Link>
-          )}
-
-          <Link
-            href="/quote"
-            className="header-nav-link"
-            style={{ color: "var(--color-muted)", fontSize: "0.875rem", fontWeight: 500, textDecoration: "none", transition: "color 0.2s" }}
-          >
-            Removal Plans
+        <nav
+          style={{
+            margin: "0 auto",
+            height: "4.5rem",
+            padding: "0 clamp(1rem, 4vw, 2rem)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+          }}
+        >
+          {/* Logo */}
+          <Link href="/" style={{ display: "flex", alignItems: "center", flexShrink: 0 }}>
+            <Image
+              src="/images/logo-grey.png"
+              alt="RepuTrust Logo"
+              width={220}
+              height={66}
+              style={{ height: "clamp(1.5rem, 5vw, 2.25rem)", width: "auto" }}
+              priority
+            />
           </Link>
 
-          {isAuthed && (
-            <Link
-              href="/settings"
-              className="header-nav-link"
-              style={{ color: "var(--color-muted)", fontSize: "0.875rem", fontWeight: 500, textDecoration: "none", transition: "color 0.2s" }}
-            >
-              Settings
-            </Link>
-          )}
+          {/* Desktop nav */}
+          <div className="desktop-nav" style={{ display: "flex", alignItems: "center", gap: "clamp(0.75rem, 2.5vw, 2rem)" }}>
+            {isAuthed && (
+              <Link href="/dashboard" className="header-nav-link" style={navLinkStyle}>Scanner</Link>
+            )}
+            <Link href="/quote" className="header-nav-link" style={navLinkStyle}>Removal Plans</Link>
+            {isAuthed && (
+              <Link href="/settings" className="header-nav-link" style={navLinkStyle}>Settings</Link>
+            )}
+            {isAuthed ? (
+              <button
+                onClick={signOut}
+                className="glow-button"
+                style={{ padding: "0.5rem 1.25rem", borderRadius: "0.5rem", fontSize: "0.875rem", fontWeight: 600, cursor: "pointer", border: "none" }}
+              >
+                Sign Out
+              </button>
+            ) : (
+              <Link
+                href="/login"
+                className="glow-button"
+                style={{ padding: "0.5rem 1.25rem", borderRadius: "0.5rem", fontSize: "0.875rem", fontWeight: 600, display: "inline-block", textDecoration: "none" }}
+              >
+                Login
+              </Link>
+            )}
+          </div>
 
+          {/* Hamburger (mobile) */}
+          <button
+            className="hamburger"
+            onClick={() => setDrawerOpen(true)}
+            aria-label="Open menu"
+            style={{
+              display: "none",
+              flexDirection: "column",
+              justifyContent: "center",
+              alignItems: "center",
+              gap: "5px",
+              width: "2.25rem",
+              height: "2.25rem",
+              background: "none",
+              border: "none",
+              cursor: "pointer",
+              padding: 0,
+            }}
+          >
+            <span style={{ width: "22px", height: "2px", backgroundColor: "var(--color-foreground)", borderRadius: "2px", display: "block" }} />
+            <span style={{ width: "22px", height: "2px", backgroundColor: "var(--color-foreground)", borderRadius: "2px", display: "block" }} />
+            <span style={{ width: "22px", height: "2px", backgroundColor: "var(--color-foreground)", borderRadius: "2px", display: "block" }} />
+          </button>
+        </nav>
+      </header>
+
+      {/* Drawer backdrop */}
+      {drawerOpen && (
+        <div
+          onClick={close}
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 998,
+            backgroundColor: "rgba(0,0,0,0.3)",
+            backdropFilter: "blur(2px)",
+            WebkitBackdropFilter: "blur(2px)",
+            animation: "fadeIn 0.2s ease",
+          }}
+        />
+      )}
+
+      {/* Drawer panel */}
+      <div
+        style={{
+          position: "fixed",
+          top: 0,
+          right: 0,
+          bottom: 0,
+          zIndex: 999,
+          width: "min(18rem, 85vw)",
+          backgroundColor: "rgba(255,255,255,0.97)",
+          backdropFilter: "blur(20px)",
+          WebkitBackdropFilter: "blur(20px)",
+          boxShadow: "-4px 0 32px rgba(0,0,0,0.12)",
+          display: "flex",
+          flexDirection: "column",
+          padding: "1.5rem",
+          transform: drawerOpen ? "translateX(0)" : "translateX(100%)",
+          transition: "transform 0.28s cubic-bezier(0.4,0,0.2,1)",
+        }}
+      >
+        {/* Drawer header */}
+        <div style={{ marginBottom: "2rem" }}>
+          <Image src="/images/logo-grey.png" alt="RepuTrust" width={220} height={66} style={{ height: "clamp(1.5rem, 5vw, 2.25rem)", width: "auto" }} />
+        </div>
+
+        {/* Drawer links */}
+        <nav style={{ flex: 1 }}>
+          {isAuthed && (
+            <Link href="/dashboard" onClick={close} className="drawer-nav-link" style={drawerLinkStyle}>Scanner</Link>
+          )}
+          <Link href="/quote" onClick={close} className="drawer-nav-link" style={drawerLinkStyle}>Removal Plans</Link>
+          {isAuthed && (
+            <Link href="/settings" onClick={close} className="drawer-nav-link" style={drawerLinkStyle}>Settings</Link>
+          )}
+        </nav>
+
+        {/* Drawer CTA */}
+        <div style={{ paddingTop: "1.5rem" }}>
           {isAuthed ? (
             <button
               onClick={signOut}
               className="glow-button"
-              style={{ padding: "0.5rem 1.25rem", borderRadius: "0.5rem", fontSize: "0.875rem", fontWeight: 600, cursor: "pointer", border: "none" }}
+              style={{ width: "100%", padding: "0.75rem", borderRadius: "0.5rem", fontSize: "0.9375rem", fontWeight: 600, cursor: "pointer", border: "none" }}
             >
               Sign Out
             </button>
           ) : (
             <Link
               href="/login"
+              onClick={close}
               className="glow-button"
-              style={{ padding: "0.5rem 1.25rem", borderRadius: "0.5rem", fontSize: "0.875rem", fontWeight: 600, display: "inline-block", textDecoration: "none" }}
+              style={{ display: "block", textAlign: "center", padding: "0.75rem", borderRadius: "0.5rem", fontSize: "0.9375rem", fontWeight: 600, textDecoration: "none" }}
             >
               Login
             </Link>
           )}
         </div>
-      </nav>
+      </div>
 
       <style jsx global>{`
-        .header-nav-link:hover {
-          color: #4ecdc4 !important;
+        .header-nav-link:hover,
+        .drawer-nav-link:hover { color: var(--color-primary) !important; }
+
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+        @media (max-width: 640px) {
+          .desktop-nav { display: none !important; }
+          .hamburger { display: flex !important; }
         }
       `}</style>
-    </header>
+    </>
   );
 }

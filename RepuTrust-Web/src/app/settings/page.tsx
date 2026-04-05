@@ -1,5 +1,6 @@
 "use client";
 
+import Footer from "@/components/common/Footer";
 import Header from "@/components/common/Header";
 import { useRouter } from "next/navigation";
 import React, { useEffect, useState } from "react";
@@ -74,8 +75,8 @@ const fieldStyle: React.CSSProperties = {
   width: "100%",
   padding: "0.625rem 1rem",
   borderRadius: "0.5rem",
-  border: "1px solid rgba(255,255,255,0.1)",
-  backgroundColor: "rgba(13,17,23,0.6)",
+  border: "1px solid var(--color-border)",
+  backgroundColor: "#ffffff",
   color: "var(--color-foreground)",
   outline: "none",
   boxSizing: "border-box",
@@ -193,7 +194,7 @@ export default function SettingsPage() {
                 <div
                   style={{
                     display: "grid",
-                    gridTemplateColumns: "1fr 1fr",
+                    gridTemplateColumns: "repeat(auto-fit, minmax(min(10rem, 100%), 1fr))",
                     gap: "1rem",
                   }}
                 >
@@ -305,7 +306,7 @@ export default function SettingsPage() {
                       <option
                         key={n}
                         value={n}
-                        style={{ backgroundColor: "#0D1117" }}
+                        style={{ backgroundColor: "#ffffff" }}
                       >
                         {n}
                       </option>
@@ -316,7 +317,7 @@ export default function SettingsPage() {
                     height="16"
                     viewBox="0 0 24 24"
                     fill="none"
-                    stroke="rgba(255,255,255,0.4)"
+                    stroke="rgba(100,116,139,0.55)"
                     strokeWidth="2"
                     strokeLinecap="round"
                     strokeLinejoin="round"
@@ -391,8 +392,8 @@ export default function SettingsPage() {
                       width: "100%",
                       padding: "0.5rem 1rem",
                       borderRadius: "0.5rem",
-                      border: "1px solid rgba(255,255,255,0.1)",
-                      backgroundColor: "rgba(13,17,23,0.5)",
+                      border: "1px solid var(--color-border)",
+                      backgroundColor: "#ffffff",
                       color: "var(--color-foreground)",
                       outline: "none",
                     }}
@@ -420,8 +421,8 @@ export default function SettingsPage() {
                       width: "100%",
                       padding: "0.5rem 1rem",
                       borderRadius: "0.5rem",
-                      border: "1px solid rgba(255,255,255,0.1)",
-                      backgroundColor: "rgba(13,17,23,0.5)",
+                      border: "1px solid var(--color-border)",
+                      backgroundColor: "#ffffff",
                       color: "var(--color-foreground)",
                       outline: "none",
                     }}
@@ -468,8 +469,8 @@ export default function SettingsPage() {
                   width: "100%",
                   padding: "0.625rem 1rem",
                   borderRadius: "0.5rem",
-                  border: "1px solid rgba(255,255,255,0.1)",
-                  backgroundColor: "rgba(13,17,23,0.5)",
+                  border: "1px solid var(--color-border)",
+                  backgroundColor: "#ffffff",
                   color: "var(--color-foreground)",
                   outline: "none",
                   resize: "vertical",
@@ -537,7 +538,7 @@ export default function SettingsPage() {
                       style={{
                         width: "1rem",
                         height: "1rem",
-                        accentColor: "#4ECDC4",
+                        accentColor: "var(--color-primary)",
                       }}
                     />
                     {label}
@@ -596,7 +597,7 @@ export default function SettingsPage() {
                       style={{
                         width: "1rem",
                         height: "1rem",
-                        accentColor: "#4ECDC4",
+                        accentColor: "var(--color-primary)",
                       }}
                     />
                     {label}
@@ -624,25 +625,7 @@ export default function SettingsPage() {
         </div>
       </main>
 
-      <footer
-        style={{
-          padding: "2rem 1.5rem",
-          borderTop: "1px solid rgba(255,255,255,0.08)",
-          backgroundColor: "var(--color-surface)",
-        }}
-      >
-        <div
-          style={{
-            maxWidth: "72rem",
-            margin: "0 auto",
-            textAlign: "center",
-            color: "var(--color-muted)",
-            fontSize: "0.875rem",
-          }}
-        >
-          <p>&copy; 2025 RepuTrust. All rights reserved.</p>
-        </div>
-      </footer>
+      <Footer />
     </div>
   );
 }

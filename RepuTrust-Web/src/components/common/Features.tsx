@@ -63,7 +63,7 @@ export default function Features() {
       <div style={{ maxWidth: '72rem', margin: '0 auto' }}>
         {/* Section Header */}
         <div style={{ textAlign: 'center', marginBottom: '4rem' }}>
-          <h2 className="neon-text" style={{ fontSize: 'clamp(2rem, 4vw, 3rem)', fontWeight: 800, marginBottom: '1rem', letterSpacing: '-0.02em' }}>
+          <h2 style={{ fontSize: 'clamp(2rem, 4vw, 3rem)', fontWeight: 800, marginBottom: '1rem', letterSpacing: '-0.02em', color: 'var(--color-foreground)' }}>
             How It Works
           </h2>
           <p style={{ fontSize: '1.0625rem', color: 'var(--color-muted)', maxWidth: '32rem', margin: '0 auto', lineHeight: 1.7 }}>
@@ -72,7 +72,7 @@ export default function Features() {
         </div>
 
         {/* Feature Grid */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(18rem, 1fr))', gap: '1.5rem' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(18rem, 100%), 1fr))', gap: '1.5rem' }}>
           {features.map((feature, index) => (
             <FeatureCard key={index} feature={feature} />
           ))}
@@ -89,7 +89,7 @@ function FeatureCard({ feature }: { feature: typeof features[0] }) {
       style={{ padding: '1.75rem', borderRadius: '0.875rem', display: 'flex', flexDirection: 'column', gap: '0.875rem', transition: 'all 0.3s ease' }}
     >
       {/* Icon */}
-      <div style={{ width: '2.75rem', height: '2.75rem', borderRadius: '0.625rem', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, backgroundColor: 'rgba(78, 205, 196, 0.12)', color: '#4ECDC4', border: '1px solid rgba(78, 205, 196, 0.25)' }}>
+      <div style={{ width: '2.75rem', height: '2.75rem', borderRadius: '0.625rem', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, backgroundColor: 'rgba(68, 121, 218, 0.1)', color: 'var(--color-primary)', border: '1px solid rgba(68, 121, 218, 0.22)' }}>
         {feature.icon}
       </div>
 
@@ -105,7 +105,7 @@ function FeatureCard({ feature }: { feature: typeof features[0] }) {
 
       <style jsx>{`
         .feature-card:hover {
-          background: rgba(255, 255, 255, 0.05);
+          background: rgba(68, 121, 218, 0.04);
         }
       `}</style>
     </div>

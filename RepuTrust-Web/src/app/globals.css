@@ -1,23 +1,20 @@
 @import "tailwindcss";
 
 :root {
-  /* RepuTrust Futuristic Neon Palette */
-  --color-primary: #4ECDC4; /* Neon Teal */
-  --color-primary-dark: #2BABA0;
-  --color-primary-light: #7FE8E0;
+  --color-button: #4479da;
+  --color-primary: #4479da;
+  --color-primary-dark: #3568c4;
+  --color-primary-light: #6b94e8;
 
-  /* Dark Mode (Default) */
-  --color-background: #0A0E1A;
-  --color-surface: #0D1117;
-  --color-foreground: #E8ECEF;
-  --color-border: #1A1F2E;
-  --color-muted: #8B93A1;
+  --color-background: #ffffff;
+  --color-surface: #ffffff;
+  --color-foreground: #1e293b;
+  --color-border: #e2e8f0;
+  --color-muted: #64748b;
 
-  /* Accents */
-  --color-success: #00E676;
-  --color-warning: #FFD600;
-  --color-error: #FF3D00;
-  --color-info: #00B0FF;
+  --color-success: #22c55e;
+  --color-warning: #eab308;
+  --color-error: #ef4444;
 }
 
 @theme inline {
@@ -31,57 +28,51 @@
   --color-muted: var(--color-muted);
 }
 
-@keyframes pulse-glow {
-  0%, 100% {
-    box-shadow: 0 0 10px rgba(78, 205, 196, 0.5), inset 0 0 10px rgba(78, 205, 196, 0.1);
-  }
-  50% {
-    box-shadow: 0 0 20px rgba(78, 205, 196, 0.8), inset 0 0 10px rgba(78, 205, 196, 0.2);
-  }
-}
-
-@keyframes float {
-  0%, 100% { transform: translateY(0px); }
-  50% { transform: translateY(-20px); }
-}
-
-@keyframes grid-shimmer {
-  0% { opacity: 0.05; }
-  50% { opacity: 0.1; }
-  100% { opacity: 0.05; }
-}
-
+/* Plain white card with a light border */
 .glass {
-  @apply bg-white/5 backdrop-blur-md border border-white/10;
+  background: #ffffff;
+  border: 1px solid var(--color-border);
 }
 
 .glass-dark {
-  @apply bg-black/30 backdrop-blur-md border border-white/10;
+  background: #f8fafc;
+  border: 1px solid var(--color-border);
 }
 
+/* Subtle border that sharpens on hover */
 .glow-border {
-  @apply border border-white/10 hover:border-[#4ECDC4]/50 hover:shadow-[0_0_20px_rgba(78,205,196,0.3)] transition-all duration-300;
+  border: 1px solid var(--color-border);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+.glow-border:hover {
+  border-color: rgba(68, 121, 218, 0.4);
+  box-shadow: 0 4px 16px rgba(68, 121, 218, 0.08);
 }
 
+/* Solid blue heading text */
 .neon-text {
-  @apply text-transparent bg-clip-text bg-gradient-to-r from-white to-[#4ECDC4];
+  color: var(--color-primary);
 }
 
+/* Primary action button */
 .glow-button {
-  @apply bg-[#4ECDC4] text-black font-semibold transition-all duration-300 hover:shadow-[0_0_20px_rgba(78,205,196,0.6)] hover:bg-[#7FE8E0];
+  font-weight: 600;
+  color: #ffffff;
+  background-color: var(--color-button);
+  transition: background-color 0.2s ease, box-shadow 0.2s ease;
+}
+.glow-button:hover {
+  background-color: var(--color-primary-dark);
+  box-shadow: 0 6px 20px rgba(68, 121, 218, 0.3);
 }
 
+/* No-op: keeps class references working without any visual pattern */
 .grid-bg {
-  @apply relative;
-  background-image:
-    linear-gradient(rgba(78, 205, 196, 0.04) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(78, 205, 196, 0.04) 1px, transparent 1px);
-  background-size: 60px 60px;
-  background-attachment: fixed;
+  background: #ffffff;
 }
 
 .header-nav-link:hover {
-  color: #4ECDC4 !important;
+  color: var(--color-primary) !important;
 }
 
 * {
@@ -102,11 +93,16 @@ body {
   margin: 0 !important;
   padding: 0 !important;
   overflow-x: hidden;
-}
-
-body {
-  background: var(--color-background);
+  background: #ffffff;
   color: var(--color-foreground);
-  font-family: var(--font-geist-sans), -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif;
+  font-family:
+    "Avenir Next",
+    Avenir,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    Roboto,
+    "Helvetica Neue",
+    sans-serif;
   line-height: 1.6;
 }

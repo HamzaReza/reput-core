@@ -27,26 +27,47 @@ export default function Hero() {
   }, []);
 
   return (
-    <section style={{ position: 'relative', overflow: 'hidden', padding: '8rem 1.5rem 6rem' }}>
-      {/* Animated gradient blobs */}
-      <div style={{ position: 'absolute', top: '5rem', right: '2.5rem', width: '20rem', height: '20rem', borderRadius: '50%', opacity: 0.15, filter: 'blur(80px)', background: 'radial-gradient(circle, #4ECDC4 0%, transparent 70%)', animation: 'float 6s ease-in-out infinite', pointerEvents: 'none' }} />
-      <div style={{ position: 'absolute', bottom: '2.5rem', left: '2.5rem', width: '20rem', height: '20rem', borderRadius: '50%', opacity: 0.1, filter: 'blur(80px)', background: 'radial-gradient(circle, #7FE8E0 0%, transparent 70%)', animation: 'float 8s ease-in-out infinite 1s', pointerEvents: 'none' }} />
+    <section style={{ padding: 'clamp(5rem, 12vw, 8rem) 1.25rem clamp(3rem, 8vw, 6rem)', backgroundColor: '#ffffff' }}>
+      <div style={{ maxWidth: '52rem', margin: '0 auto', textAlign: 'center' }}>
 
-      <div style={{ maxWidth: '52rem', margin: '0 auto', textAlign: 'center', position: 'relative', zIndex: 10, padding: '4rem 0' }}>
         {/* Badge */}
-        <div style={{ display: 'inline-flex', alignItems: 'center', padding: '0.375rem 1rem', borderRadius: '9999px', marginBottom: '2rem', fontSize: '0.8125rem', fontWeight: 500, backgroundColor: 'rgba(78, 205, 196, 0.1)', color: '#4ECDC4', border: '1px solid rgba(78, 205, 196, 0.3)' }}>
+        <div style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          padding: '0.375rem 1rem',
+          borderRadius: '9999px',
+          marginBottom: '2rem',
+          fontSize: '0.8125rem',
+          fontWeight: 500,
+          backgroundColor: 'rgba(68, 121, 218, 0.08)',
+          color: 'var(--color-primary)',
+          border: '1px solid rgba(68, 121, 218, 0.2)',
+        }}>
           {isAuthed ? 'Your scan is ready' : 'AI-Powered Web Scanner'}
         </div>
 
         {/* Headline */}
-        <h1 className="neon-text" style={{ fontSize: 'clamp(2.5rem, 6vw, 4.5rem)', fontWeight: 800, lineHeight: 1.1, marginBottom: '1.5rem', letterSpacing: '-0.02em' }}>
+        <h1 style={{
+          fontSize: 'clamp(2.5rem, 6vw, 4.5rem)',
+          fontWeight: 800,
+          lineHeight: 1.1,
+          marginBottom: '1.5rem',
+          letterSpacing: '-0.02em',
+          color: 'var(--color-foreground)',
+        }}>
           {isAuthed && name
             ? <>Welcome back,<br />{name}</>
-            : <>Discover What the<br />Web Says About You</>}
+            : <>Discover What the<br /><span style={{ color: 'var(--color-primary)' }}>Web Says</span> About You</>}
         </h1>
 
         {/* Subtext */}
-        <p style={{ fontSize: '1.125rem', lineHeight: 1.7, marginBottom: '3rem', color: 'var(--color-muted)', maxWidth: '36rem', margin: '0 auto 3rem' }}>
+        <p style={{
+          fontSize: '1.125rem',
+          lineHeight: 1.7,
+          color: 'var(--color-muted)',
+          maxWidth: '36rem',
+          margin: '0 auto 3rem',
+        }}>
           {isAuthed
             ? 'View your latest ReputScore, check flagged links, or request a removal to protect your reputation.'
             : 'Enter your name and keywords — RepuTrust scans the entire web to surface negative content, harmful links, and reputation threats before they cause damage.'}
@@ -65,8 +86,17 @@ export default function Hero() {
               </Link>
               <Link
                 href="/quote/request"
-                className="glass glow-border"
-                style={{ padding: '0.875rem 2rem', borderRadius: '0.625rem', fontWeight: 700, fontSize: '1rem', color: 'var(--color-foreground)', textDecoration: 'none', display: 'inline-block' }}
+                style={{
+                  padding: '0.875rem 2rem',
+                  borderRadius: '0.625rem',
+                  fontWeight: 700,
+                  fontSize: '1rem',
+                  color: 'var(--color-foreground)',
+                  textDecoration: 'none',
+                  display: 'inline-block',
+                  border: '1px solid var(--color-border)',
+                  backgroundColor: '#ffffff',
+                }}
               >
                 Request Removal
               </Link>
@@ -82,8 +112,17 @@ export default function Hero() {
               </Link>
               <Link
                 href="/quote"
-                className="glass glow-border"
-                style={{ padding: '0.875rem 2rem', borderRadius: '0.625rem', fontWeight: 700, fontSize: '1rem', color: 'var(--color-foreground)', textDecoration: 'none', display: 'inline-block' }}
+                style={{
+                  padding: '0.875rem 2rem',
+                  borderRadius: '0.625rem',
+                  fontWeight: 700,
+                  fontSize: '1rem',
+                  color: 'var(--color-foreground)',
+                  textDecoration: 'none',
+                  display: 'inline-block',
+                  border: '1px solid var(--color-border)',
+                  backgroundColor: '#ffffff',
+                }}
               >
                 View Removal Plans
               </Link>

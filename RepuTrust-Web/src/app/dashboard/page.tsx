@@ -1,5 +1,6 @@
 "use client";
 
+import Footer from "@/components/common/Footer";
 import Header from "@/components/common/Header";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -93,7 +94,6 @@ const RISK_COLORS: Record<
   },
 };
 
-const SCORE = Math.floor(Math.random() * 100);
 
 function scoreLabel(score: number): { label: string; color: string } {
   if (score >= 75) return { label: "Negative", color: "#FF6B4A" };
@@ -181,7 +181,7 @@ function RepuGauge({
         cy={cy}
         r={r}
         fill="none"
-        stroke="rgba(200,215,230,0.13)"
+        stroke="rgba(148,163,184,0.3)"
         strokeWidth={arcStroke}
       />
 
@@ -195,7 +195,7 @@ function RepuGauge({
       />
 
       {/* Avatar background disc */}
-      <circle cx={cx} cy={cy} r={avatarR + 4} fill="#0A0E1A" />
+      <circle cx={cx} cy={cy} r={avatarR + 4} fill="#ffffff" />
 
       {/* Avatar content */}
       {avatar ? (
@@ -235,7 +235,7 @@ function RepuGauge({
         cy={cy}
         r={avatarR}
         fill="none"
-        stroke="rgba(255,255,255,0.1)"
+        stroke="rgba(148,163,184,0.35)"
         strokeWidth={2}
       />
 
@@ -260,6 +260,7 @@ export default function DashboardPage() {
   const [scanName, setScanName] = useState("");
   const [scanKeywords, setScanKeywords] = useState<string[]>([]);
   const [avatar, setAvatar] = useState("");
+  const [score] = useState(() => Math.floor(Math.random() * 100));
   const [listRequested, setListRequested] = useState(false);
   const [linkListPending, setLinkListPending] = useState(false);
   const [linkListHasNegatives, setLinkListHasNegatives] = useState<
@@ -347,7 +348,7 @@ export default function DashboardPage() {
 
   const tabs: { key: Tab; label: string }[] = [
     { key: "score", label: "ReputScore" },
-    { key: "links", label: "Reputation Content" },
+    { key: "links", label: "Link List" },
     { key: "contract", label: "Contract" },
   ];
 
@@ -368,7 +369,7 @@ export default function DashboardPage() {
           style={{
             maxWidth: "52rem",
             margin: "0 auto",
-            padding: "2rem 1.5rem",
+            padding: "1.5rem clamp(1rem, 4vw, 1.5rem)",
           }}
         >
           {/* Tab bar */}
@@ -379,7 +380,7 @@ export default function DashboardPage() {
               borderRadius: "0.625rem",
               padding: "0.25rem",
               marginBottom: "2rem",
-              border: "1px solid rgba(255,255,255,0.08)",
+              border: "1px solid var(--color-border)",
             }}
           >
             {tabs.map((tab) => (
@@ -396,8 +397,8 @@ export default function DashboardPage() {
                   fontSize: "0.875rem",
                   transition: "all 0.2s",
                   backgroundColor:
-                    activeTab === tab.key ? "#4ECDC4" : "transparent",
-                  color: activeTab === tab.key ? "#000" : "var(--color-muted)",
+                    activeTab === tab.key ? "var(--color-button)" : "transparent",
+                  color: activeTab === tab.key ? "#fff" : "var(--color-muted)",
                 }}
               >
                 {tab.label}
@@ -431,7 +432,7 @@ export default function DashboardPage() {
 
               {/* Gauge */}
               <RepuGauge
-                score={SCORE}
+                score={score}
                 avatar={avatar}
                 initials={scanName
                   .split(" ")
@@ -449,31 +450,31 @@ export default function DashboardPage() {
                   zIndex: 1,
                   padding: "0.625rem 2rem",
                   borderRadius: "0.625rem",
-                  backgroundColor: "#12161f",
-                  border: "1px solid rgba(255,255,255,0.1)",
+                  backgroundColor: "var(--color-surface)",
+                  border: "1px solid var(--color-border)",
                 }}
               >
                 <p
                   style={{
                     fontSize: "2.5rem",
                     fontWeight: 800,
-                    color: scoreLabel(SCORE).color,
+                    color: scoreLabel(score).color,
                     lineHeight: 1,
                     marginBottom: "0.25rem",
                   }}
                 >
-                  {SCORE}%
+                  {score}%
                 </p>
                 <p
                   style={{
                     fontSize: "0.75rem",
                     fontWeight: 700,
                     letterSpacing: "0.12em",
-                    color: scoreLabel(SCORE).color,
+                    color: scoreLabel(score).color,
                     textTransform: "uppercase",
                   }}
                 >
-                  {scoreLabel(SCORE).label}
+                  {scoreLabel(score).label}
                 </p>
               </div>
 
@@ -484,7 +485,7 @@ export default function DashboardPage() {
                   borderRadius: "0.75rem",
                   padding: "1.5rem",
                   marginTop: "1.25rem",
-                  border: "1px solid rgba(255,255,255,0.07)",
+                  border: "1px solid var(--color-border)",
                   textAlign: "left",
                 }}
               >
@@ -518,8 +519,8 @@ export default function DashboardPage() {
                       style={{
                         padding: "0.5rem 1.25rem",
                         borderRadius: "0.5rem",
-                        backgroundColor: "rgba(78,205,196,0.08)",
-                        border: "1px solid rgba(78,205,196,0.2)",
+                        backgroundColor: "rgba(68,121,218,0.08)",
+                        border: "1px solid rgba(68,121,218,0.2)",
                         color: "var(--color-foreground)",
                         fontSize: "0.9375rem",
                         fontWeight: 500,
@@ -533,7 +534,7 @@ export default function DashboardPage() {
             </div>
           )}
 
-          {/* ── Tab: Reputation Content ─────────────────────────────── */}
+          {/* ── Tab: Link List ─────────────────────────────── */}
           {activeTab === "links" &&
             (() => {
               const disabledBtn: React.CSSProperties = {
@@ -543,8 +544,8 @@ export default function DashboardPage() {
                 fontWeight: 700,
                 fontSize: "0.875rem",
                 letterSpacing: "0.05em",
-                border: "1px solid rgba(255,255,255,0.1)",
-                backgroundColor: "rgba(255,255,255,0.05)",
+                border: "1px solid var(--color-border)",
+                backgroundColor: "#f1f5f9",
                 color: "var(--color-muted)",
                 cursor: "not-allowed",
               };
@@ -577,7 +578,7 @@ export default function DashboardPage() {
                         marginBottom: "1.25rem",
                       }}
                     >
-                      Reputation Content
+                      Link List
                     </h2>
                     <p
                       style={{
@@ -653,8 +654,8 @@ export default function DashboardPage() {
                         width: "3.5rem",
                         height: "3.5rem",
                         borderRadius: "50%",
-                        backgroundColor: "rgba(78,205,196,0.1)",
-                        border: "1px solid rgba(78,205,196,0.3)",
+                        backgroundColor: "rgba(68,121,218,0.08)",
+                        border: "1px solid rgba(68,121,218,0.22)",
                         display: "flex",
                         alignItems: "center",
                         justifyContent: "center",
@@ -665,7 +666,7 @@ export default function DashboardPage() {
                         width="22"
                         height="22"
                         fill="none"
-                        stroke="#4ECDC4"
+                        stroke="var(--color-primary)"
                         viewBox="0 0 24 24"
                       >
                         <path
@@ -739,7 +740,7 @@ export default function DashboardPage() {
                       style={{
                         display: "grid",
                         gridTemplateColumns:
-                          "repeat(auto-fit, minmax(130px, 1fr))",
+                          "repeat(auto-fit, minmax(min(130px, 100%), 1fr))",
                         gap: "1rem",
                         marginBottom: "1.5rem",
                       }}
@@ -748,7 +749,7 @@ export default function DashboardPage() {
                         {
                           label: "Total Found",
                           value: MOCK_RESULTS.length,
-                          color: "#4ECDC4",
+                          color: "var(--color-primary)",
                         },
                         {
                           label: "Negative",
@@ -817,7 +818,7 @@ export default function DashboardPage() {
                             style={{
                               borderRadius: "0.625rem",
                               padding: "1.25rem 1.5rem",
-                              border: "1px solid rgba(255,255,255,0.07)",
+                              border: "1px solid var(--color-border)",
                             }}
                           >
                             <div
@@ -847,7 +848,7 @@ export default function DashboardPage() {
                                   style={{
                                     display: "block",
                                     fontSize: "0.75rem",
-                                    color: "#4ECDC4",
+                                    color: "var(--color-primary)",
                                     marginBottom: "0.5rem",
                                     overflow: "hidden",
                                     textOverflow: "ellipsis",
@@ -908,8 +909,8 @@ export default function DashboardPage() {
                   width: "3.5rem",
                   height: "3.5rem",
                   borderRadius: "0.75rem",
-                  backgroundColor: "rgba(78,205,196,0.1)",
-                  border: "1px solid rgba(78,205,196,0.25)",
+                  backgroundColor: "rgba(68,121,218,0.08)",
+                  border: "1px solid rgba(68,121,218,0.22)",
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
@@ -920,7 +921,7 @@ export default function DashboardPage() {
                   width="22"
                   height="22"
                   fill="none"
-                  stroke="#4ECDC4"
+                  stroke="var(--color-primary)"
                   viewBox="0 0 24 24"
                 >
                   <path
@@ -961,18 +962,18 @@ export default function DashboardPage() {
               <div
                 style={{
                   display: "grid",
-                  gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(min(160px, 100%), 1fr))",
                   gap: "1rem",
                   marginBottom: "2rem",
                   textAlign: "left",
                 }}
               >
                 {[
-                  { label: "Links to remove", value: "6", color: "#4ECDC4" },
+                  { label: "Links to remove", value: "6", color: "var(--color-primary)" },
                   {
                     label: "Avg. removal time",
                     value: "3–7 days",
-                    color: "#4ECDC4",
+                    color: "var(--color-primary)",
                   },
                   {
                     label: "Google de-indexing",
@@ -985,8 +986,8 @@ export default function DashboardPage() {
                     style={{
                       borderRadius: "0.625rem",
                       padding: "1rem 1.25rem",
-                      backgroundColor: "rgba(255,255,255,0.03)",
-                      border: "1px solid rgba(255,255,255,0.07)",
+                      backgroundColor: "var(--color-surface)",
+                      border: "1px solid var(--color-border)",
                     }}
                   >
                     <p
@@ -1030,25 +1031,7 @@ export default function DashboardPage() {
         </div>
       </main>
 
-      <footer
-        style={{
-          padding: "2rem 1.5rem",
-          borderTop: "1px solid rgba(255,255,255,0.08)",
-          backgroundColor: "var(--color-surface)",
-        }}
-      >
-        <div
-          style={{
-            maxWidth: "72rem",
-            margin: "0 auto",
-            textAlign: "center",
-            color: "var(--color-muted)",
-            fontSize: "0.875rem",
-          }}
-        >
-          <p>&copy; 2025 RepuTrust. All rights reserved.</p>
-        </div>
-      </footer>
+      <Footer />
     </div>
   );
 }

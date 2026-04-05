@@ -1,5 +1,6 @@
 "use client";
 
+import Footer from "@/components/common/Footer";
 import Header from "@/components/common/Header";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -8,8 +9,8 @@ const inputStyle: React.CSSProperties = {
   width: "100%",
   padding: "0.625rem 1rem",
   borderRadius: "0.5rem",
-  border: "1px solid rgba(255,255,255,0.1)",
-  backgroundColor: "rgba(13,17,23,0.6)",
+  border: "1px solid var(--color-border)",
+  backgroundColor: "#ffffff",
   color: "var(--color-foreground)",
   outline: "none",
   boxSizing: "border-box",
@@ -93,12 +94,12 @@ export default function RemovalRequestPage() {
             </p>
           </div>
 
-          <div className="glass glow-border" style={{ borderRadius: "0.875rem", padding: "2rem" }}>
+          <div className="glass glow-border" style={{ borderRadius: "0.875rem", padding: "clamp(1.25rem, 5vw, 2rem)" }}>
             <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
               <div
                 style={{
                   display: "grid",
-                  gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(min(200px, 100%), 1fr))",
                   gap: "1.25rem",
                 }}
               >
@@ -178,7 +179,7 @@ export default function RemovalRequestPage() {
               maxWidth: "22rem",
               width: "100%",
               textAlign: "center",
-              border: "1px solid rgba(78,205,196,0.25)",
+              border: "1px solid var(--color-border)",
             }}
           >
             {/* Check icon */}
@@ -187,15 +188,15 @@ export default function RemovalRequestPage() {
                 width: "3.5rem",
                 height: "3.5rem",
                 borderRadius: "50%",
-                backgroundColor: "rgba(78,205,196,0.1)",
-                border: "1px solid rgba(78,205,196,0.35)",
+                backgroundColor: "rgba(68,121,218,0.08)",
+                border: "1px solid rgba(68,121,218,0.22)",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
                 margin: "0 auto 1.5rem",
               }}
             >
-              <svg width="24" height="24" fill="none" stroke="#4ECDC4" viewBox="0 0 24 24">
+              <svg width="24" height="24" fill="none" stroke="var(--color-primary)" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
               </svg>
             </div>
@@ -237,25 +238,7 @@ export default function RemovalRequestPage() {
         </div>
       )}
 
-      <footer
-        style={{
-          padding: "2rem 1.5rem",
-          borderTop: "1px solid rgba(255,255,255,0.08)",
-          backgroundColor: "var(--color-surface)",
-        }}
-      >
-        <div
-          style={{
-            maxWidth: "72rem",
-            margin: "0 auto",
-            textAlign: "center",
-            color: "var(--color-muted)",
-            fontSize: "0.875rem",
-          }}
-        >
-          <p>&copy; 2025 RepuTrust. All rights reserved.</p>
-        </div>
-      </footer>
+      <Footer />
     </div>
   );
 }

@@ -1,6 +1,7 @@
 # RepuTrust Project Structure
 
 ## Overview
+
 RepuTrust is a Next.js-based reputation management platform built with TypeScript, React 19, and Tailwind CSS 4.
 
 ## Directory Structure
@@ -80,28 +81,33 @@ RepuTrust uses a professional color scheme inspired by the brand:
 ## Getting Started
 
 ### Prerequisites
+
 - Node.js 18+
 - npm or yarn
 
 ### Installation
 
 1. Navigate to the project directory:
+
 ```bash
 cd RepuTrust
 ```
 
 2. Install dependencies:
+
 ```bash
 npm install
 ```
 
 3. Set up environment variables:
+
 ```bash
 cp .env.example .env.local
 # Edit .env.local with your configuration
 ```
 
 4. Run the development server:
+
 ```bash
 npm run dev
 ```
@@ -166,6 +172,7 @@ All components use Tailwind CSS classes with custom CSS variables for theming:
 ## Contributing
 
 When adding new features:
+
 1. Create components in appropriate subdirectory under `src/components/`
 2. Add TypeScript types in `src/types/`
 3. Use custom hooks for shared logic in `src/hooks/`
@@ -174,4 +181,4 @@ When adding new features:
 
 ## License
 
-All rights reserved © 2024 RepuTrust
+All rights reserved © 2026 Ealixir
