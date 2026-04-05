@@ -17,9 +17,7 @@ export default function Header() {
 
   const signOut = () => {
     try {
-      localStorage.removeItem("reput_authed");
-      localStorage.removeItem("reput_name");
-      localStorage.removeItem("reput_keywords");
+      localStorage.clear();
     } catch {}
     setIsAuthed(false);
     window.dispatchEvent(new Event("reput-auth-change"));

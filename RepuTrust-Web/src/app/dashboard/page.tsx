@@ -3,7 +3,7 @@
 import Header from "@/components/common/Header";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 type Tab = "score" | "links" | "contract";
 type RiskLevel = "Negative" | "Poor" | "Mediocre" | "Good";
@@ -261,7 +261,13 @@ export default function DashboardPage() {
   const [scanKeywords, setScanKeywords] = useState<string[]>([]);
   const [avatar, setAvatar] = useState("");
   const [listRequested, setListRequested] = useState(false);
-  const [infoRequested, setInfoRequested] = useState(false);
+  const [linkListPending, setLinkListPending] = useState(false);
+  const [linkListHasNegatives, setLinkListHasNegatives] = useState<
+    boolean | null
+  >(null);
+  const [infoPending, setInfoPending] = useState(false);
+  const linkListTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const infoMoreTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     try {
@@ -282,19 +288,59 @@ export default function DashboardPage() {
         );
       const a = localStorage.getItem("reput_avatar");
       if (a) setAvatar(a);
-      if (localStorage.getItem("reput_list_requested") === "true") setListRequested(true);
-      if (localStorage.getItem("reput_info_requested") === "true") setInfoRequested(true);
+      if (localStorage.getItem("reput_list_requested") === "true") {
+        setListRequested(true);
+        const outcome = localStorage.getItem("reput_link_list_has_negatives");
+        if (outcome === "true") setLinkListHasNegatives(true);
+        else if (outcome === "false") setLinkListHasNegatives(false);
+        else setLinkListHasNegatives(true);
+      }
     } catch {}
   }, [router]);
 
+  useEffect(() => {
+    return () => {
+      if (linkListTimeoutRef.current) clearTimeout(linkListTimeoutRef.current);
+      if (infoMoreTimeoutRef.current) clearTimeout(infoMoreTimeoutRef.current);
+    };
+  }, []);
+
   const requestLinkList = () => {
-    try { localStorage.setItem("reput_list_requested", "true"); } catch {}
-    setListRequested(true);
+    if (linkListPending) return;
+    setLinkListPending(true);
+    if (linkListTimeoutRef.current) clearTimeout(linkListTimeoutRef.current);
+    linkListTimeoutRef.current = setTimeout(() => {
+      linkListTimeoutRef.current = null;
+      const hasNegatives = Math.random() < 0.5;
+      try {
+        localStorage.setItem("reput_list_requested", "true");
+        localStorage.setItem(
+          "reput_link_list_has_negatives",
+          hasNegatives ? "true" : "false",
+        );
+      } catch {}
+      setLinkListHasNegatives(hasNegatives);
+      setListRequested(true);
+      setLinkListPending(false);
+    }, 2500);
   };
 
   const requestMoreInfo = () => {
-    try { localStorage.setItem("reput_info_requested", "true"); } catch {}
-    setInfoRequested(true);
+    if (infoPending) return;
+    setInfoPending(true);
+    if (infoMoreTimeoutRef.current) clearTimeout(infoMoreTimeoutRef.current);
+    infoMoreTimeoutRef.current = setTimeout(() => {
+      infoMoreTimeoutRef.current = null;
+      const hasNegatives = Math.random() < 0.5;
+      try {
+        localStorage.setItem(
+          "reput_link_list_has_negatives",
+          hasNegatives ? "true" : "false",
+        );
+      } catch {}
+      setLinkListHasNegatives(hasNegatives);
+      setInfoPending(false);
+    }, 2500);
   };
 
   if (!authed) return null;
@@ -488,115 +534,364 @@ export default function DashboardPage() {
           )}
 
           {/* ── Tab: Reputation Content ─────────────────────────────── */}
-          {activeTab === "links" && (() => {
-            const disabledBtn: React.CSSProperties = {
-              width: "100%", padding: "0.75rem 2rem", borderRadius: "0.5rem",
-              fontWeight: 700, fontSize: "0.875rem", letterSpacing: "0.05em",
-              border: "1px solid rgba(255,255,255,0.1)",
-              backgroundColor: "rgba(255,255,255,0.05)",
-              color: "var(--color-muted)", cursor: "not-allowed",
-            };
-            const activeBtn: React.CSSProperties = {
-              width: "100%", padding: "0.75rem 2rem", borderRadius: "0.5rem",
-              fontWeight: 700, fontSize: "0.875rem", letterSpacing: "0.05em", cursor: "pointer",
-            };
+          {activeTab === "links" &&
+            (() => {
+              const disabledBtn: React.CSSProperties = {
+                width: "100%",
+                padding: "0.75rem 2rem",
+                borderRadius: "0.5rem",
+                fontWeight: 700,
+                fontSize: "0.875rem",
+                letterSpacing: "0.05em",
+                border: "1px solid rgba(255,255,255,0.1)",
+                backgroundColor: "rgba(255,255,255,0.05)",
+                color: "var(--color-muted)",
+                cursor: "not-allowed",
+              };
+              const activeBtn: React.CSSProperties = {
+                width: "100%",
+                padding: "0.75rem 2rem",
+                borderRadius: "0.5rem",
+                fontWeight: 700,
+                fontSize: "0.875rem",
+                letterSpacing: "0.05em",
+                cursor: "pointer",
+              };
 
-            /* ── Scenario 1: list not yet requested ── */
-            if (!listRequested) return (
-              <div className="glass glow-border" style={{ borderRadius: "0.875rem", padding: "2.5rem 2rem", textAlign: "center" }}>
-                <h2 style={{ fontSize: "1.25rem", fontWeight: 700, color: "var(--color-foreground)", marginBottom: "1.25rem" }}>
-                  Reputation Content
-                </h2>
-                <p style={{ color: "var(--color-muted)", fontSize: "0.9375rem", lineHeight: 1.7, marginBottom: "0.75rem" }}>
-                  If you are interested in accessing a comprehensive list of all the{" "}
-                  <strong style={{ color: "var(--color-foreground)" }}>negative articles</strong> and mentions{" "}
-                  <strong style={{ color: "var(--color-foreground)" }}>related to your name or brand</strong>, we can provide it to you.
-                </p>
-                <p style={{ color: "var(--color-muted)", fontSize: "0.9375rem", lineHeight: 1.7, marginBottom: "0.75rem" }}>
-                  Simply click the button below to{" "}
-                  <strong style={{ color: "var(--color-foreground)" }}>request the link list</strong>. Please allow us a few days to provide you with a comprehensive negative link list.
-                </p>
-                <p style={{ color: "var(--color-muted)", fontSize: "0.9375rem", lineHeight: 1.7, marginBottom: "2rem" }}>
-                  This will allow you to stay informed about any negative publicity or mentions concerning your name or your company.
-                </p>
-                <button onClick={requestLinkList} className="glow-button" style={activeBtn}>
-                  Request Link List
-                </button>
-              </div>
-            );
+              /* ── Scenario 1: list not yet requested ── */
+              if (!listRequested)
+                return (
+                  <div
+                    className="glass glow-border"
+                    style={{
+                      borderRadius: "0.875rem",
+                      padding: "2.5rem 2rem",
+                      textAlign: "center",
+                    }}
+                  >
+                    <h2
+                      style={{
+                        fontSize: "1.25rem",
+                        fontWeight: 700,
+                        color: "var(--color-foreground)",
+                        marginBottom: "1.25rem",
+                      }}
+                    >
+                      Reputation Content
+                    </h2>
+                    <p
+                      style={{
+                        color: "var(--color-muted)",
+                        fontSize: "0.9375rem",
+                        lineHeight: 1.7,
+                        marginBottom: "0.75rem",
+                      }}
+                    >
+                      If you are interested in accessing a comprehensive list of
+                      all the{" "}
+                      <strong style={{ color: "var(--color-foreground)" }}>
+                        negative articles
+                      </strong>{" "}
+                      and mentions{" "}
+                      <strong style={{ color: "var(--color-foreground)" }}>
+                        related to your name or brand
+                      </strong>
+                      , we can provide it to you.
+                    </p>
+                    <p
+                      style={{
+                        color: "var(--color-muted)",
+                        fontSize: "0.9375rem",
+                        lineHeight: 1.7,
+                        marginBottom: "0.75rem",
+                      }}
+                    >
+                      Simply click the button below to{" "}
+                      <strong style={{ color: "var(--color-foreground)" }}>
+                        request the link list
+                      </strong>
+                      . Please allow us a few days to provide you with a
+                      comprehensive negative link list.
+                    </p>
+                    <p
+                      style={{
+                        color: "var(--color-muted)",
+                        fontSize: "0.9375rem",
+                        lineHeight: 1.7,
+                        marginBottom: "2rem",
+                      }}
+                    >
+                      This will allow you to stay informed about any negative
+                      publicity or mentions concerning your name or your
+                      company.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={requestLinkList}
+                      disabled={linkListPending}
+                      className={linkListPending ? "" : "glow-button"}
+                      style={linkListPending ? disabledBtn : activeBtn}
+                    >
+                      {linkListPending ? "Please wait…" : "Request Link List"}
+                    </button>
+                  </div>
+                );
 
-            /* ── Scenario 2: list returned, 0 negatives ── */
-            if (MOCK_RESULTS.length === 0) return (
-              <div className="glass glow-border" style={{ borderRadius: "0.875rem", padding: "2.5rem 2rem", textAlign: "center" }}>
-                <div style={{ width: "3.5rem", height: "3.5rem", borderRadius: "50%", backgroundColor: "rgba(78,205,196,0.1)", border: "1px solid rgba(78,205,196,0.3)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 1.5rem" }}>
-                  <svg width="22" height="22" fill="none" stroke="#4ECDC4" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
-                  </svg>
-                </div>
-                <h2 style={{ fontSize: "1.25rem", fontWeight: 700, color: "var(--color-foreground)", marginBottom: "1.25rem" }}>
-                  Congratulations!
-                </h2>
-                <p style={{ color: "var(--color-muted)", fontSize: "0.9375rem", lineHeight: 1.7, marginBottom: "0.75rem" }}>
-                  We did not find any negative links or articles regarding you.
-                </p>
-                <p style={{ color: "var(--color-muted)", fontSize: "0.9375rem", lineHeight: 1.7, marginBottom: "0.75rem" }}>
-                  Although if there is no information about you online it may still be a problem.
-                </p>
-                <p style={{ color: "var(--color-muted)", fontSize: "0.9375rem", lineHeight: 1.7, marginBottom: "2rem" }}>
-                  It&apos;s important to be visible online. If interested, click the button below and we will contact you via email.
-                </p>
-                <button
-                  onClick={infoRequested ? undefined : requestMoreInfo}
-                  disabled={infoRequested}
-                  className={infoRequested ? "" : "glow-button"}
-                  style={infoRequested ? disabledBtn : activeBtn}
-                >
-                  {infoRequested ? "Requested" : "Request More Information"}
-                </button>
-              </div>
-            );
-
-            /* ── Scenario 3: list returned, negatives found ── */
-            return (
-              <>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: "1rem", marginBottom: "1.5rem" }}>
-                  {[
-                    { label: "Total Found", value: MOCK_RESULTS.length,                                          color: "#4ECDC4" },
-                    { label: "Negative",    value: MOCK_RESULTS.filter((r) => r.risk === "Negative").length,     color: "#FF6B4A" },
-                    { label: "Poor",        value: MOCK_RESULTS.filter((r) => r.risk === "Poor").length,         color: "#FF8C00" },
-                    { label: "Mediocre",    value: MOCK_RESULTS.filter((r) => r.risk === "Mediocre").length,     color: "#FFD600" },
-                  ].map(({ label, value, color }) => (
-                    <div key={label} className="glass glow-border" style={{ borderRadius: "0.75rem", padding: "1rem 1.25rem" }}>
-                      <p style={{ fontSize: "1.75rem", fontWeight: 700, color, lineHeight: 1 }}>{value}</p>
-                      <p style={{ color: "var(--color-muted)", fontSize: "0.75rem", marginTop: "0.25rem" }}>{label}</p>
+              /* ── Scenario 2: list returned, 0 negatives ── */
+              if (linkListHasNegatives === false)
+                return (
+                  <div
+                    className="glass glow-border"
+                    style={{
+                      borderRadius: "0.875rem",
+                      padding: "2.5rem 2rem",
+                      textAlign: "center",
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: "3.5rem",
+                        height: "3.5rem",
+                        borderRadius: "50%",
+                        backgroundColor: "rgba(78,205,196,0.1)",
+                        border: "1px solid rgba(78,205,196,0.3)",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        margin: "0 auto 1.5rem",
+                      }}
+                    >
+                      <svg
+                        width="22"
+                        height="22"
+                        fill="none"
+                        stroke="#4ECDC4"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2.5}
+                          d="M5 13l4 4L19 7"
+                        />
+                      </svg>
                     </div>
-                  ))}
-                </div>
-                <div style={{ display: "flex", flexDirection: "column", gap: "0.875rem" }}>
-                  {MOCK_RESULTS.map((result, i) => {
-                    const risk = RISK_COLORS[result.risk];
-                    return (
-                      <div key={i} className="glass" style={{ borderRadius: "0.625rem", padding: "1.25rem 1.5rem", border: "1px solid rgba(255,255,255,0.07)" }}>
-                        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "1rem", flexWrap: "wrap" }}>
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <p style={{ fontSize: "0.9375rem", fontWeight: 600, color: "var(--color-foreground)", marginBottom: "0.2rem" }}>{result.title}</p>
-                            <a href={`https://${result.url}`} target="_blank" rel="noopener noreferrer"
-                              style={{ display: "block", fontSize: "0.75rem", color: "#4ECDC4", marginBottom: "0.5rem", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", textDecoration: "none" }}>
-                              {result.url}
-                            </a>
-                            <p style={{ fontSize: "0.8125rem", color: "var(--color-muted)", lineHeight: 1.55 }}>{result.snippet}</p>
-                          </div>
-                          <span style={{ flexShrink: 0, fontSize: "0.75rem", fontWeight: 700, padding: "0.25rem 0.75rem", borderRadius: "9999px", backgroundColor: risk.bg, color: risk.color, border: `1px solid ${risk.border}`, whiteSpace: "nowrap" }}>
-                            {result.risk}
-                          </span>
+                    <h2
+                      style={{
+                        fontSize: "1.25rem",
+                        fontWeight: 700,
+                        color: "var(--color-foreground)",
+                        marginBottom: "1.25rem",
+                      }}
+                    >
+                      Congratulations!
+                    </h2>
+                    <p
+                      style={{
+                        color: "var(--color-muted)",
+                        fontSize: "0.9375rem",
+                        lineHeight: 1.7,
+                        marginBottom: "0.75rem",
+                      }}
+                    >
+                      We did not find any negative links or articles regarding
+                      you.
+                    </p>
+                    <p
+                      style={{
+                        color: "var(--color-muted)",
+                        fontSize: "0.9375rem",
+                        lineHeight: 1.7,
+                        marginBottom: "0.75rem",
+                      }}
+                    >
+                      Although if there is no information about you online it
+                      may still be a problem.
+                    </p>
+                    <p
+                      style={{
+                        color: "var(--color-muted)",
+                        fontSize: "0.9375rem",
+                        lineHeight: 1.7,
+                        marginBottom: "2rem",
+                      }}
+                    >
+                      It&apos;s important to be visible online. If interested,
+                      click the button below and we will contact you via email.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={requestMoreInfo}
+                      disabled={infoPending}
+                      className={infoPending ? "" : "glow-button"}
+                      style={infoPending ? disabledBtn : activeBtn}
+                    >
+                      {infoPending ? "Requested" : "Request More Information"}
+                    </button>
+                  </div>
+                );
+
+              /* ── Scenario 3: list returned, negatives found ── */
+              if (linkListHasNegatives === true)
+                return (
+                  <>
+                    <div
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns:
+                          "repeat(auto-fit, minmax(130px, 1fr))",
+                        gap: "1rem",
+                        marginBottom: "1.5rem",
+                      }}
+                    >
+                      {[
+                        {
+                          label: "Total Found",
+                          value: MOCK_RESULTS.length,
+                          color: "#4ECDC4",
+                        },
+                        {
+                          label: "Negative",
+                          value: MOCK_RESULTS.filter(
+                            (r) => r.risk === "Negative",
+                          ).length,
+                          color: "#FF6B4A",
+                        },
+                        {
+                          label: "Poor",
+                          value: MOCK_RESULTS.filter((r) => r.risk === "Poor")
+                            .length,
+                          color: "#FF8C00",
+                        },
+                        {
+                          label: "Mediocre",
+                          value: MOCK_RESULTS.filter(
+                            (r) => r.risk === "Mediocre",
+                          ).length,
+                          color: "#FFD600",
+                        },
+                      ].map(({ label, value, color }) => (
+                        <div
+                          key={label}
+                          className="glass glow-border"
+                          style={{
+                            borderRadius: "0.75rem",
+                            padding: "1rem 1.25rem",
+                          }}
+                        >
+                          <p
+                            style={{
+                              fontSize: "1.75rem",
+                              fontWeight: 700,
+                              color,
+                              lineHeight: 1,
+                            }}
+                          >
+                            {value}
+                          </p>
+                          <p
+                            style={{
+                              color: "var(--color-muted)",
+                              fontSize: "0.75rem",
+                              marginTop: "0.25rem",
+                            }}
+                          >
+                            {label}
+                          </p>
                         </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </>
-            );
-          })()}
+                      ))}
+                    </div>
+                    <div
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: "0.875rem",
+                      }}
+                    >
+                      {MOCK_RESULTS.map((result, i) => {
+                        const risk = RISK_COLORS[result.risk];
+                        return (
+                          <div
+                            key={i}
+                            className="glass"
+                            style={{
+                              borderRadius: "0.625rem",
+                              padding: "1.25rem 1.5rem",
+                              border: "1px solid rgba(255,255,255,0.07)",
+                            }}
+                          >
+                            <div
+                              style={{
+                                display: "flex",
+                                alignItems: "flex-start",
+                                justifyContent: "space-between",
+                                gap: "1rem",
+                                flexWrap: "wrap",
+                              }}
+                            >
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <p
+                                  style={{
+                                    fontSize: "0.9375rem",
+                                    fontWeight: 600,
+                                    color: "var(--color-foreground)",
+                                    marginBottom: "0.2rem",
+                                  }}
+                                >
+                                  {result.title}
+                                </p>
+                                <a
+                                  href={`https://${result.url}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  style={{
+                                    display: "block",
+                                    fontSize: "0.75rem",
+                                    color: "#4ECDC4",
+                                    marginBottom: "0.5rem",
+                                    overflow: "hidden",
+                                    textOverflow: "ellipsis",
+                                    whiteSpace: "nowrap",
+                                    textDecoration: "none",
+                                  }}
+                                >
+                                  {result.url}
+                                </a>
+                                <p
+                                  style={{
+                                    fontSize: "0.8125rem",
+                                    color: "var(--color-muted)",
+                                    lineHeight: 1.55,
+                                  }}
+                                >
+                                  {result.snippet}
+                                </p>
+                              </div>
+                              <span
+                                style={{
+                                  flexShrink: 0,
+                                  fontSize: "0.75rem",
+                                  fontWeight: 700,
+                                  padding: "0.25rem 0.75rem",
+                                  borderRadius: "9999px",
+                                  backgroundColor: risk.bg,
+                                  color: risk.color,
+                                  border: `1px solid ${risk.border}`,
+                                  whiteSpace: "nowrap",
+                                }}
+                              >
+                                {result.risk}
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </>
+                );
+
+              return null;
+            })()}
 
           {/* ── Tab: Contract ────────────────────────────────────────────── */}
           {activeTab === "contract" && (
