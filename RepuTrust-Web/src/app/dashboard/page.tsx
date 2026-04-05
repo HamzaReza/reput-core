@@ -152,6 +152,7 @@ function RepuGauge({
     <svg
       viewBox={vb}
       width="100%"
+      className="animate-fade-up delay-200"
       style={{ maxWidth: "21rem", display: "block", margin: "0 auto" }}
     >
       <defs>
@@ -409,7 +410,7 @@ export default function DashboardPage() {
           {/* ── Tab: ReputScore ─────────────────────────────────────────── */}
           {activeTab === "score" && (
             <div
-              className="glass glow-border"
+              className="glass glow-border animate-scale-in"
               style={{
                 borderRadius: "0.875rem",
                 padding: "2.5rem 2rem",

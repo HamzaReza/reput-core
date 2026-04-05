@@ -31,7 +31,7 @@ export default function Hero() {
       <div style={{ maxWidth: '52rem', margin: '0 auto', textAlign: 'center' }}>
 
         {/* Badge */}
-        <div style={{
+        <div className="animate-fade-up" style={{
           display: 'inline-flex',
           alignItems: 'center',
           padding: '0.375rem 1rem',
@@ -47,7 +47,7 @@ export default function Hero() {
         </div>
 
         {/* Headline */}
-        <h1 style={{
+        <h1 className="animate-fade-up delay-100" style={{
           fontSize: 'clamp(2.5rem, 6vw, 4.5rem)',
           fontWeight: 800,
           lineHeight: 1.1,
@@ -61,7 +61,7 @@ export default function Hero() {
         </h1>
 
         {/* Subtext */}
-        <p style={{
+        <p className="animate-fade-up delay-200" style={{
           fontSize: '1.125rem',
           lineHeight: 1.7,
           color: 'var(--color-muted)',
@@ -74,7 +74,7 @@ export default function Hero() {
         </p>
 
         {/* CTA Buttons */}
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem', justifyContent: 'center', alignItems: 'center' }}>
+        <div className="animate-fade-up delay-300" style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem', justifyContent: 'center', alignItems: 'center' }}>
           {isAuthed ? (
             <>
               <Link

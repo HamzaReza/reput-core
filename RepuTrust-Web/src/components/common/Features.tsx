@@ -74,7 +74,7 @@ export default function Features() {
         {/* Feature Grid */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(18rem, 100%), 1fr))', gap: '1.5rem' }}>
           {features.map((feature, index) => (
-            <FeatureCard key={index} feature={feature} />
+            <FeatureCard key={index} feature={feature} delay={index * 100} />
           ))}
         </div>
       </div>
@@ -82,11 +82,11 @@ export default function Features() {
   );
 }
 
-function FeatureCard({ feature }: { feature: typeof features[0] }) {
+function FeatureCard({ feature, delay }: { feature: typeof features[0]; delay: number }) {
   return (
     <div
-      className="glass glow-border feature-card"
-      style={{ padding: '1.75rem', borderRadius: '0.875rem', display: 'flex', flexDirection: 'column', gap: '0.875rem', transition: 'all 0.3s ease' }}
+      className="glass glow-border feature-card animate-fade-up"
+      style={{ padding: '1.75rem', borderRadius: '0.875rem', display: 'flex', flexDirection: 'column', gap: '0.875rem', transition: 'all 0.3s ease', animationDelay: `${delay}ms` }}
     >
       {/* Icon */}
       <div style={{ width: '2.75rem', height: '2.75rem', borderRadius: '0.625rem', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, backgroundColor: 'rgba(68, 121, 218, 0.1)', color: 'var(--color-primary)', border: '1px solid rgba(68, 121, 218, 0.22)' }}>

@@ -30,7 +30,11 @@ export default function Header() {
   }, [drawerOpen]);
 
   const signOut = () => {
-    try { localStorage.clear(); } catch {}
+    try {
+      const splash = localStorage.getItem("reput_splash_shown");
+      localStorage.clear();
+      if (splash) localStorage.setItem("reput_splash_shown", splash);
+    } catch {}
     setIsAuthed(false);
     setDrawerOpen(false);
     window.dispatchEvent(new Event("reput-auth-change"));

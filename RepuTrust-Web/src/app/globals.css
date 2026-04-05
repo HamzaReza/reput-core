@@ -75,6 +75,82 @@
   color: var(--color-primary) !important;
 }
 
+/* ── Keyframes ────────────────────────────────────────────────────────── */
+
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(18px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes scaleIn {
+  from { opacity: 0; transform: scale(0.94); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+@keyframes slideInRight {
+  from { opacity: 0; transform: translateX(24px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0px); }
+  50%       { transform: translateY(-10px); }
+}
+
+@keyframes gaugeIn {
+  from { opacity: 0; transform: scale(0.88); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+/* ── Utility animation classes ───────────────────────────────────────── */
+
+.animate-fade-up {
+  animation: fadeUp 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.45s ease both;
+}
+
+.animate-scale-in {
+  animation: scaleIn 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.animate-slide-right {
+  animation: slideInRight 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* Stagger helpers */
+.delay-100 { animation-delay: 0.1s; }
+.delay-150 { animation-delay: 0.15s; }
+.delay-200 { animation-delay: 0.2s; }
+.delay-300 { animation-delay: 0.3s; }
+.delay-400 { animation-delay: 0.4s; }
+.delay-500 { animation-delay: 0.5s; }
+.delay-600 { animation-delay: 0.6s; }
+.delay-700 { animation-delay: 0.7s; }
+
+/* ── Button press micro-interaction ──────────────────────────────────── */
+.glow-button {
+  transition: background-color 0.2s ease, box-shadow 0.2s ease, transform 0.12s ease !important;
+}
+.glow-button:active {
+  transform: scale(0.97);
+}
+
+/* ── Card lift on hover ───────────────────────────────────────────────── */
+.glow-border {
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease !important;
+}
+.glow-border:hover {
+  transform: translateY(-2px);
+}
+
 * {
   margin: 0;
   padding: 0;

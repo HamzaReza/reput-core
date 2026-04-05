@@ -60,7 +60,7 @@ export default function LoginPage() {
         }}
       >
         <div style={{ width: "100%", maxWidth: "26rem" }}>
-          <div className="glass" style={{ borderRadius: "0.875rem", padding: "2rem" }}>
+          <div className="glass animate-scale-in" style={{ borderRadius: "0.875rem", padding: "2rem" }}>
             <h1
               className="neon-text"
               style={{ fontSize: "1.75rem", fontWeight: 700, marginBottom: "0.5rem", textAlign: "center" }}
