@@ -1,9 +1,31 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 
 export default function Header() {
+  const router = useRouter();
+  const [isAuthed, setIsAuthed] = useState(false);
+
+  useEffect(() => {
+    try {
+      setIsAuthed(localStorage.getItem("reput_authed") === "true");
+    } catch {}
+  }, []);
+
+  const signOut = () => {
+    try {
+      localStorage.removeItem("reput_authed");
+      localStorage.removeItem("reput_name");
+      localStorage.removeItem("reput_keywords");
+    } catch {}
+    setIsAuthed(false);
+    window.dispatchEvent(new Event("reput-auth-change"));
+    router.push("/");
+  };
+
   return (
     <header
       style={{
@@ -29,11 +51,8 @@ export default function Header() {
           justifyContent: "space-between",
         }}
       >
-        {/* Logo — left */}
-        <Link
-          href="/"
-          style={{ display: "flex", alignItems: "center", flexShrink: 0 }}
-        >
+        {/* Logo */}
+        <Link href="/" style={{ display: "flex", alignItems: "center", flexShrink: 0 }}>
           <Image
             src="/images/logo-white.png"
             alt="RepuTrust Logo"
@@ -44,62 +63,53 @@ export default function Header() {
           />
         </Link>
 
-        {/* Right side: nav links + sign in, all grouped together */}
+        {/* Right side */}
         <div style={{ display: "flex", alignItems: "center", gap: "2rem" }}>
-          <Link
-            href="/dashboard"
-            className="header-nav-link"
-            style={{
-              color: "var(--color-muted)",
-              fontSize: "0.875rem",
-              fontWeight: 500,
-              textDecoration: "none",
-              transition: "color 0.2s",
-            }}
-          >
-            Dashboard
-          </Link>
+          {isAuthed && (
+            <Link
+              href="/dashboard"
+              className="header-nav-link"
+              style={{ color: "var(--color-muted)", fontSize: "0.875rem", fontWeight: 500, textDecoration: "none", transition: "color 0.2s" }}
+            >
+              Scanner
+            </Link>
+          )}
+
           <Link
             href="/quote"
             className="header-nav-link"
-            style={{
-              color: "var(--color-muted)",
-              fontSize: "0.875rem",
-              fontWeight: 500,
-              textDecoration: "none",
-              transition: "color 0.2s",
-            }}
+            style={{ color: "var(--color-muted)", fontSize: "0.875rem", fontWeight: 500, textDecoration: "none", transition: "color 0.2s" }}
           >
-            Get Quote
-          </Link>
-          <Link
-            href="/settings"
-            className="header-nav-link"
-            style={{
-              color: "var(--color-muted)",
-              fontSize: "0.875rem",
-              fontWeight: 500,
-              textDecoration: "none",
-              transition: "color 0.2s",
-            }}
-          >
-            Settings
+            Removal Plans
           </Link>
 
-          <Link
-            href="/auth"
-            className="glow-button"
-            style={{
-              padding: "0.5rem 1.25rem",
-              borderRadius: "0.5rem",
-              fontSize: "0.875rem",
-              fontWeight: 600,
-              display: "inline-block",
-              textDecoration: "none",
-            }}
-          >
-            Sign In
-          </Link>
+          {isAuthed && (
+            <Link
+              href="/settings"
+              className="header-nav-link"
+              style={{ color: "var(--color-muted)", fontSize: "0.875rem", fontWeight: 500, textDecoration: "none", transition: "color 0.2s" }}
+            >
+              Settings
+            </Link>
+          )}
+
+          {isAuthed ? (
+            <button
+              onClick={signOut}
+              className="glow-button"
+              style={{ padding: "0.5rem 1.25rem", borderRadius: "0.5rem", fontSize: "0.875rem", fontWeight: 600, cursor: "pointer", border: "none" }}
+            >
+              Sign Out
+            </button>
+          ) : (
+            <Link
+              href="/login"
+              className="glow-button"
+              style={{ padding: "0.5rem 1.25rem", borderRadius: "0.5rem", fontSize: "0.875rem", fontWeight: 600, display: "inline-block", textDecoration: "none" }}
+            >
+              Login
+            </Link>
+          )}
         </div>
       </nav>
 
