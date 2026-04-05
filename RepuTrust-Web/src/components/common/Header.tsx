@@ -35,7 +35,7 @@ export default function Header() {
           style={{ display: "flex", alignItems: "center", flexShrink: 0 }}
         >
           <Image
-            src="/images/logo-grey.png"
+            src="/images/logo-white.png"
             alt="RepuTrust Logo"
             width={220}
             height={66}
