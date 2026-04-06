@@ -2,6 +2,7 @@
 
 import Footer from "@/components/common/Footer";
 import Header from "@/components/common/Header";
+import { isAuthed, quotes, auth } from "@/lib/api";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
@@ -32,26 +33,49 @@ export default function RemovalRequestPage() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [links, setLinks] = useState("");
+  const [submitLoading, setSubmitLoading] = useState(false);
+  const [submitError, setSubmitError] = useState("");
 
   useEffect(() => {
-    try {
-      if (localStorage.getItem("reput_authed") !== "true") {
-        router.replace("/auth");
-        return;
-      }
-      setAuthed(true);
-      const n = localStorage.getItem("reput_name");
-      if (n) setName(n);
-      const e = localStorage.getItem("reput_email");
-      if (e) setEmail(e);
-    } catch {}
+    if (!isAuthed()) {
+      router.replace("/auth");
+      return;
+    }
+    setAuthed(true);
+
+    auth.me().then((user) => {
+      if (user.name) setName(user.name);
+      setEmail(user.email);
+    }).catch(() => {
+      try {
+        const n = localStorage.getItem("reput_name");
+        const e = localStorage.getItem("reput_profile_email");
+        if (n) setName(n);
+        if (e) setEmail(e);
+      } catch {}
+    });
   }, [router]);
 
   if (!authed) return null;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setShowSuccess(true);
+    setSubmitError("");
+    setSubmitLoading(true);
+    try {
+      await quotes.submit({
+        name,
+        email,
+        plan_type: "starter",
+        message: links,
+        details: { links },
+      });
+      setShowSuccess(true);
+    } catch (err: unknown) {
+      setSubmitError(err instanceof Error ? err.message : "Submission failed.");
+    } finally {
+      setSubmitLoading(false);
+    }
   };
 
   const handleClose = () => {
@@ -149,17 +173,24 @@ export default function RemovalRequestPage() {
                 />
               </div>
 
+              {submitError && (
+                <p style={{ color: "#FF6B4A", fontSize: "0.875rem", textAlign: "center" }}>
+                  {submitError}
+                </p>
+              )}
               <button
                 type="submit"
+                disabled={submitLoading}
                 className="glow-button"
                 style={{
                   width: "100%",
                   fontWeight: 700,
                   padding: "0.75rem",
                   borderRadius: "0.625rem",
+                  opacity: submitLoading ? 0.8 : 1,
                 }}
               >
-                Submit Removal Request
+                {submitLoading ? "Submitting…" : "Submit Removal Request"}
               </button>
             </form>
           </div>

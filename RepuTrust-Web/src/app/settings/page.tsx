@@ -2,6 +2,7 @@
 
 import Footer from "@/components/common/Footer";
 import Header from "@/components/common/Header";
+import { isAuthed, auth, users } from "@/lib/api";
 import { useRouter } from "next/navigation";
 import React, { useEffect, useState } from "react";
 
@@ -96,39 +97,73 @@ export default function SettingsPage() {
   const [dob, setDob] = useState("");
   const [keywords, setKeywords] = useState<string[]>([]);
   const [keywordInput, setKeywordInput] = useState("");
+  const [saveLoading, setSaveLoading] = useState(false);
+  const [saveError, setSaveError] = useState("");
+  const [saveSuccess, setSaveSuccess] = useState(false);
 
   useEffect(() => {
-    try {
-      if (localStorage.getItem("reput_authed") !== "true") {
-        router.replace("/auth");
-        return;
+    if (!isAuthed()) {
+      router.replace("/auth");
+      return;
+    }
+    setAuthed(true);
+
+    const loadProfile = async () => {
+      try {
+        const [user, profile] = await Promise.all([
+          auth.me(),
+          users.getProfile().catch(() => null),
+        ]);
+        if (user.name) {
+          const parts = user.name.split(" ");
+          setFirstName(parts[0] || "");
+          setLastName(parts.slice(1).join(" ") || "");
+        }
+        setProfileEmail(user.email || "");
+        if (user.phone) setPhone(user.phone);
+        if (profile) {
+          if (profile.keywords?.length) setKeywords(profile.keywords);
+        }
+      } catch {
+        // Fallback to localStorage cache
+        try {
+          setFirstName(localStorage.getItem("reput_firstname") || "");
+          setLastName(localStorage.getItem("reput_lastname") || "");
+          setPhone(localStorage.getItem("reput_phone") || "");
+          setProfileEmail(localStorage.getItem("reput_profile_email") || "");
+          const kw = localStorage.getItem("reput_keywords") || "";
+          setKeywords(kw ? kw.split(",").map((s) => s.trim()).filter(Boolean) : []);
+        } catch {}
       }
-      setAuthed(true);
-      setFirstName(localStorage.getItem("reput_firstname") || "");
-      setLastName(localStorage.getItem("reput_lastname") || "");
-      setPhone(localStorage.getItem("reput_phone") || "");
-      setProfileEmail(localStorage.getItem("reput_profile_email") || "");
-      setNationality(localStorage.getItem("reput_nationality") || "");
-      setDob(localStorage.getItem("reput_dob") || "");
-      const kw = localStorage.getItem("reput_keywords") || "";
-      setKeywords(kw ? kw.split(",").map((s) => s.trim()).filter(Boolean) : []);
-    } catch {}
+    };
+    loadProfile();
   }, [router]);
 
-  const saveChanges = () => {
+  const saveChanges = async () => {
+    setSaveError("");
+    setSaveSuccess(false);
+    setSaveLoading(true);
     try {
-      localStorage.setItem("reput_firstname", firstName.trim());
-      localStorage.setItem("reput_lastname", lastName.trim());
-      localStorage.setItem("reput_phone", phone.trim());
-      localStorage.setItem("reput_profile_email", profileEmail.trim());
-      localStorage.setItem("reput_nationality", nationality);
-      localStorage.setItem("reput_dob", dob);
-      localStorage.setItem("reput_keywords", keywords.join(","));
-      localStorage.setItem(
-        "reput_name",
-        `${firstName.trim()} ${lastName.trim()}`.trim(),
-      );
-    } catch {}
+      const fullName = `${firstName.trim()} ${lastName.trim()}`.trim();
+      await users.updateMe({ name: fullName, phone: phone.trim() });
+      const finalKeywords = keywordInput.trim()
+        ? [...keywords, keywordInput.replace(/,/g, "").trim()].filter(Boolean)
+        : keywords;
+      await users.upsertProfile({ keywords: finalKeywords });
+      try {
+        localStorage.setItem("reput_name", fullName);
+        localStorage.setItem("reput_keywords", finalKeywords.join(","));
+        localStorage.setItem("reput_firstname", firstName.trim());
+        localStorage.setItem("reput_lastname", lastName.trim());
+        localStorage.setItem("reput_phone", phone.trim());
+      } catch {}
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 3000);
+    } catch (err: unknown) {
+      setSaveError(err instanceof Error ? err.message : "Failed to save.");
+    } finally {
+      setSaveLoading(false);
+    }
   };
 
   if (!authed) return null;
@@ -722,18 +757,26 @@ export default function SettingsPage() {
             </div> */}
 
             {/* Save */}
-            <div style={{ display: "flex", justifyContent: "flex-end" }}>
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "0.5rem" }}>
+              {saveError && (
+                <p style={{ color: "#FF6B4A", fontSize: "0.875rem" }}>{saveError}</p>
+              )}
+              {saveSuccess && (
+                <p style={{ color: "#4CAF50", fontSize: "0.875rem" }}>Changes saved successfully.</p>
+              )}
               <button
                 onClick={saveChanges}
+                disabled={saveLoading}
                 className="glow-button"
                 style={{
                   fontWeight: 700,
                   padding: "0.75rem 2rem",
                   borderRadius: "0.625rem",
                   transition: "all 0.3s",
+                  opacity: saveLoading ? 0.8 : 1,
                 }}
               >
-                Save Changes
+                {saveLoading ? "Saving…" : "Save Changes"}
               </button>
             </div>
           </div>

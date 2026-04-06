@@ -2,6 +2,7 @@
 
 import Footer from "@/components/common/Footer";
 import Header from "@/components/common/Header";
+import { auth, users, setToken } from "@/lib/api";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useRef, useState, Suspense } from "react";
 
@@ -250,34 +251,18 @@ function AuthPageInner() {
   const [step4NoLoading, setStep4NoLoading] = useState(false);
   const [step4YesLoading, setStep4YesLoading] = useState(false);
   const [step5Loading, setStep5Loading] = useState(false);
+  const [step1Error, setStep1Error] = useState("");
+  const [step3Error, setStep3Error] = useState("");
 
   const advance = () => {
     const next = Math.min(step + 1, 5) as Step;
-    // Persist and authenticate as soon as the user reaches the notifications step
-    if (next === 5) {
-      try {
-        localStorage.setItem("reput_authed", "true");
-        localStorage.setItem("reput_firstname", firstName.trim());
-        localStorage.setItem("reput_lastname", lastName.trim());
-        localStorage.setItem("reput_phone", phone.trim());
-        localStorage.setItem(
-          "reput_profile_email",
-          profileEmail.trim() || email.trim(),
-        );
-        localStorage.setItem("reput_nationality", nationality);
-        localStorage.setItem("reput_dob", dob);
-        localStorage.setItem("reput_keywords", keywords.join(","));
-        localStorage.setItem(
-          "reput_name",
-          `${firstName.trim()} ${lastName.trim()}`.trim() || "John Doe",
-        );
-        if (avatar) localStorage.setItem("reput_avatar", avatar);
-      } catch {}
-    }
     setStep(next);
   };
 
-  const goToDashboard = () => router.push("/dashboard");
+  const goToDashboard = () => {
+    window.dispatchEvent(new Event("reput-auth-change"));
+    router.push("/dashboard");
+  };
 
   // ── OTP helpers ────────────────────────────────────────────────────────────
   const handleOtpChange = (index: number, value: string) => {
@@ -371,14 +356,24 @@ function AuthPageInner() {
         </p>
 
         <form
-          onSubmit={(e) => {
+          onSubmit={async (e) => {
             e.preventDefault();
+            setStep1Error("");
             setProfileEmail(email);
             setStep1Loading(true);
-            setTimeout(() => {
-              setStep1Loading(false);
+            try {
+              const res = await auth.register(email, password);
+              setToken(res.access_token);
+              try {
+                localStorage.setItem("reput_user", JSON.stringify(res.user));
+              } catch {}
+              window.dispatchEvent(new Event("reput-auth-change"));
               advance();
-            }, 1200);
+            } catch (err: unknown) {
+              setStep1Error(err instanceof Error ? err.message : "Registration failed.");
+            } finally {
+              setStep1Loading(false);
+            }
           }}
           style={{ display: "flex", flexDirection: "column", gap: "1rem" }}
         >
@@ -404,6 +399,11 @@ function AuthPageInner() {
               required
             />
           </div>
+          {step1Error && (
+            <p style={{ color: "#FF6B4A", fontSize: "0.875rem", textAlign: "center", margin: 0 }}>
+              {step1Error}
+            </p>
+          )}
           <button
             type="submit"
             disabled={step1Loading}
@@ -686,8 +686,9 @@ function AuthPageInner() {
         </p>
 
         <form
-          onSubmit={(e) => {
+          onSubmit={async (e) => {
             e.preventDefault();
+            setStep3Error("");
             const finalKeywords = [...keywords];
             if (keywordInput.trim()) {
               const val = keywordInput.replace(/,/g, "").trim();
@@ -699,10 +700,25 @@ function AuthPageInner() {
             }
             if (finalKeywords.length === 0) return;
             setStep3Loading(true);
-            setTimeout(() => {
-              setStep3Loading(false);
+            try {
+              const fullName = `${firstName.trim()} ${lastName.trim()}`.trim();
+              await users.updateMe({ name: fullName, phone: phone.trim() });
+              await users.upsertProfile({
+                keywords: finalKeywords,
+                avatar_url: avatar || null,
+                notification_email: true,
+              });
+              try {
+                localStorage.setItem("reput_name", fullName || "User");
+                localStorage.setItem("reput_keywords", finalKeywords.join(","));
+                if (avatar) localStorage.setItem("reput_avatar", avatar);
+              } catch {}
               advance();
-            }, 1200);
+            } catch (err: unknown) {
+              setStep3Error(err instanceof Error ? err.message : "Failed to save profile.");
+            } finally {
+              setStep3Loading(false);
+            }
           }}
           style={{ display: "flex", flexDirection: "column", gap: "0.875rem" }}
         >
@@ -1098,6 +1114,11 @@ function AuthPageInner() {
             </span>
           </label>
 
+          {step3Error && (
+            <p style={{ color: "#FF6B4A", fontSize: "0.875rem", textAlign: "center", margin: 0 }}>
+              {step3Error}
+            </p>
+          )}
           <button
             type="submit"
             disabled={step3Loading}

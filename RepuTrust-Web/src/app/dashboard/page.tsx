@@ -2,6 +2,7 @@
 
 import Footer from "@/components/common/Footer";
 import Header from "@/components/common/Header";
+import { isAuthed, reputation, auth, type ReputationScan } from "@/lib/api";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
@@ -17,56 +18,12 @@ interface ScanResult {
   risk: RiskLevel;
 }
 
-const MOCK_RESULTS: ScanResult[] = [
-  {
-    site: "reddit.com",
-    url: "reddit.com/r/complaints/comments/xk91a2",
-    title: "Avoid doing business — multiple complaints filed",
-    snippet:
-      "Several users have reported fraudulent behaviour and unresolved disputes. Thread has 240 upvotes and 80+ comments...",
-    risk: "Negative",
-  },
-  {
-    site: "trustpilot.com",
-    url: "trustpilot.com/review/example-profile",
-    title: '1-star review: "Complete scam, lost money"',
-    snippet:
-      "Verified review from October 2024. Reviewer claims services were never delivered after payment was made...",
-    risk: "Negative",
-  },
-  {
-    site: "ripoffreport.com",
-    url: "ripoffreport.com/reports/detail/112984",
-    title: "Rip-off Report: Misleading claims and no refunds",
-    snippet:
-      "Filed report alleges intentional misrepresentation. Report has been indexed on Google for 14 months...",
-    risk: "Poor",
-  },
-  {
-    site: "twitter.com",
-    url: "twitter.com/user/status/1749302918",
-    title: 'Viral tweet: "Warning — do NOT hire this person"',
-    snippet:
-      "Tweet received 1.2K retweets and 3.4K likes. Contains name alongside fraud allegations and screenshots...",
-    risk: "Poor",
-  },
-  {
-    site: "glassdoor.com",
-    url: "glassdoor.com/Reviews/company-review-12345",
-    title: "Former employee review: toxic environment, false promises",
-    snippet:
-      "One-star Glassdoor review describing unethical management practices. Currently ranking page 1 on Google...",
-    risk: "Mediocre",
-  },
-  {
-    site: "quora.com",
-    url: "quora.com/Is-this-company-a-scam",
-    title: 'Quora thread: "Is this a scam?"',
-    snippet:
-      "Multiple answers confirm negative experiences. Thread has 4,800 views and appears in top 10 search results...",
-    risk: "Good",
-  },
-];
+function apiRiskToUi(risk: string): RiskLevel {
+  if (risk === "high") return "Negative";
+  if (risk === "medium") return "Poor";
+  if (risk === "low") return "Good";
+  return "Mediocre";
+}
 
 const RISK_COLORS: Record<
   RiskLevel,
@@ -276,7 +233,8 @@ export default function DashboardPage() {
   const [scanName, setScanName] = useState("");
   const [scanKeywords, setScanKeywords] = useState<string[]>([]);
   const [avatar, setAvatar] = useState("");
-  const [score] = useState(() => Math.floor(Math.random() * 100));
+  const [score, setScore] = useState(0);
+  const [scanData, setScanData] = useState<ReputationScan | null>(null);
   const [scoreLoading, setScoreLoading] = useState(true);
   const [listRequested, setListRequested] = useState(false);
   const [linkListPending, setLinkListPending] = useState(false);
@@ -288,35 +246,50 @@ export default function DashboardPage() {
   const infoMoreTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
+    if (!isAuthed()) {
+      router.replace("/auth");
+      return;
+    }
+    setAuthed(true);
+
+    // Load cached user info
     try {
-      if (localStorage.getItem("reput_authed") !== "true") {
-        router.replace("/auth");
-        return;
-      }
-      setAuthed(true);
       const n = localStorage.getItem("reput_name");
       const k = localStorage.getItem("reput_keywords");
-      if (n) setScanName(n.toUpperCase());
-      if (k)
-        setScanKeywords(
-          k
-            .split(",")
-            .map((s) => s.trim())
-            .filter(Boolean),
-        );
       const a = localStorage.getItem("reput_avatar");
+      if (n) setScanName(n.toUpperCase());
+      if (k) setScanKeywords(k.split(",").map((s) => s.trim()).filter(Boolean));
       if (a) setAvatar(a);
-      if (localStorage.getItem("reput_list_requested") === "true") {
-        setListRequested(true);
-        const outcome = localStorage.getItem("reput_link_list_has_negatives");
-        if (outcome === "true") setLinkListHasNegatives(true);
-        else if (outcome === "false") setLinkListHasNegatives(false);
-        else setLinkListHasNegatives(true);
-      }
     } catch {}
 
-    const t = setTimeout(() => setScoreLoading(false), 2000);
-    return () => clearTimeout(t);
+    // Fetch user + latest scan from API
+    const loadData = async () => {
+      try {
+        const [user, latestScan] = await Promise.all([
+          auth.me(),
+          reputation.getLatest(),
+        ]);
+        if (user.name) setScanName(user.name.toUpperCase());
+        if (user.profile?.keywords?.length) setScanKeywords(user.profile.keywords);
+        if (user.profile?.avatar_url) setAvatar(user.profile.avatar_url);
+
+        if (latestScan) {
+          setScanData(latestScan);
+          setScore(latestScan.score);
+        } else {
+          // No scan yet — trigger the first one
+          const newScan = await reputation.triggerScan();
+          setScanData(newScan);
+          setScore(newScan.score);
+        }
+      } catch {
+        // Fallback — keep defaults
+      } finally {
+        setScoreLoading(false);
+      }
+    };
+
+    loadData();
   }, [router]);
 
   useEffect(() => {
@@ -326,42 +299,37 @@ export default function DashboardPage() {
     };
   }, []);
 
-  const requestLinkList = () => {
+  const requestLinkList = async () => {
     if (linkListPending) return;
     setLinkListPending(true);
-    if (linkListTimeoutRef.current) clearTimeout(linkListTimeoutRef.current);
-    linkListTimeoutRef.current = setTimeout(() => {
-      linkListTimeoutRef.current = null;
-      const hasNegatives = Math.random() < 0.5;
-      try {
-        localStorage.setItem("reput_list_requested", "true");
-        localStorage.setItem(
-          "reput_link_list_has_negatives",
-          hasNegatives ? "true" : "false",
-        );
-      } catch {}
+    try {
+      const newScan = await reputation.triggerScan();
+      setScanData(newScan);
+      setScore(newScan.score);
+      const hasNegatives = newScan.summary.high_risk > 0 || newScan.summary.medium_risk > 0;
       setLinkListHasNegatives(hasNegatives);
       setListRequested(true);
+    } catch {
+      setLinkListHasNegatives(true);
+      setListRequested(true);
+    } finally {
       setLinkListPending(false);
-    }, 2500);
+    }
   };
 
-  const requestMoreInfo = () => {
+  const requestMoreInfo = async () => {
     if (infoPending) return;
     setInfoPending(true);
-    if (infoMoreTimeoutRef.current) clearTimeout(infoMoreTimeoutRef.current);
-    infoMoreTimeoutRef.current = setTimeout(() => {
-      infoMoreTimeoutRef.current = null;
-      const hasNegatives = Math.random() < 0.5;
-      try {
-        localStorage.setItem(
-          "reput_link_list_has_negatives",
-          hasNegatives ? "true" : "false",
-        );
-      } catch {}
-      setLinkListHasNegatives(hasNegatives);
+    try {
+      const newScan = await reputation.triggerScan();
+      setScanData(newScan);
+      setScore(newScan.score);
+      setLinkListHasNegatives(newScan.summary.high_risk > 0 || newScan.summary.medium_risk > 0);
+    } catch {
+      setLinkListHasNegatives(true);
+    } finally {
       setInfoPending(false);
-    }, 2500);
+    }
   };
 
   if (!authed) return null;
@@ -827,28 +795,23 @@ export default function DashboardPage() {
                       {[
                         {
                           label: "Total Found",
-                          value: MOCK_RESULTS.length,
+                          value: scanData?.summary?.total_results ?? 0,
                           color: "var(--color-primary)",
                         },
                         {
                           label: "Negative",
-                          value: MOCK_RESULTS.filter(
-                            (r) => r.risk === "Negative",
-                          ).length,
+                          value: scanData?.summary?.high_risk ?? 0,
                           color: "#FF6B4A",
                         },
                         {
                           label: "Poor",
-                          value: MOCK_RESULTS.filter((r) => r.risk === "Poor")
-                            .length,
+                          value: scanData?.summary?.medium_risk ?? 0,
                           color: "#FF8C00",
                         },
                         {
-                          label: "Mediocre",
-                          value: MOCK_RESULTS.filter(
-                            (r) => r.risk === "Mediocre",
-                          ).length,
-                          color: "#FFD600",
+                          label: "Good",
+                          value: scanData?.summary?.low_risk ?? 0,
+                          color: "#4CAF50",
                         },
                       ].map(({ label, value, color }) => (
                         <div
@@ -888,8 +851,9 @@ export default function DashboardPage() {
                         gap: "0.875rem",
                       }}
                     >
-                      {MOCK_RESULTS.map((result, i) => {
-                        const risk = RISK_COLORS[result.risk];
+                      {(scanData?.results ?? []).map((result, i) => {
+                        const uiRisk = apiRiskToUi(result.risk);
+                        const risk = RISK_COLORS[uiRisk];
                         return (
                           <div
                             key={i}
@@ -921,7 +885,7 @@ export default function DashboardPage() {
                                   {result.title}
                                 </p>
                                 <a
-                                  href={`https://${result.url}`}
+                                  href={result.url}
                                   target="_blank"
                                   rel="noopener noreferrer"
                                   style={{
@@ -960,7 +924,7 @@ export default function DashboardPage() {
                                   whiteSpace: "nowrap",
                                 }}
                               >
-                                {result.risk}
+                                {uiRisk}
                               </span>
                             </div>
                           </div>
