@@ -3,7 +3,7 @@
 import Footer from "@/components/common/Footer";
 import Header from "@/components/common/Header";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useRef, useState } from "react";
+import { useRef, useState, Suspense } from "react";
 
 // 5 steps: 1=account, 2=otp, 3=information, 4=linkedin, 5=notifications
 type Step = 1 | 2 | 3 | 4 | 5;
@@ -207,7 +207,7 @@ function Shell({
   );
 }
 
-export default function AuthPage() {
+function AuthPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const initialStep = (Number(searchParams.get("step")) as Step) || 1;
@@ -1570,5 +1570,13 @@ function ProfileCard({
         </div>
       )}
     </div>
+  );
+}
+
+export default function AuthPage() {
+  return (
+    <Suspense>
+      <AuthPageInner />
+    </Suspense>
   );
 }
