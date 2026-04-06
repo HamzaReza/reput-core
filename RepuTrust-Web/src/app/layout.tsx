@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import SplashScreen from "@/components/common/SplashScreenClient";
 
 export const metadata: Metadata = {
   title: "RepuTrust - Reputation Management Platform",
@@ -19,6 +20,7 @@ export default function RootLayout({
   return (
     <html lang="en" className="h-full antialiased">
       <body suppressHydrationWarning style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', width: '100%', margin: 0, padding: 0 }}>
+        <SplashScreen />
         {children}
       </body>
     </html>

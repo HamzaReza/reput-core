@@ -24,7 +24,9 @@ export default function Header() {
   // Close drawer on route change / resize
   useEffect(() => {
     if (!drawerOpen) return;
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setDrawerOpen(false); };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setDrawerOpen(false);
+    };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [drawerOpen]);
@@ -38,7 +40,7 @@ export default function Header() {
     setIsAuthed(false);
     setDrawerOpen(false);
     window.dispatchEvent(new Event("reput-auth-change"));
-    router.push("/");
+    router.push("/login");
   };
 
   const close = () => setDrawerOpen(false);
@@ -66,14 +68,21 @@ export default function Header() {
       <header
         style={{
           position: "fixed",
-          top: 0, left: 0, right: 0,
+          top: 0,
+          left: 0,
+          right: 0,
           width: "100%",
           zIndex: 50,
-          backgroundColor: scrolled ? "rgba(255,255,255,0.72)" : "rgba(255,255,255,0.85)",
+          backgroundColor: scrolled
+            ? "rgba(255,255,255,0.72)"
+            : "rgba(255,255,255,0.85)",
           backdropFilter: "saturate(180%) blur(20px)",
           WebkitBackdropFilter: "saturate(180%) blur(20px)",
-          borderBottom: scrolled ? "1px solid rgba(0,0,0,0.08)" : "1px solid rgba(0,0,0,0.04)",
-          transition: "background-color 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease",
+          borderBottom: scrolled
+            ? "1px solid rgba(0,0,0,0.08)"
+            : "1px solid rgba(0,0,0,0.04)",
+          transition:
+            "background-color 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease",
           boxShadow: scrolled ? "0 1px 24px rgba(0,0,0,0.06)" : "none",
         }}
       >
@@ -88,7 +97,10 @@ export default function Header() {
           }}
         >
           {/* Logo */}
-          <Link href="/" style={{ display: "flex", alignItems: "center", flexShrink: 0 }}>
+          <Link
+            href="/"
+            style={{ display: "flex", alignItems: "center", flexShrink: 0 }}
+          >
             <Image
               src="/images/logo-grey.png"
               alt="RepuTrust Logo"
@@ -96,23 +108,56 @@ export default function Header() {
               height={66}
               style={{ height: "clamp(1.5rem, 5vw, 2.25rem)", width: "auto" }}
               priority
+              loading="eager"
             />
           </Link>
 
           {/* Desktop nav */}
-          <div className="desktop-nav" style={{ display: "flex", alignItems: "center", gap: "clamp(0.75rem, 2.5vw, 2rem)" }}>
+          <div
+            className="desktop-nav"
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "clamp(0.75rem, 2.5vw, 2rem)",
+            }}
+          >
             {isAuthed && (
-              <Link href="/dashboard" className="header-nav-link" style={navLinkStyle}>Scanner</Link>
+              <Link
+                href="/dashboard"
+                className="header-nav-link"
+                style={navLinkStyle}
+              >
+                Scanner
+              </Link>
             )}
-            <Link href="/quote" className="header-nav-link" style={navLinkStyle}>Removal Plans</Link>
+            <Link
+              href="/quote"
+              className="header-nav-link"
+              style={navLinkStyle}
+            >
+              Removal Plans
+            </Link>
             {isAuthed && (
-              <Link href="/settings" className="header-nav-link" style={navLinkStyle}>Settings</Link>
+              <Link
+                href="/settings"
+                className="header-nav-link"
+                style={navLinkStyle}
+              >
+                Settings
+              </Link>
             )}
             {isAuthed ? (
               <button
                 onClick={signOut}
                 className="glow-button"
-                style={{ padding: "0.5rem 1.25rem", borderRadius: "0.5rem", fontSize: "0.875rem", fontWeight: 600, cursor: "pointer", border: "none" }}
+                style={{
+                  padding: "0.5rem 1.25rem",
+                  borderRadius: "0.625rem",
+                  fontSize: "0.875rem",
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  border: "none",
+                }}
               >
                 Sign Out
               </button>
@@ -120,7 +165,14 @@ export default function Header() {
               <Link
                 href="/login"
                 className="glow-button"
-                style={{ padding: "0.5rem 1.25rem", borderRadius: "0.5rem", fontSize: "0.875rem", fontWeight: 600, display: "inline-block", textDecoration: "none" }}
+                style={{
+                  padding: "0.5rem 1.25rem",
+                  borderRadius: "0.625rem",
+                  fontSize: "0.875rem",
+                  fontWeight: 600,
+                  display: "inline-block",
+                  textDecoration: "none",
+                }}
               >
                 Login
               </Link>
@@ -146,9 +198,33 @@ export default function Header() {
               padding: 0,
             }}
           >
-            <span style={{ width: "22px", height: "2px", backgroundColor: "var(--color-foreground)", borderRadius: "2px", display: "block" }} />
-            <span style={{ width: "22px", height: "2px", backgroundColor: "var(--color-foreground)", borderRadius: "2px", display: "block" }} />
-            <span style={{ width: "22px", height: "2px", backgroundColor: "var(--color-foreground)", borderRadius: "2px", display: "block" }} />
+            <span
+              style={{
+                width: "22px",
+                height: "2px",
+                backgroundColor: "var(--color-foreground)",
+                borderRadius: "2px",
+                display: "block",
+              }}
+            />
+            <span
+              style={{
+                width: "22px",
+                height: "2px",
+                backgroundColor: "var(--color-foreground)",
+                borderRadius: "2px",
+                display: "block",
+              }}
+            />
+            <span
+              style={{
+                width: "22px",
+                height: "2px",
+                backgroundColor: "var(--color-foreground)",
+                borderRadius: "2px",
+                display: "block",
+              }}
+            />
           </button>
         </nav>
       </header>
@@ -191,17 +267,44 @@ export default function Header() {
       >
         {/* Drawer header */}
         <div style={{ marginBottom: "2rem" }}>
-          <Image src="/images/logo-grey.png" alt="RepuTrust" width={220} height={66} style={{ height: "clamp(1.5rem, 5vw, 2.25rem)", width: "auto" }} />
+          <Image
+            src="/images/logo-grey.png"
+            alt="RepuTrust"
+            width={220}
+            height={66}
+            style={{ height: "clamp(1.5rem, 5vw, 2.25rem)", width: "auto" }}
+          />
         </div>
 
         {/* Drawer links */}
         <nav style={{ flex: 1 }}>
           {isAuthed && (
-            <Link href="/dashboard" onClick={close} className="drawer-nav-link" style={drawerLinkStyle}>Scanner</Link>
+            <Link
+              href="/dashboard"
+              onClick={close}
+              className="drawer-nav-link"
+              style={drawerLinkStyle}
+            >
+              Scanner
+            </Link>
           )}
-          <Link href="/quote" onClick={close} className="drawer-nav-link" style={drawerLinkStyle}>Removal Plans</Link>
+          <Link
+            href="/quote"
+            onClick={close}
+            className="drawer-nav-link"
+            style={drawerLinkStyle}
+          >
+            Removal Plans
+          </Link>
           {isAuthed && (
-            <Link href="/settings" onClick={close} className="drawer-nav-link" style={drawerLinkStyle}>Settings</Link>
+            <Link
+              href="/settings"
+              onClick={close}
+              className="drawer-nav-link"
+              style={drawerLinkStyle}
+            >
+              Settings
+            </Link>
           )}
         </nav>
 
@@ -211,7 +314,15 @@ export default function Header() {
             <button
               onClick={signOut}
               className="glow-button"
-              style={{ width: "100%", padding: "0.75rem", borderRadius: "0.5rem", fontSize: "0.9375rem", fontWeight: 600, cursor: "pointer", border: "none" }}
+              style={{
+                width: "100%",
+                padding: "0.75rem",
+                borderRadius: "0.625rem",
+                fontSize: "0.9375rem",
+                fontWeight: 600,
+                cursor: "pointer",
+                border: "none",
+              }}
             >
               Sign Out
             </button>
@@ -220,7 +331,15 @@ export default function Header() {
               href="/login"
               onClick={close}
               className="glow-button"
-              style={{ display: "block", textAlign: "center", padding: "0.75rem", borderRadius: "0.5rem", fontSize: "0.9375rem", fontWeight: 600, textDecoration: "none" }}
+              style={{
+                display: "block",
+                textAlign: "center",
+                padding: "0.75rem",
+                borderRadius: "0.625rem",
+                fontSize: "0.9375rem",
+                fontWeight: 600,
+                textDecoration: "none",
+              }}
             >
               Login
             </Link>
@@ -230,13 +349,26 @@ export default function Header() {
 
       <style jsx global>{`
         .header-nav-link:hover,
-        .drawer-nav-link:hover { color: var(--color-primary) !important; }
+        .drawer-nav-link:hover {
+          color: var(--color-primary) !important;
+        }
 
-        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes fadeIn {
+          from {
+            opacity: 0;
+          }
+          to {
+            opacity: 1;
+          }
+        }
 
         @media (max-width: 640px) {
-          .desktop-nav { display: none !important; }
-          .hamburger { display: flex !important; }
+          .desktop-nav {
+            display: none !important;
+          }
+          .hamburger {
+            display: flex !important;
+          }
         }
       `}</style>
     </>

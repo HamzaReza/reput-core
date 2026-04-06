@@ -94,7 +94,6 @@ const RISK_COLORS: Record<
   },
 };
 
-
 function scoreLabel(score: number): { label: string; color: string } {
   if (score >= 75) return { label: "Negative", color: "#FF6B4A" };
   if (score >= 50) return { label: "Poor", color: "#FF8C00" };
@@ -113,9 +112,9 @@ function RepuGauge({
 }) {
   const cx = 140,
     cy = 140;
-  const r = 112; // arc radius
+  const r = 112;
   const arcStroke = 22;
-  const avatarR = 62; // avatar size
+  const avatarR = 62;
 
   const toRad = (d: number) => (d * Math.PI) / 180;
   const pt = (deg: number, radius: number) => ({
@@ -123,42 +122,46 @@ function RepuGauge({
     y: cy - radius * Math.sin(toRad(deg)),
   });
 
-  // 240° horseshoe: start at 210° (7-o'clock, green) → CW → 330° (5-o'clock, red)
   const s = pt(210, r);
   const e = pt(330, r);
 
-  // Needle: 0% = 210°, 100% = 330° going clockwise (decreasing math angle)
-  const needleAngle = 210 - (score / 100) * 240;
-  const nRad = toRad(needleAngle);
+  // Final needle angle (math convention, CCW from east)
+  const finalAngle = 210 - (score / 100) * 240;
+  // Start angle is always 210° (0% position)
+  const startAngle = 210;
+  // SVG rotation: from startAngle to finalAngle, both converted to SVG rotation degrees
+  // SVG rotates CW, math angles go CCW → SVG angle = -mathAngle
+  const svgStartRot = -startAngle; // = -210
+  const svgFinalRot = -finalAngle;
 
-  // Dart tip: near inner edge of arc, base: at avatar rim
   const tipLen = r - arcStroke / 2 - 4;
   const baseLen = avatarR + 1;
-  const hw = 14; // half-width of dart base
+  const hw = 14;
 
-  const tx = cx + tipLen * Math.cos(nRad);
-  const ty = cy - tipLen * Math.sin(nRad);
-  const bx = cx + baseLen * Math.cos(nRad);
-  const by = cy - baseLen * Math.sin(nRad);
-
-  // Perpendicular in SVG coords: rotate needle dir 90° CCW → (sin θ, cos θ)
-  const p1 = { x: bx + hw * Math.sin(nRad), y: by + hw * Math.cos(nRad) };
-  const p2 = { x: bx - hw * Math.sin(nRad), y: by - hw * Math.cos(nRad) };
+  // Dart at 0° position (pointing right from cx,cy) — rotation handles direction
+  const tx0 = cx + tipLen;
+  const ty0 = cy;
+  const bx0 = cx + baseLen;
+  const by0 = cy;
+  const p1_0 = { x: bx0, y: by0 + hw };
+  const p2_0 = { x: bx0, y: by0 - hw };
 
   const pad = arcStroke / 2 + 10;
   const vb = `${cx - r - pad} ${cy - r - pad} ${(r + pad) * 2} ${(r + pad) * 2}`;
+
+  // Unique id per instance to avoid gradient conflicts
+  const gradId = "gaugeGrad";
+  const clipId = "avatarClip";
 
   return (
     <svg
       viewBox={vb}
       width="100%"
-      className="animate-fade-up delay-200"
       style={{ maxWidth: "21rem", display: "block", margin: "0 auto" }}
     >
       <defs>
-        {/* Gradient along the arc direction (left→right roughly) */}
         <linearGradient
-          id="gaugeGrad"
+          id={gradId}
           gradientUnits="userSpaceOnUse"
           x1={s.x}
           y1={cy}
@@ -171,12 +174,24 @@ function RepuGauge({
           <stop offset="75%" stopColor="#FF8C00" />
           <stop offset="100%" stopColor="#FF3D00" />
         </linearGradient>
-        <clipPath id="avatarClip">
+        <clipPath id={clipId}>
           <circle cx={cx} cy={cy} r={avatarR} />
         </clipPath>
+        <style>{`
+          @keyframes gauge-needle {
+            from { transform: rotate(${svgStartRot}deg); }
+            to   { transform: rotate(${svgFinalRot}deg); }
+          }
+          .gauge-needle-g {
+            transform-origin: ${cx}px ${cy}px;
+            transform: rotate(${svgStartRot}deg);
+            animation: gauge-needle ${(0.6 + (score / 100) * 2.4).toFixed(2)}s cubic-bezier(0.25, 0.1, 0.25, 1) forwards;
+            animation-delay: 0.3s;
+          }
+        `}</style>
       </defs>
 
-      {/* Thin full grey ring behind everything */}
+      {/* Grey background ring */}
       <circle
         cx={cx}
         cy={cy}
@@ -186,11 +201,11 @@ function RepuGauge({
         strokeWidth={arcStroke}
       />
 
-      {/* Colored 240° horseshoe arc (large-arc=1, sweep=1 = clockwise in SVG) */}
+      {/* Colored arc — animates drawing in */}
       <path
         d={`M ${s.x.toFixed(2)} ${s.y.toFixed(2)} A ${r} ${r} 0 1 1 ${e.x.toFixed(2)} ${e.y.toFixed(2)}`}
         fill="none"
-        stroke="url(#gaugeGrad)"
+        stroke={`url(#${gradId})`}
         strokeWidth={arcStroke}
         strokeLinecap="round"
       />
@@ -198,7 +213,7 @@ function RepuGauge({
       {/* Avatar background disc */}
       <circle cx={cx} cy={cy} r={avatarR + 4} fill="#ffffff" />
 
-      {/* Avatar content */}
+      {/* Avatar */}
       {avatar ? (
         <image
           href={avatar}
@@ -206,20 +221,18 @@ function RepuGauge({
           y={cy - avatarR}
           width={avatarR * 2}
           height={avatarR * 2}
-          clipPath="url(#avatarClip)"
+          clipPath={`url(#${clipId})`}
           preserveAspectRatio="xMidYMid slice"
         />
       ) : (
         <>
           <circle cx={cx} cy={cy} r={avatarR} fill="rgba(150,175,210,0.1)" />
-          {/* Silhouette head */}
           <circle
             cx={cx}
             cy={cy - avatarR * 0.25}
             r={avatarR * 0.29}
             fill="rgba(150,175,210,0.38)"
           />
-          {/* Silhouette body */}
           <ellipse
             cx={cx}
             cy={cy + avatarR * 0.58}
@@ -230,7 +243,7 @@ function RepuGauge({
         </>
       )}
 
-      {/* Avatar rim ring */}
+      {/* Avatar rim */}
       <circle
         cx={cx}
         cy={cy}
@@ -240,16 +253,18 @@ function RepuGauge({
         strokeWidth={2}
       />
 
-      {/* Dart arrow: straight sides, rounded base (arc away from tip, sweep=1) */}
-      <path
-        d={[
-          `M ${tx.toFixed(2)} ${ty.toFixed(2)}`,
-          `L ${p1.x.toFixed(2)} ${p1.y.toFixed(2)}`,
-          `A ${hw} ${hw} 0 0 1 ${p2.x.toFixed(2)} ${p2.y.toFixed(2)}`,
-          `Z`,
-        ].join(" ")}
-        fill="#4A6FA5"
-      />
+      {/* Dart — rotates from start to final angle */}
+      <g className="gauge-needle-g">
+        <path
+          d={[
+            `M ${tx0} ${ty0}`,
+            `L ${p1_0.x} ${p1_0.y}`,
+            `A ${hw} ${hw} 0 0 1 ${p2_0.x} ${p2_0.y}`,
+            `Z`,
+          ].join(" ")}
+          fill="#4A6FA5"
+        />
+      </g>
     </svg>
   );
 }
@@ -262,6 +277,7 @@ export default function DashboardPage() {
   const [scanKeywords, setScanKeywords] = useState<string[]>([]);
   const [avatar, setAvatar] = useState("");
   const [score] = useState(() => Math.floor(Math.random() * 100));
+  const [scoreLoading, setScoreLoading] = useState(true);
   const [listRequested, setListRequested] = useState(false);
   const [linkListPending, setLinkListPending] = useState(false);
   const [linkListHasNegatives, setLinkListHasNegatives] = useState<
@@ -298,6 +314,9 @@ export default function DashboardPage() {
         else setLinkListHasNegatives(true);
       }
     } catch {}
+
+    const t = setTimeout(() => setScoreLoading(false), 2000);
+    return () => clearTimeout(t);
   }, [router]);
 
   useEffect(() => {
@@ -391,14 +410,16 @@ export default function DashboardPage() {
                 style={{
                   flex: 1,
                   padding: "0.625rem",
-                  borderRadius: "0.4rem",
+                  borderRadius: "0.625rem",
                   border: "none",
                   cursor: "pointer",
                   fontWeight: 600,
                   fontSize: "0.875rem",
                   transition: "all 0.2s",
                   backgroundColor:
-                    activeTab === tab.key ? "var(--color-button)" : "transparent",
+                    activeTab === tab.key
+                      ? "var(--color-button)"
+                      : "transparent",
                   color: activeTab === tab.key ? "#fff" : "var(--color-muted)",
                 }}
               >
@@ -415,123 +436,180 @@ export default function DashboardPage() {
                 borderRadius: "0.875rem",
                 padding: "2.5rem 2rem",
                 textAlign: "center",
+                minHeight: "24rem",
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                justifyContent: scoreLoading ? "center" : "flex-start",
               }}
             >
-              {/* Name */}
-              <h1
-                style={{
-                  fontSize: "1.5rem",
-                  fontWeight: 800,
-                  color: "var(--color-foreground)",
-                  letterSpacing: "0.08em",
-                  marginBottom: "2rem",
-                  textTransform: "uppercase",
-                }}
-              >
-                {scanName}
-              </h1>
-
-              {/* Gauge */}
-              <RepuGauge
-                score={score}
-                avatar={avatar}
-                initials={scanName
-                  .split(" ")
-                  .map((w) => w[0])
-                  .join("")
-                  .slice(0, 2)}
-              />
-
-              {/* Score label — pulled up to overlap the arc gap */}
-              <div
-                style={{
-                  display: "inline-block",
-                  marginTop: "-3.25rem",
-                  position: "relative",
-                  zIndex: 1,
-                  padding: "0.625rem 2rem",
-                  borderRadius: "0.625rem",
-                  backgroundColor: "var(--color-surface)",
-                  border: "1px solid var(--color-border)",
-                }}
-              >
-                <p
-                  style={{
-                    fontSize: "2.5rem",
-                    fontWeight: 800,
-                    color: scoreLabel(score).color,
-                    lineHeight: 1,
-                    marginBottom: "0.25rem",
-                  }}
-                >
-                  {score}%
-                </p>
-                <p
-                  style={{
-                    fontSize: "0.75rem",
-                    fontWeight: 700,
-                    letterSpacing: "0.12em",
-                    color: scoreLabel(score).color,
-                    textTransform: "uppercase",
-                  }}
-                >
-                  {scoreLabel(score).label}
-                </p>
-              </div>
-
-              {/* Keywords */}
-              <div
-                className="glass"
-                style={{
-                  borderRadius: "0.75rem",
-                  padding: "1.5rem",
-                  marginTop: "1.25rem",
-                  border: "1px solid var(--color-border)",
-                  textAlign: "left",
-                }}
-              >
-                <h2
-                  style={{
-                    fontSize: "0.75rem",
-                    fontWeight: 700,
-                    letterSpacing: "0.1em",
-                    textTransform: "uppercase",
-                    color: "var(--color-muted)",
-                    marginBottom: "0.75rem",
-                  }}
-                >
-                  Keywords
-                </h2>
-                <p
-                  style={{
-                    color: "var(--color-muted)",
-                    fontSize: "0.8125rem",
-                    marginBottom: "1rem",
-                  }}
-                >
-                  The keywords you inserted are the following:
-                </p>
+              {scoreLoading ? (
+                /* ── Loading state ── */
                 <div
-                  style={{ display: "flex", flexWrap: "wrap", gap: "0.625rem" }}
+                  className="animate-fade-in"
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center",
+                    gap: "1.5rem",
+                  }}
                 >
-                  {scanKeywords.map((kw) => (
-                    <span
-                      key={kw}
+                  {/* Spinner */}
+                  <div
+                    style={{
+                      width: "3rem",
+                      height: "3rem",
+                      borderRadius: "50%",
+                      border: "3px solid var(--color-border)",
+                      borderTopColor: "var(--color-primary)",
+                      animation: "reput-spin 0.9s linear infinite",
+                    }}
+                  />
+                  <p
+                    style={{
+                      fontSize: "1rem",
+                      fontWeight: 600,
+                      color: "var(--color-foreground)",
+                    }}
+                  >
+                    Your ReputScore is being calculated…
+                  </p>
+                  <p
+                    style={{
+                      fontSize: "0.875rem",
+                      color: "var(--color-muted)",
+                    }}
+                  >
+                    Scanning the web for mentions of your name
+                  </p>
+                </div>
+              ) : (
+                /* ── Loaded state ── */
+                <div
+                  className="animate-fade-up"
+                  style={{ width: "100%", textAlign: "center" }}
+                >
+                  {/* Name */}
+                  <h1
+                    style={{
+                      fontSize: "1.5rem",
+                      fontWeight: 800,
+                      color: "var(--color-foreground)",
+                      letterSpacing: "0.08em",
+                      marginBottom: "2rem",
+                      textTransform: "uppercase",
+                    }}
+                  >
+                    {scanName}
+                  </h1>
+
+                  {/* Gauge */}
+                  <RepuGauge
+                    score={score}
+                    avatar={avatar}
+                    initials={scanName
+                      .split(" ")
+                      .map((w) => w[0])
+                      .join("")
+                      .slice(0, 2)}
+                  />
+
+                  {/* Score label — pulled up to overlap the arc gap */}
+                  <div
+                    style={{
+                      display: "inline-block",
+                      marginTop: "-3.25rem",
+                      position: "relative",
+                      zIndex: 1,
+                      padding: "0.625rem 2rem",
+                      borderRadius: "0.625rem",
+                      backgroundColor: "var(--color-surface)",
+                      border: "1px solid var(--color-border)",
+                    }}
+                  >
+                    <p
                       style={{
-                        padding: "0.5rem 1.25rem",
-                        borderRadius: "0.5rem",
-                        backgroundColor: "rgba(68,121,218,0.08)",
-                        border: "1px solid rgba(68,121,218,0.2)",
-                        color: "var(--color-foreground)",
-                        fontSize: "0.9375rem",
-                        fontWeight: 500,
+                        fontSize: "2.5rem",
+                        fontWeight: 800,
+                        color: scoreLabel(score).color,
+                        lineHeight: 1,
+                        marginBottom: "0.25rem",
                       }}
                     >
-                      {kw}
-                    </span>
-                  ))}
+                      {score}%
+                    </p>
+                    <p
+                      style={{
+                        fontSize: "0.75rem",
+                        fontWeight: 700,
+                        letterSpacing: "0.12em",
+                        color: scoreLabel(score).color,
+                        textTransform: "uppercase",
+                      }}
+                    >
+                      {scoreLabel(score).label}
+                    </p>
+                  </div>
+
+                  {/* Keywords */}
+                  <div
+                    className="glass"
+                    style={{
+                      borderRadius: "0.75rem",
+                      padding: "1.5rem",
+                      marginTop: "1.25rem",
+                      border: "1px solid var(--color-border)",
+                      textAlign: "left",
+                    }}
+                  >
+                    <h2
+                      style={{
+                        fontSize: "0.75rem",
+                        fontWeight: 700,
+                        letterSpacing: "0.1em",
+                        textTransform: "uppercase",
+                        color: "var(--color-muted)",
+                        marginBottom: "0.75rem",
+                      }}
+                    >
+                      Keywords
+                    </h2>
+                    <p
+                      style={{
+                        color: "var(--color-muted)",
+                        fontSize: "0.8125rem",
+                        marginBottom: "1rem",
+                      }}
+                    >
+                      The keywords you inserted are the following:
+                    </p>
+                    <div
+                      style={{
+                        display: "flex",
+                        flexWrap: "wrap",
+                        gap: "0.625rem",
+                      }}
+                    >
+                      {scanKeywords.map((kw) => (
+                        <span
+                          key={kw}
+                          style={{
+                            padding: "0.5rem 1.25rem",
+                            borderRadius: "0.625rem",
+                            backgroundColor: "rgba(68,121,218,0.08)",
+                            border: "1px solid rgba(68,121,218,0.2)",
+                            color: "var(--color-foreground)",
+                            fontSize: "0.9375rem",
+                            fontWeight: 500,
+                          }}
+                        >
+                          {kw}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
           )}
 
@@ -541,7 +619,7 @@ export default function DashboardPage() {
               const disabledBtn: React.CSSProperties = {
                 width: "100%",
                 padding: "0.75rem 2rem",
-                borderRadius: "0.5rem",
+                borderRadius: "0.625rem",
                 fontWeight: 700,
                 fontSize: "0.875rem",
                 letterSpacing: "0.05em",
@@ -553,7 +631,7 @@ export default function DashboardPage() {
               const activeBtn: React.CSSProperties = {
                 width: "100%",
                 padding: "0.75rem 2rem",
-                borderRadius: "0.5rem",
+                borderRadius: "0.625rem",
                 fontWeight: 700,
                 fontSize: "0.875rem",
                 letterSpacing: "0.05em",
@@ -963,14 +1041,19 @@ export default function DashboardPage() {
               <div
                 style={{
                   display: "grid",
-                  gridTemplateColumns: "repeat(auto-fit, minmax(min(160px, 100%), 1fr))",
+                  gridTemplateColumns:
+                    "repeat(auto-fit, minmax(min(160px, 100%), 1fr))",
                   gap: "1rem",
                   marginBottom: "2rem",
                   textAlign: "left",
                 }}
               >
                 {[
-                  { label: "Links to remove", value: "6", color: "var(--color-primary)" },
+                  {
+                    label: "Links to remove",
+                    value: "6",
+                    color: "var(--color-primary)",
+                  },
                   {
                     label: "Avg. removal time",
                     value: "3–7 days",
@@ -1021,7 +1104,7 @@ export default function DashboardPage() {
                   textDecoration: "none",
                   fontWeight: 700,
                   padding: "0.875rem 2.5rem",
-                  borderRadius: "0.5rem",
+                  borderRadius: "0.625rem",
                   fontSize: "1rem",
                 }}
               >

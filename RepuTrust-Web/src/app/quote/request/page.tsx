@@ -8,10 +8,10 @@ import { useEffect, useState } from "react";
 const inputStyle: React.CSSProperties = {
   width: "100%",
   padding: "0.625rem 1rem",
-  borderRadius: "0.5rem",
+  borderRadius: "0.625rem",
   border: "1px solid var(--color-border)",
   backgroundColor: "#ffffff",
-  color: "var(--color-foreground)",
+  color: "#1e293b",
   outline: "none",
   boxSizing: "border-box",
   fontSize: "0.9375rem",
@@ -84,8 +84,7 @@ export default function RemovalRequestPage() {
         <div style={{ width: "100%", maxWidth: "36rem" }}>
           <div style={{ marginBottom: "2rem", textAlign: "center" }}>
             <h1
-              className="neon-text"
-              style={{ fontSize: "1.75rem", fontWeight: 700, marginBottom: "0.5rem" }}
+              style={{ fontSize: "1.75rem", fontWeight: 700, marginBottom: "0.5rem", color: "var(--color-foreground)" }}
             >
               Request a Removal Quote
             </h1>
@@ -94,7 +93,18 @@ export default function RemovalRequestPage() {
             </p>
           </div>
 
-          <div className="glass glow-border" style={{ borderRadius: "0.875rem", padding: "clamp(1.25rem, 5vw, 2rem)" }}>
+          <div
+            style={{
+              borderRadius: "0.875rem",
+              padding: "clamp(1.25rem, 5vw, 2rem)",
+              background: "linear-gradient(160deg, #4479DA 0%, #48D4B8 100%)",
+              border: "1px solid rgba(255,255,255,0.2)",
+              boxShadow: "0 8px 32px rgba(68,121,218,0.28)",
+              "--color-foreground": "#ffffff",
+              "--color-muted": "rgba(255,255,255,0.72)",
+              "--color-border": "rgba(255,255,255,0.3)",
+            } as React.CSSProperties}
+          >
             <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
               <div
                 style={{
@@ -146,7 +156,7 @@ export default function RemovalRequestPage() {
                   width: "100%",
                   fontWeight: 700,
                   padding: "0.75rem",
-                  borderRadius: "0.5rem",
+                  borderRadius: "0.625rem",
                 }}
               >
                 Submit Removal Request
@@ -229,7 +239,7 @@ export default function RemovalRequestPage() {
                 width: "100%",
                 fontWeight: 700,
                 padding: "0.75rem",
-                borderRadius: "0.5rem",
+                borderRadius: "0.625rem",
               }}
             >
               Back to Dashboard

@@ -1,28 +1,20 @@
 "use client";
 
-import Features from "@/components/common/Features";
-import Footer from "@/components/common/Footer";
-import Header from "@/components/common/Header";
-import Hero from "@/components/common/Hero";
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
 
 export default function Home() {
-  return (
-    <div
-      className="grid-bg"
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        minHeight: "100vh",
-        width: "100%",
-        backgroundColor: "var(--color-background)",
-      }}
-    >
-      <Header />
-      <main style={{ flex: 1 }}>
-        <Hero />
-        <Features />
-      </main>
-      <Footer />
-    </div>
-  );
+  const router = useRouter();
+
+  useEffect(() => {
+    let destination = "/login";
+    try {
+      if (localStorage.getItem("reput_authed") === "true") destination = "/dashboard";
+    } catch {}
+
+    const timer = setTimeout(() => router.replace(destination), 3200);
+    return () => clearTimeout(timer);
+  }, [router]);
+
+  return null;
 }

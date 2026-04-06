@@ -1,17 +1,17 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
 import Footer from "@/components/common/Footer";
 import Header from "@/components/common/Header";
+import { useRouter } from "next/navigation";
+import { useState } from "react";
 
 const inputStyle: React.CSSProperties = {
   width: "100%",
   padding: "0.625rem 1rem",
-  borderRadius: "0.5rem",
+  borderRadius: "0.625rem",
   border: "1px solid var(--color-border)",
   backgroundColor: "#ffffff",
-  color: "var(--color-foreground)",
+  color: "#1e293b",
   outline: "none",
   boxSizing: "border-box",
   fontSize: "0.9375rem",
@@ -25,17 +25,44 @@ const labelStyle: React.CSSProperties = {
   marginBottom: "0.5rem",
 };
 
+function Spinner() {
+  return (
+    <svg
+      width="15"
+      height="15"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.5"
+      strokeLinecap="round"
+      style={{
+        animation: "reput-spin 0.75s linear infinite",
+        display: "inline-block",
+        verticalAlign: "middle",
+        marginRight: "0.5rem",
+      }}
+    >
+      <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
+    </svg>
+  );
+}
+
 export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [loginLoading, setLoginLoading] = useState(false);
+  const [linkedinLoading, setLinkedinLoading] = useState(false);
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    try {
-      localStorage.setItem("reput_authed", "true");
-    } catch {}
-    router.push("/dashboard");
+    setLoginLoading(true);
+    setTimeout(() => {
+      try {
+        localStorage.setItem("reput_authed", "true");
+      } catch {}
+      router.push("/dashboard");
+    }, 1500);
   };
 
   return (
@@ -60,18 +87,45 @@ export default function LoginPage() {
         }}
       >
         <div style={{ width: "100%", maxWidth: "26rem" }}>
-          <div className="glass animate-scale-in" style={{ borderRadius: "0.875rem", padding: "2rem" }}>
+          <div
+            style={
+              {
+                borderRadius: "0.875rem",
+                padding: "2rem",
+                background: "linear-gradient(160deg, #4479DA 0%, #48D4B8 100%)",
+                boxShadow: "0 8px 32px rgba(68,121,218,0.28)",
+                "--color-foreground": "#ffffff",
+                "--color-muted": "rgba(255,255,255,0.72)",
+                "--color-border": "rgba(255,255,255,0.3)",
+              } as React.CSSProperties
+            }
+          >
             <h1
-              className="neon-text"
-              style={{ fontSize: "1.75rem", fontWeight: 700, marginBottom: "0.5rem", textAlign: "center" }}
+              style={{
+                fontSize: "1.75rem",
+                fontWeight: 700,
+                marginBottom: "0.5rem",
+                textAlign: "center",
+                color: "#ffffff",
+              }}
             >
-              Welcome Back
+              Welcome
             </h1>
-            <p style={{ textAlign: "center", color: "var(--color-muted)", marginBottom: "2rem", fontSize: "0.875rem" }}>
+            <p
+              style={{
+                textAlign: "center",
+                color: "var(--color-muted)",
+                marginBottom: "2rem",
+                fontSize: "0.875rem",
+              }}
+            >
               Sign in to view your ReputScore and scan results
             </p>
 
-            <form onSubmit={handleLogin} style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+            <form
+              onSubmit={handleLogin}
+              style={{ display: "flex", flexDirection: "column", gap: "1rem" }}
+            >
               <div>
                 <label style={labelStyle}>Email Address</label>
                 <input
@@ -98,7 +152,11 @@ export default function LoginPage() {
               <div style={{ display: "flex", justifyContent: "flex-end" }}>
                 <a
                   href="#"
-                  style={{ fontSize: "0.8125rem", color: "var(--color-primary)", textDecoration: "none" }}
+                  style={{
+                    fontSize: "0.8125rem",
+                    color: "var(--color-primary)",
+                    textDecoration: "none",
+                  }}
                 >
                   Forgot password?
                 </a>
@@ -106,10 +164,24 @@ export default function LoginPage() {
 
               <button
                 type="submit"
+                disabled={loginLoading}
                 className="glow-button"
-                style={{ width: "100%", fontWeight: 700, padding: "0.75rem", borderRadius: "0.5rem" }}
+                style={{
+                  width: "100%",
+                  fontWeight: 700,
+                  padding: "0.75rem",
+                  borderRadius: "0.625rem",
+                  opacity: loginLoading ? 0.8 : 1,
+                }}
               >
-                Login
+                {loginLoading ? (
+                  <>
+                    <Spinner />
+                    Signing in…
+                  </>
+                ) : (
+                  "Login"
+                )}
               </button>
             </form>
 
@@ -117,33 +189,66 @@ export default function LoginPage() {
               style={{
                 marginTop: "1.5rem",
                 paddingTop: "1.5rem",
-                borderTop: "1px solid rgba(255,255,255,0.1)",
+                borderTop: "1px solid rgba(255,255,255,0.25)",
               }}
             >
               <button
                 onClick={() => {
-                  try { localStorage.setItem("reput_authed", "true"); } catch {}
-                  router.push("/dashboard");
+                  setLinkedinLoading(true);
+                  setTimeout(() => {
+                    try {
+                      if (localStorage.getItem("reput_authed") === "true") {
+                        router.push("/dashboard");
+                      } else {
+                        router.push("/auth?step=3");
+                      }
+                    } catch {
+                      router.push("/auth?step=3");
+                    }
+                  }, 1200);
                 }}
+                disabled={linkedinLoading}
                 style={{
                   width: "100%",
                   padding: "0.625rem 1rem",
-                  border: "1px solid var(--color-border)",
-                  borderRadius: "0.5rem",
-                  backgroundColor: "transparent",
-                  color: "var(--color-foreground)",
-                  cursor: "pointer",
+                  border: "1px solid rgba(255,255,255,0.35)",
+                  borderRadius: "0.625rem",
+                  backgroundColor: "rgba(255,255,255,0.15)",
+                  color: "#ffffff",
+                  cursor: linkedinLoading ? "default" : "pointer",
                   fontWeight: 500,
                   fontSize: "0.9375rem",
+                  opacity: linkedinLoading ? 0.7 : 1,
                 }}
               >
-                Continue with LinkedIn
+                {linkedinLoading ? (
+                  <>
+                    <Spinner />
+                    Connecting…
+                  </>
+                ) : (
+                  "Continue with LinkedIn"
+                )}
               </button>
             </div>
 
-            <p style={{ textAlign: "center", marginTop: "1.25rem", color: "var(--color-muted)", fontSize: "0.875rem" }}>
+            <p
+              style={{
+                textAlign: "center",
+                marginTop: "1.25rem",
+                color: "var(--color-muted)",
+                fontSize: "0.875rem",
+              }}
+            >
               Don&apos;t have an account?{" "}
-              <a href="/auth" style={{ color: "var(--color-primary)", fontWeight: 500, textDecoration: "none" }}>
+              <a
+                href="/auth"
+                style={{
+                  color: "var(--color-primary)",
+                  fontWeight: 500,
+                  textDecoration: "none",
+                }}
+              >
                 Sign up free
               </a>
             </p>

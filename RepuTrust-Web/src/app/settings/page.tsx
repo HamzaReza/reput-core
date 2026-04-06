@@ -74,10 +74,10 @@ const NATIONALITIES = [
 const fieldStyle: React.CSSProperties = {
   width: "100%",
   padding: "0.625rem 1rem",
-  borderRadius: "0.5rem",
+  borderRadius: "0.625rem",
   border: "1px solid var(--color-border)",
   backgroundColor: "#ffffff",
-  color: "var(--color-foreground)",
+  color: "#1e293b",
   outline: "none",
   boxSizing: "border-box",
   fontSize: "0.9375rem",
@@ -94,7 +94,8 @@ export default function SettingsPage() {
   const [profileEmail, setProfileEmail] = useState("");
   const [nationality, setNationality] = useState("");
   const [dob, setDob] = useState("");
-  const [keywords, setKeywords] = useState("");
+  const [keywords, setKeywords] = useState<string[]>([]);
+  const [keywordInput, setKeywordInput] = useState("");
 
   useEffect(() => {
     try {
@@ -109,7 +110,8 @@ export default function SettingsPage() {
       setProfileEmail(localStorage.getItem("reput_profile_email") || "");
       setNationality(localStorage.getItem("reput_nationality") || "");
       setDob(localStorage.getItem("reput_dob") || "");
-      setKeywords(localStorage.getItem("reput_keywords") || "");
+      const kw = localStorage.getItem("reput_keywords") || "";
+      setKeywords(kw ? kw.split(",").map((s) => s.trim()).filter(Boolean) : []);
     } catch {}
   }, [router]);
 
@@ -121,7 +123,7 @@ export default function SettingsPage() {
       localStorage.setItem("reput_profile_email", profileEmail.trim());
       localStorage.setItem("reput_nationality", nationality);
       localStorage.setItem("reput_dob", dob);
-      localStorage.setItem("reput_keywords", keywords.trim());
+      localStorage.setItem("reput_keywords", keywords.join(","));
       localStorage.setItem(
         "reput_name",
         `${firstName.trim()} ${lastName.trim()}`.trim(),
@@ -171,8 +173,16 @@ export default function SettingsPage() {
           >
             {/* Profile Information */}
             <div
-              className="glass glow-border"
-              style={{ borderRadius: "0.75rem", padding: "2rem" }}
+              style={{
+                borderRadius: "0.75rem",
+                padding: "2rem",
+                background: "linear-gradient(160deg, #4479DA 0%, #48D4B8 100%)",
+                border: "1px solid rgba(255,255,255,0.2)",
+                boxShadow: "0 8px 32px rgba(68,121,218,0.28)",
+                "--color-foreground": "#ffffff",
+                "--color-muted": "rgba(255,255,255,0.72)",
+                "--color-border": "rgba(255,255,255,0.3)",
+              } as React.CSSProperties}
             >
               <h2
                 style={{
@@ -347,7 +357,7 @@ export default function SettingsPage() {
                     type="date"
                     value={dob}
                     onChange={(e) => setDob(e.target.value)}
-                    style={{ ...fieldStyle, colorScheme: "dark" }}
+                    style={{ ...fieldStyle, colorScheme: "light" }}
                   />
                 </div>
               </div>
@@ -355,8 +365,16 @@ export default function SettingsPage() {
 
             {/* Scan Settings */}
             <div
-              className="glass glow-border"
-              style={{ borderRadius: "0.75rem", padding: "2rem" }}
+              style={{
+                borderRadius: "0.75rem",
+                padding: "2rem",
+                background: "linear-gradient(160deg, #4479DA 0%, #48D4B8 100%)",
+                border: "1px solid rgba(255,255,255,0.2)",
+                boxShadow: "0 8px 32px rgba(68,121,218,0.28)",
+                "--color-foreground": "#ffffff",
+                "--color-muted": "rgba(255,255,255,0.72)",
+                "--color-border": "rgba(255,255,255,0.3)",
+              } as React.CSSProperties}
             >
               <h2
                 style={{
@@ -391,10 +409,10 @@ export default function SettingsPage() {
                     style={{
                       width: "100%",
                       padding: "0.5rem 1rem",
-                      borderRadius: "0.5rem",
-                      border: "1px solid var(--color-border)",
+                      borderRadius: "0.625rem",
+                      border: "1px solid rgba(255,255,255,0.3)",
                       backgroundColor: "#ffffff",
-                      color: "var(--color-foreground)",
+                      color: "#1e293b",
                       outline: "none",
                     }}
                   >
@@ -420,7 +438,7 @@ export default function SettingsPage() {
                     style={{
                       width: "100%",
                       padding: "0.5rem 1rem",
-                      borderRadius: "0.5rem",
+                      borderRadius: "0.625rem",
                       border: "1px solid var(--color-border)",
                       backgroundColor: "#ffffff",
                       color: "var(--color-foreground)",
@@ -438,8 +456,16 @@ export default function SettingsPage() {
 
             {/* Monitored Keywords */}
             <div
-              className="glass glow-border"
-              style={{ borderRadius: "0.75rem", padding: "2rem" }}
+              style={{
+                borderRadius: "0.75rem",
+                padding: "2rem",
+                background: "linear-gradient(160deg, #4479DA 0%, #48D4B8 100%)",
+                border: "1px solid rgba(255,255,255,0.2)",
+                boxShadow: "0 8px 32px rgba(68,121,218,0.28)",
+                "--color-foreground": "#ffffff",
+                "--color-muted": "rgba(255,255,255,0.72)",
+                "--color-border": "rgba(255,255,255,0.3)",
+              } as React.CSSProperties}
             >
               <h2
                 style={{
@@ -461,24 +487,113 @@ export default function SettingsPage() {
                 These keywords are pre-filled on every new scan. Add terms like
                 your job title, company, or location.
               </p>
-              <textarea
-                rows={3}
-                value={keywords}
-                onChange={(e) => setKeywords(e.target.value)}
+              <div
                 style={{
-                  width: "100%",
-                  padding: "0.625rem 1rem",
-                  borderRadius: "0.5rem",
-                  border: "1px solid var(--color-border)",
+                  display: "flex",
+                  flexWrap: "wrap",
+                  gap: "0.5rem",
+                  padding: "0.5rem",
+                  borderRadius: "0.625rem",
+                  border: "1px solid rgba(255,255,255,0.3)",
                   backgroundColor: "#ffffff",
-                  color: "var(--color-foreground)",
-                  outline: "none",
-                  resize: "vertical",
-                  boxSizing: "border-box",
-                  fontSize: "0.9375rem",
+                  minHeight: "3rem",
+                  alignItems: "center",
+                  cursor: "text",
                 }}
-                placeholder="Enter keywords separated by commas..."
-              />
+                onClick={() =>
+                  (
+                    document.getElementById(
+                      "settings-keyword-input",
+                    ) as HTMLInputElement | null
+                  )?.focus()
+                }
+              >
+                {keywords.map((kw) => (
+                  <span
+                    key={kw}
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "0.375rem",
+                      padding: "0.25rem 0.75rem",
+                      borderRadius: "0.5rem",
+                      backgroundColor: "#4479DA",
+                      color: "#fff",
+                      fontSize: "0.8125rem",
+                      fontWeight: 500,
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {kw}
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setKeywords((prev) => prev.filter((k) => k !== kw));
+                      }}
+                      style={{
+                        background: "none",
+                        border: "none",
+                        cursor: "pointer",
+                        padding: 0,
+                        lineHeight: 1,
+                        color: "rgba(255,255,255,0.8)",
+                        fontSize: "1rem",
+                        display: "flex",
+                        alignItems: "center",
+                      }}
+                      aria-label={`Remove ${kw}`}
+                    >
+                      ×
+                    </button>
+                  </span>
+                ))}
+                <input
+                  id="settings-keyword-input"
+                  type="text"
+                  value={keywordInput}
+                  onChange={(e) => setKeywordInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (
+                      (e.key === "Enter" ||
+                        e.key === "," ||
+                        e.key === "Tab") &&
+                      keywordInput.trim()
+                    ) {
+                      e.preventDefault();
+                      const val = keywordInput.replace(/,/g, "").trim();
+                      if (val && !keywords.includes(val)) {
+                        setKeywords((prev) => [...prev, val]);
+                      }
+                      setKeywordInput("");
+                    } else if (
+                      e.key === "Backspace" &&
+                      !keywordInput &&
+                      keywords.length
+                    ) {
+                      setKeywords((prev) => prev.slice(0, -1));
+                    }
+                  }}
+                  onBlur={() => {
+                    const val = keywordInput.replace(/,/g, "").trim();
+                    if (val && !keywords.includes(val)) {
+                      setKeywords((prev) => [...prev, val]);
+                    }
+                    setKeywordInput("");
+                  }}
+                  placeholder={keywords.length === 0 ? "Type a keyword and press Enter…" : ""}
+                  style={{
+                    flex: 1,
+                    minWidth: "10rem",
+                    border: "none",
+                    outline: "none",
+                    backgroundColor: "transparent",
+                    fontSize: "0.9375rem",
+                    color: "#1e293b",
+                    padding: "0.25rem 0.5rem",
+                  }}
+                />
+              </div>
             </div>
 
             {/* Alert Preferences */}
@@ -614,7 +729,7 @@ export default function SettingsPage() {
                 style={{
                   fontWeight: 700,
                   padding: "0.75rem 2rem",
-                  borderRadius: "0.5rem",
+                  borderRadius: "0.625rem",
                   transition: "all 0.3s",
                 }}
               >

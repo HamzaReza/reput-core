@@ -180,12 +180,12 @@ export default function QuotePage() {
                   className={plan.highlight ? "glow-button" : ""}
                   style={
                     plan.highlight
-                      ? { fontWeight: 700, padding: "0.75rem", borderRadius: "0.5rem", transition: "all 0.3s", width: "100%", cursor: "pointer" }
+                      ? { fontWeight: 700, padding: "0.75rem", borderRadius: "0.625rem", transition: "all 0.3s", width: "100%", cursor: "pointer" }
                       : {
                           width: "100%",
                           fontWeight: 700,
                           padding: "0.75rem",
-                          borderRadius: "0.5rem",
+                          borderRadius: "0.625rem",
                           border: "1px solid rgba(68,121,218,0.35)",
                           backgroundColor: "transparent",
                           color: "var(--color-primary)",
