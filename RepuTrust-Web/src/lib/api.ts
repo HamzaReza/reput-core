@@ -101,6 +101,21 @@ export interface ApiError {
 
 // ── Core fetch wrapper ────────────────────────────────────────────────────────
 
+function networkErrorMessage(): string {
+  return `Cannot reach the API at ${BASE_URL}. Start the backend: cd reput-projects && docker compose up`;
+}
+
+async function fetchWithHelp(url: string, init?: RequestInit): Promise<Response> {
+  try {
+    return await fetch(url, init);
+  } catch (e) {
+    if (e instanceof TypeError) {
+      throw new Error(networkErrorMessage());
+    }
+    throw e;
+  }
+}
+
 async function request<T>(
   path: string,
   options: RequestInit = {},
@@ -116,7 +131,7 @@ async function request<T>(
     if (token) headers["Authorization"] = `Bearer ${token}`;
   }
 
-  const res = await fetch(`${BASE_URL}${path}`, { ...options, headers });
+  const res = await fetchWithHelp(`${BASE_URL}${path}`, { ...options, headers });
 
   if (!res.ok) {
     const err: ApiError = await res.json().catch(() => ({
@@ -144,7 +159,7 @@ export const auth = {
     const form = new URLSearchParams();
     form.append("username", email);
     form.append("password", password);
-    return fetch(`${BASE_URL}/auth/login`, {
+    return fetchWithHelp(`${BASE_URL}/auth/login`, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: form.toString(),

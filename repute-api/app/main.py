@@ -27,13 +27,18 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=settings.allowed_origins,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# CORS: in debug, also allow any localhost / 127.0.0.1 / ::1 port (Next.js dev, alternate ports)
+_cors_kw: dict = {
+    "allow_origins": settings.allowed_origins,
+    "allow_credentials": True,
+    "allow_methods": ["*"],
+    "allow_headers": ["*"],
+}
+if settings.debug:
+    _cors_kw["allow_origin_regex"] = (
+        r"https?://(localhost|127\.0\.0\.1|\[::1\])(:\d+)?"
+    )
+app.add_middleware(CORSMiddleware, **_cors_kw)
 
 API_PREFIX = "/api/v1"
 app.include_router(auth.router, prefix=API_PREFIX)
