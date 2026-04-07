@@ -314,9 +314,12 @@ function AuthPageInner() {
     setOtpVerifying(true);
     try {
       await auth.verify();
-    } catch {}
-    setOtpVerifying(false);
-    advance();
+      advance();
+    } catch (err: unknown) {
+      setOtpError(err instanceof Error ? err.message : "Verification failed. Please try again.");
+    } finally {
+      setOtpVerifying(false);
+    }
   };
 
   // ── Notification permission ────────────────────────────────────────────────
