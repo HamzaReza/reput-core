@@ -236,6 +236,7 @@ export default function DashboardPage() {
   const [score, setScore] = useState(0);
   const [scanData, setScanData] = useState<ReputationScan | null>(null);
   const [scoreLoading, setScoreLoading] = useState(true);
+
   const [listRequested, setListRequested] = useState(false);
   const [linkListPending, setLinkListPending] = useState(false);
   const [linkListHasNegatives, setLinkListHasNegatives] = useState<
@@ -260,6 +261,7 @@ export default function DashboardPage() {
       if (n) setScanName(n.toUpperCase());
       if (k) setScanKeywords(k.split(",").map((s) => s.trim()).filter(Boolean));
       if (a) setAvatar(a);
+
     } catch {}
 
     // Fetch user + latest scan from API
@@ -287,10 +289,12 @@ export default function DashboardPage() {
       } finally {
         setScoreLoading(false);
       }
+
     };
 
     loadData();
   }, [router]);
+
 
   useEffect(() => {
     return () => {
@@ -397,7 +401,7 @@ export default function DashboardPage() {
           </div>
 
           {/* ── Tab: ReputScore ─────────────────────────────────────────── */}
-          {activeTab === "score" && (
+          <div style={{ display: activeTab === "score" ? undefined : "none" }}>
             <div
               className="glass glow-border animate-scale-in"
               style={{
@@ -471,53 +475,86 @@ export default function DashboardPage() {
                     {scanName}
                   </h1>
 
-                  {/* Gauge */}
-                  <RepuGauge
-                    score={score}
-                    avatar={avatar}
-                    initials={scanName
-                      .split(" ")
-                      .map((w) => w[0])
-                      .join("")
-                      .slice(0, 2)}
-                  />
+                  {/* Gauge — only shown when keywords exist */}
+                  {scanKeywords.length === 0 ? (
+                    <div
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        alignItems: "center",
+                        gap: "1rem",
+                        padding: "2rem 1rem",
+                        borderRadius: "0.75rem",
+                        border: "1px dashed var(--color-border)",
+                        marginBottom: "1.25rem",
+                      }}
+                    >
+                      <svg width="40" height="40" fill="none" stroke="var(--color-muted)" viewBox="0 0 24 24">
+                        <circle cx="11" cy="11" r="8" strokeWidth="2" />
+                        <path strokeLinecap="round" strokeWidth="2" d="M21 21l-4.35-4.35" />
+                      </svg>
+                      <p style={{ fontWeight: 700, fontSize: "1rem", color: "var(--color-foreground)" }}>
+                        No keywords added yet
+                      </p>
+                      <p style={{ fontSize: "0.875rem", color: "var(--color-muted)", maxWidth: "22rem" }}>
+                        Add keywords in{" "}
+                        <a href="/settings" style={{ color: "var(--color-primary)", textDecoration: "none", fontWeight: 600 }}>
+                          Settings
+                        </a>{" "}
+                        so we can calculate your ReputScore.
+                      </p>
+                    </div>
+                  ) : (
+                    <>
+                      <RepuGauge
 
-                  {/* Score label — pulled up to overlap the arc gap */}
-                  <div
-                    style={{
-                      display: "inline-block",
-                      marginTop: "-3.25rem",
-                      position: "relative",
-                      zIndex: 1,
-                      padding: "0.625rem 2rem",
-                      borderRadius: "0.625rem",
-                      backgroundColor: "var(--color-surface)",
-                      border: "1px solid var(--color-border)",
-                    }}
-                  >
-                    <p
-                      style={{
-                        fontSize: "2.5rem",
-                        fontWeight: 800,
-                        color: scoreLabel(score).color,
-                        lineHeight: 1,
-                        marginBottom: "0.25rem",
-                      }}
-                    >
-                      {score}%
-                    </p>
-                    <p
-                      style={{
-                        fontSize: "0.75rem",
-                        fontWeight: 700,
-                        letterSpacing: "0.12em",
-                        color: scoreLabel(score).color,
-                        textTransform: "uppercase",
-                      }}
-                    >
-                      {scoreLabel(score).label}
-                    </p>
-                  </div>
+                        score={score}
+                        avatar={avatar}
+                        initials={scanName
+                          .split(" ")
+                          .map((w) => w[0])
+                          .join("")
+                          .slice(0, 2)}
+                      />
+
+                      {/* Score label — pulled up to overlap the arc gap */}
+                      <div
+                        style={{
+                          display: "inline-block",
+                          marginTop: "-3.25rem",
+                          position: "relative",
+                          zIndex: 1,
+                          padding: "0.625rem 2rem",
+                          borderRadius: "0.625rem",
+                          backgroundColor: "var(--color-surface)",
+                          border: "1px solid var(--color-border)",
+                        }}
+                      >
+                        <p
+                          style={{
+                            fontSize: "2.5rem",
+                            fontWeight: 800,
+                            color: scoreLabel(score).color,
+                            lineHeight: 1,
+                            marginBottom: "0.25rem",
+                          }}
+                        >
+                          {score}%
+                        </p>
+                        <p
+                          style={{
+                            fontSize: "0.75rem",
+                            fontWeight: 700,
+                            letterSpacing: "0.12em",
+                            color: scoreLabel(score).color,
+                            textTransform: "uppercase",
+                          }}
+                        >
+                          {scoreLabel(score).label}
+                        </p>
+                      </div>
+                    </>
+                  )}
 
                   {/* Keywords */}
                   <div
@@ -579,11 +616,11 @@ export default function DashboardPage() {
                 </div>
               )}
             </div>
-          )}
+          </div>
 
           {/* ── Tab: Link List ─────────────────────────────── */}
-          {activeTab === "links" &&
-            (() => {
+          <div style={{ display: activeTab === "links" ? undefined : "none" }}>
+            {(() => {
               const disabledBtn: React.CSSProperties = {
                 width: "100%",
                 padding: "0.75rem 2rem",
@@ -936,9 +973,10 @@ export default function DashboardPage() {
 
               return null;
             })()}
+          </div>
 
           {/* ── Tab: Contract ────────────────────────────────────────────── */}
-          {activeTab === "contract" && (
+          <div style={{ display: activeTab === "contract" ? undefined : "none" }}>
             <div
               className="glass glow-border"
               style={{
@@ -1075,7 +1113,7 @@ export default function DashboardPage() {
                 Request Removal Service →
               </Link>
             </div>
-          )}
+          </div>
         </div>
       </main>
 

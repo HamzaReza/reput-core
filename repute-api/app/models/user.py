@@ -1,11 +1,18 @@
 import uuid
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, String, Text, func
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, String, Text, func, Enum as SAEnum
+import enum
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
+
+
+class ScanDepth(str, enum.Enum):
+    standard = "Standard"
+    deep = "Deep"
+    thorough = "Thorough"
 
 
 def utcnow() -> datetime:
@@ -22,6 +29,14 @@ class User(Base):
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     name: Mapped[str | None] = mapped_column(String(255))
     phone: Mapped[str | None] = mapped_column(String(50))
+    nationality: Mapped[str | None] = mapped_column(String(100))
+    date_of_birth: Mapped[date | None] = mapped_column(Date)
+    scan_depth: Mapped[str] = mapped_column(
+        SAEnum(ScanDepth, values_callable=lambda x: [e.value for e in x], name="scandepth"),
+        default=ScanDepth.standard.value,
+        server_default=ScanDepth.standard.value,
+        nullable=False,
+    )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     is_verified: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(

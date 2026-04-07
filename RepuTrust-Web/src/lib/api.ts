@@ -45,11 +45,16 @@ export interface UserProfile {
   updated_at: string;
 }
 
+export type ScanDepth = "Standard" | "Deep" | "Thorough";
+
 export interface User {
   id: string;
   email: string;
   name: string | null;
   phone: string | null;
+  nationality: string | null;
+  date_of_birth: string | null;
+  scan_depth: ScanDepth;
   is_active: boolean;
   is_verified: boolean;
   created_at: string;
@@ -205,7 +210,7 @@ export const auth = {
 // ── User / Profile endpoints ──────────────────────────────────────────────────
 
 export const users = {
-  updateMe: (data: { name?: string; phone?: string }) =>
+  updateMe: (data: { name?: string; phone?: string; nationality?: string; date_of_birth?: string; scan_depth?: ScanDepth }) =>
     request<User>(
       "/users/me",
       { method: "PATCH", body: JSON.stringify(data) },
@@ -220,6 +225,9 @@ export const users = {
       { method: "PUT", body: JSON.stringify(data) },
       true,
     ),
+
+  deleteMe: () =>
+    request<void>("/users/me", { method: "DELETE" }, true),
 };
 
 // ── Reputation endpoints ──────────────────────────────────────────────────────

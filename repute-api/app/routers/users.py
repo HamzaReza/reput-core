@@ -54,6 +54,15 @@ async def get_profile(
     return UserProfileOut.model_validate(profile)
 
 
+@router.delete("/me", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_me(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    await db.delete(current_user)
+    await db.flush()
+
+
 @router.put("/me/profile", response_model=UserProfileOut)
 async def upsert_profile(
     payload: UserProfileUpdate,

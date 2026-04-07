@@ -1,5 +1,6 @@
 import uuid
-from datetime import datetime
+from datetime import date, datetime
+from typing import Literal
 
 from pydantic import BaseModel, EmailStr, Field, field_validator
 
@@ -31,10 +32,16 @@ class UserProfileOut(UserProfileBase):
     model_config = {"from_attributes": True}
 
 
+ScanDepthLiteral = Literal["Standard", "Deep", "Thorough"]
+
+
 class UserBase(BaseModel):
     email: EmailStr
     name: str | None = None
     phone: str | None = None
+    nationality: str | None = None
+    date_of_birth: date | None = None
+    scan_depth: ScanDepthLiteral = "Standard"
 
 
 class UserCreate(UserBase):
@@ -44,6 +51,9 @@ class UserCreate(UserBase):
 class UserUpdate(BaseModel):
     name: str | None = None
     phone: str | None = None
+    nationality: str | None = None
+    date_of_birth: date | None = None
+    scan_depth: ScanDepthLiteral | None = None
 
 
 class UserOut(UserBase):

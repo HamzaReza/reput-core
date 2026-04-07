@@ -2,7 +2,7 @@
 
 import Footer from "@/components/common/Footer";
 import Header from "@/components/common/Header";
-import { isAuthed, auth, users } from "@/lib/api";
+import { isAuthed, auth, users, clearAuth, ScanDepth, reputation } from "@/lib/api";
 import { useRouter } from "next/navigation";
 import React, { useEffect, useState } from "react";
 
@@ -95,11 +95,16 @@ export default function SettingsPage() {
   const [profileEmail, setProfileEmail] = useState("");
   const [nationality, setNationality] = useState("");
   const [dob, setDob] = useState("");
+  const [scanDepth, setScanDepth] = useState<ScanDepth>("Standard");
   const [keywords, setKeywords] = useState<string[]>([]);
+  const [originalKeywords, setOriginalKeywords] = useState<string[]>([]);
   const [keywordInput, setKeywordInput] = useState("");
   const [saveLoading, setSaveLoading] = useState(false);
   const [saveError, setSaveError] = useState("");
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
 
   useEffect(() => {
     if (!isAuthed()) {
@@ -121,8 +126,14 @@ export default function SettingsPage() {
         }
         setProfileEmail(user.email || "");
         if (user.phone) setPhone(user.phone);
+        if (user.nationality) setNationality(user.nationality);
+        if (user.date_of_birth) setDob(user.date_of_birth);
+        if (user.scan_depth) setScanDepth(user.scan_depth);
         if (profile) {
-          if (profile.keywords?.length) setKeywords(profile.keywords);
+          if (profile.keywords?.length) {
+            setKeywords(profile.keywords);
+            setOriginalKeywords(profile.keywords);
+          }
         }
       } catch {
         // Fallback to localStorage cache
@@ -145,11 +156,20 @@ export default function SettingsPage() {
     setSaveLoading(true);
     try {
       const fullName = `${firstName.trim()} ${lastName.trim()}`.trim();
-      await users.updateMe({ name: fullName, phone: phone.trim() });
+      await users.updateMe({ name: fullName, phone: phone.trim(), nationality: nationality || undefined, date_of_birth: dob || undefined, scan_depth: scanDepth });
       const finalKeywords = keywordInput.trim()
         ? [...keywords, keywordInput.replace(/,/g, "").trim()].filter(Boolean)
         : keywords;
       await users.upsertProfile({ keywords: finalKeywords });
+
+      const keywordsChanged =
+        finalKeywords.length !== originalKeywords.length ||
+        finalKeywords.some((k, i) => k !== originalKeywords[i]);
+      if (keywordsChanged) {
+        setOriginalKeywords(finalKeywords);
+        reputation.triggerScan().catch(() => {});
+      }
+
       try {
         localStorage.setItem("reput_name", fullName);
         localStorage.setItem("reput_keywords", finalKeywords.join(","));
@@ -163,6 +183,19 @@ export default function SettingsPage() {
       setSaveError(err instanceof Error ? err.message : "Failed to save.");
     } finally {
       setSaveLoading(false);
+    }
+  };
+
+  const deleteAccount = async () => {
+    setDeleteError("");
+    setDeleteLoading(true);
+    try {
+      await users.deleteMe();
+      clearAuth();
+      router.replace("/auth");
+    } catch (err: unknown) {
+      setDeleteError(err instanceof Error ? err.message : "Failed to delete account.");
+      setDeleteLoading(false);
     }
   };
 
@@ -441,6 +474,8 @@ export default function SettingsPage() {
                     Scan Depth
                   </label>
                   <select
+                    value={scanDepth}
+                    onChange={(e) => setScanDepth(e.target.value as ScanDepth)}
                     style={{
                       width: "100%",
                       padding: "0.5rem 1rem",
@@ -451,9 +486,9 @@ export default function SettingsPage() {
                       outline: "none",
                     }}
                   >
-                    <option>Standard — top 50 results per source</option>
-                    <option>Deep — top 200 results per source</option>
-                    <option>Thorough — full crawl (slower)</option>
+                    <option value="Standard">Standard — top 50 results per source</option>
+                    <option value="Deep">Deep — top 200 results per source</option>
+                    <option value="Thorough">Thorough — full crawl (slower)</option>
                   </select>
                 </div>
 
@@ -755,6 +790,103 @@ export default function SettingsPage() {
                 ))}
               </div>
             </div> */}
+
+            {/* Danger Zone */}
+            <div
+              style={{
+                borderRadius: "0.75rem",
+                padding: "2rem",
+                background: "linear-gradient(160deg, #b91c1c 0%, #ef4444 100%)",
+                border: "1px solid rgba(255,255,255,0.2)",
+                boxShadow: "0 8px 32px rgba(185,28,28,0.28)",
+                "--color-foreground": "#ffffff",
+                "--color-muted": "rgba(255,255,255,0.72)",
+              } as React.CSSProperties}
+            >
+              <h2
+                style={{
+                  fontSize: "1.125rem",
+                  fontWeight: 700,
+                  color: "var(--color-foreground)",
+                  marginBottom: "0.375rem",
+                }}
+              >
+                Danger Zone
+              </h2>
+              <p
+                style={{
+                  color: "var(--color-muted)",
+                  fontSize: "0.8125rem",
+                  marginBottom: "1.25rem",
+                }}
+              >
+                Permanently delete your account and all associated data. This action cannot be undone.
+              </p>
+              {deleteError && (
+                <p style={{ color: "#fca5a5", fontSize: "0.875rem", marginBottom: "0.75rem" }}>{deleteError}</p>
+              )}
+              {!showDeleteConfirm ? (
+                <button
+                  type="button"
+                  onClick={() => setShowDeleteConfirm(true)}
+                  style={{
+                    padding: "0.625rem 1.5rem",
+                    borderRadius: "0.625rem",
+                    border: "2px solid rgba(255,255,255,0.6)",
+                    background: "transparent",
+                    color: "#ffffff",
+                    fontWeight: 700,
+                    fontSize: "0.9375rem",
+                    cursor: "pointer",
+                  }}
+                >
+                  Delete Account
+                </button>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+                  <p style={{ color: "#fef2f2", fontWeight: 600, fontSize: "0.9375rem" }}>
+                    Are you sure? This will permanently delete your account.
+                  </p>
+                  <div style={{ display: "flex", gap: "0.75rem" }}>
+                    <button
+                      type="button"
+                      onClick={deleteAccount}
+                      disabled={deleteLoading}
+                      style={{
+                        padding: "0.625rem 1.5rem",
+                        borderRadius: "0.625rem",
+                        border: "none",
+                        background: "#ffffff",
+                        color: "#b91c1c",
+                        fontWeight: 700,
+                        fontSize: "0.9375rem",
+                        cursor: deleteLoading ? "not-allowed" : "pointer",
+                        opacity: deleteLoading ? 0.7 : 1,
+                      }}
+                    >
+                      {deleteLoading ? "Deleting…" : "Yes, delete my account"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setShowDeleteConfirm(false); setDeleteError(""); }}
+                      disabled={deleteLoading}
+                      style={{
+                        padding: "0.625rem 1.5rem",
+                        borderRadius: "0.625rem",
+                        border: "2px solid rgba(255,255,255,0.6)",
+                        background: "transparent",
+                        color: "#ffffff",
+                        fontWeight: 600,
+                        fontSize: "0.9375rem",
+                        cursor: "pointer",
+                      }}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
 
             {/* Save */}
             <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "0.5rem" }}>
