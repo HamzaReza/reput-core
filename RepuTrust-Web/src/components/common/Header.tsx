@@ -1,5 +1,6 @@
 "use client";
 
+import { clearAuth, isAuthed as checkAuthed } from "@/lib/api";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -12,13 +13,17 @@ export default function Header() {
   const [drawerOpen, setDrawerOpen] = useState(false);
 
   useEffect(() => {
-    try {
-      setIsAuthed(localStorage.getItem("reput_authed") === "true");
-    } catch {}
+    setIsAuthed(checkAuthed());
+
+    const onAuthChange = () => setIsAuthed(checkAuthed());
+    window.addEventListener("reput-auth-change", onAuthChange);
 
     const onScroll = () => setScrolled(window.scrollY > 8);
     window.addEventListener("scroll", onScroll, { passive: true });
-    return () => window.removeEventListener("scroll", onScroll);
+    return () => {
+      window.removeEventListener("reput-auth-change", onAuthChange);
+      window.removeEventListener("scroll", onScroll);
+    };
   }, []);
 
   // Close drawer on route change / resize
@@ -32,11 +37,7 @@ export default function Header() {
   }, [drawerOpen]);
 
   const signOut = () => {
-    try {
-      const splash = localStorage.getItem("reput_splash_shown");
-      localStorage.clear();
-      if (splash) localStorage.setItem("reput_splash_shown", splash);
-    } catch {}
+    clearAuth();
     setIsAuthed(false);
     setDrawerOpen(false);
     window.dispatchEvent(new Event("reput-auth-change"));
@@ -98,7 +99,7 @@ export default function Header() {
         >
           {/* Logo */}
           <Link
-            href="/"
+            href={isAuthed ? "/dashboard" : "/"}
             style={{ display: "flex", alignItems: "center", flexShrink: 0 }}
           >
             <Image

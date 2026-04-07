@@ -2,6 +2,7 @@
 
 import Footer from "@/components/common/Footer";
 import Header from "@/components/common/Header";
+import { auth, setToken } from "@/lib/api";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
@@ -53,16 +54,31 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [loginLoading, setLoginLoading] = useState(false);
   const [linkedinLoading, setLinkedinLoading] = useState(false);
+  const [error, setError] = useState("");
 
-  const handleLogin = (e: React.FormEvent<HTMLFormElement>) => {
+  const handleLogin = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    setError("");
     setLoginLoading(true);
-    setTimeout(() => {
+    try {
+      const res = await auth.login(email, password);
+      setToken(res.access_token);
       try {
-        localStorage.setItem("reput_authed", "true");
+        localStorage.setItem("reput_user", JSON.stringify(res.user));
+        localStorage.setItem("reput_name", res.user.name || res.user.email);
+        if (res.user.profile?.keywords?.length) {
+          localStorage.setItem("reput_keywords", res.user.profile.keywords.join(","));
+        }
+        if (res.user.profile?.avatar_url) {
+          localStorage.setItem("reput_avatar", res.user.profile.avatar_url);
+        }
       } catch {}
+      window.dispatchEvent(new Event("reput-auth-change"));
       router.push("/dashboard");
-    }, 1500);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Login failed.");
+      setLoginLoading(false);
+    }
   };
 
   return (
@@ -161,6 +177,12 @@ export default function LoginPage() {
                   Forgot password?
                 </a>
               </div>
+
+              {error && (
+                <p style={{ color: "#FF6B4A", fontSize: "0.875rem", textAlign: "center", margin: 0 }}>
+                  {error}
+                </p>
+              )}
 
               <button
                 type="submit"

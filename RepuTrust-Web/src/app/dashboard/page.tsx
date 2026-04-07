@@ -2,6 +2,7 @@
 
 import Footer from "@/components/common/Footer";
 import Header from "@/components/common/Header";
+import { isAuthed, reputation, auth, type ReputationScan } from "@/lib/api";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
@@ -17,56 +18,12 @@ interface ScanResult {
   risk: RiskLevel;
 }
 
-const MOCK_RESULTS: ScanResult[] = [
-  {
-    site: "reddit.com",
-    url: "reddit.com/r/complaints/comments/xk91a2",
-    title: "Avoid doing business — multiple complaints filed",
-    snippet:
-      "Several users have reported fraudulent behaviour and unresolved disputes. Thread has 240 upvotes and 80+ comments...",
-    risk: "Negative",
-  },
-  {
-    site: "trustpilot.com",
-    url: "trustpilot.com/review/example-profile",
-    title: '1-star review: "Complete scam, lost money"',
-    snippet:
-      "Verified review from October 2024. Reviewer claims services were never delivered after payment was made...",
-    risk: "Negative",
-  },
-  {
-    site: "ripoffreport.com",
-    url: "ripoffreport.com/reports/detail/112984",
-    title: "Rip-off Report: Misleading claims and no refunds",
-    snippet:
-      "Filed report alleges intentional misrepresentation. Report has been indexed on Google for 14 months...",
-    risk: "Poor",
-  },
-  {
-    site: "twitter.com",
-    url: "twitter.com/user/status/1749302918",
-    title: 'Viral tweet: "Warning — do NOT hire this person"',
-    snippet:
-      "Tweet received 1.2K retweets and 3.4K likes. Contains name alongside fraud allegations and screenshots...",
-    risk: "Poor",
-  },
-  {
-    site: "glassdoor.com",
-    url: "glassdoor.com/Reviews/company-review-12345",
-    title: "Former employee review: toxic environment, false promises",
-    snippet:
-      "One-star Glassdoor review describing unethical management practices. Currently ranking page 1 on Google...",
-    risk: "Mediocre",
-  },
-  {
-    site: "quora.com",
-    url: "quora.com/Is-this-company-a-scam",
-    title: 'Quora thread: "Is this a scam?"',
-    snippet:
-      "Multiple answers confirm negative experiences. Thread has 4,800 views and appears in top 10 search results...",
-    risk: "Good",
-  },
-];
+function apiRiskToUi(risk: string): RiskLevel {
+  if (risk === "high") return "Negative";
+  if (risk === "medium") return "Poor";
+  if (risk === "low") return "Good";
+  return "Mediocre";
+}
 
 const RISK_COLORS: Record<
   RiskLevel,
@@ -276,8 +233,10 @@ export default function DashboardPage() {
   const [scanName, setScanName] = useState("");
   const [scanKeywords, setScanKeywords] = useState<string[]>([]);
   const [avatar, setAvatar] = useState("");
-  const [score] = useState(() => Math.floor(Math.random() * 100));
+  const [score, setScore] = useState(0);
+  const [scanData, setScanData] = useState<ReputationScan | null>(null);
   const [scoreLoading, setScoreLoading] = useState(true);
+
   const [listRequested, setListRequested] = useState(false);
   const [linkListPending, setLinkListPending] = useState(false);
   const [linkListHasNegatives, setLinkListHasNegatives] = useState<
@@ -288,36 +247,54 @@ export default function DashboardPage() {
   const infoMoreTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
+    if (!isAuthed()) {
+      router.replace("/auth");
+      return;
+    }
+    setAuthed(true);
+
+    // Load cached user info
     try {
-      if (localStorage.getItem("reput_authed") !== "true") {
-        router.replace("/auth");
-        return;
-      }
-      setAuthed(true);
       const n = localStorage.getItem("reput_name");
       const k = localStorage.getItem("reput_keywords");
-      if (n) setScanName(n.toUpperCase());
-      if (k)
-        setScanKeywords(
-          k
-            .split(",")
-            .map((s) => s.trim())
-            .filter(Boolean),
-        );
       const a = localStorage.getItem("reput_avatar");
+      if (n) setScanName(n.toUpperCase());
+      if (k) setScanKeywords(k.split(",").map((s) => s.trim()).filter(Boolean));
       if (a) setAvatar(a);
-      if (localStorage.getItem("reput_list_requested") === "true") {
-        setListRequested(true);
-        const outcome = localStorage.getItem("reput_link_list_has_negatives");
-        if (outcome === "true") setLinkListHasNegatives(true);
-        else if (outcome === "false") setLinkListHasNegatives(false);
-        else setLinkListHasNegatives(true);
-      }
+
     } catch {}
 
-    const t = setTimeout(() => setScoreLoading(false), 2000);
-    return () => clearTimeout(t);
+    // Fetch user + latest scan from API
+    const loadData = async () => {
+      try {
+        const [user, latestScan] = await Promise.all([
+          auth.me(),
+          reputation.getLatest(),
+        ]);
+        if (user.name) setScanName(user.name.toUpperCase());
+        if (user.profile?.keywords?.length) setScanKeywords(user.profile.keywords);
+        if (user.profile?.avatar_url) setAvatar(user.profile.avatar_url);
+
+        if (latestScan) {
+          setScanData(latestScan);
+          setScore(latestScan.score);
+        } else {
+          // No scan yet — trigger the first one
+          const newScan = await reputation.triggerScan();
+          setScanData(newScan);
+          setScore(newScan.score);
+        }
+      } catch {
+        // Fallback — keep defaults
+      } finally {
+        setScoreLoading(false);
+      }
+
+    };
+
+    loadData();
   }, [router]);
+
 
   useEffect(() => {
     return () => {
@@ -326,42 +303,37 @@ export default function DashboardPage() {
     };
   }, []);
 
-  const requestLinkList = () => {
+  const requestLinkList = async () => {
     if (linkListPending) return;
     setLinkListPending(true);
-    if (linkListTimeoutRef.current) clearTimeout(linkListTimeoutRef.current);
-    linkListTimeoutRef.current = setTimeout(() => {
-      linkListTimeoutRef.current = null;
-      const hasNegatives = Math.random() < 0.5;
-      try {
-        localStorage.setItem("reput_list_requested", "true");
-        localStorage.setItem(
-          "reput_link_list_has_negatives",
-          hasNegatives ? "true" : "false",
-        );
-      } catch {}
+    try {
+      const newScan = await reputation.triggerScan();
+      setScanData(newScan);
+      setScore(newScan.score);
+      const hasNegatives = newScan.summary.high_risk > 0 || newScan.summary.medium_risk > 0;
       setLinkListHasNegatives(hasNegatives);
       setListRequested(true);
+    } catch {
+      setLinkListHasNegatives(true);
+      setListRequested(true);
+    } finally {
       setLinkListPending(false);
-    }, 2500);
+    }
   };
 
-  const requestMoreInfo = () => {
+  const requestMoreInfo = async () => {
     if (infoPending) return;
     setInfoPending(true);
-    if (infoMoreTimeoutRef.current) clearTimeout(infoMoreTimeoutRef.current);
-    infoMoreTimeoutRef.current = setTimeout(() => {
-      infoMoreTimeoutRef.current = null;
-      const hasNegatives = Math.random() < 0.5;
-      try {
-        localStorage.setItem(
-          "reput_link_list_has_negatives",
-          hasNegatives ? "true" : "false",
-        );
-      } catch {}
-      setLinkListHasNegatives(hasNegatives);
+    try {
+      const newScan = await reputation.triggerScan();
+      setScanData(newScan);
+      setScore(newScan.score);
+      setLinkListHasNegatives(newScan.summary.high_risk > 0 || newScan.summary.medium_risk > 0);
+    } catch {
+      setLinkListHasNegatives(true);
+    } finally {
       setInfoPending(false);
-    }, 2500);
+    }
   };
 
   if (!authed) return null;
@@ -429,7 +401,7 @@ export default function DashboardPage() {
           </div>
 
           {/* ── Tab: ReputScore ─────────────────────────────────────────── */}
-          {activeTab === "score" && (
+          <div style={{ display: activeTab === "score" ? undefined : "none" }}>
             <div
               className="glass glow-border animate-scale-in"
               style={{
@@ -503,53 +475,86 @@ export default function DashboardPage() {
                     {scanName}
                   </h1>
 
-                  {/* Gauge */}
-                  <RepuGauge
-                    score={score}
-                    avatar={avatar}
-                    initials={scanName
-                      .split(" ")
-                      .map((w) => w[0])
-                      .join("")
-                      .slice(0, 2)}
-                  />
+                  {/* Gauge — only shown when keywords exist */}
+                  {scanKeywords.length === 0 ? (
+                    <div
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        alignItems: "center",
+                        gap: "1rem",
+                        padding: "2rem 1rem",
+                        borderRadius: "0.75rem",
+                        border: "1px dashed var(--color-border)",
+                        marginBottom: "1.25rem",
+                      }}
+                    >
+                      <svg width="40" height="40" fill="none" stroke="var(--color-muted)" viewBox="0 0 24 24">
+                        <circle cx="11" cy="11" r="8" strokeWidth="2" />
+                        <path strokeLinecap="round" strokeWidth="2" d="M21 21l-4.35-4.35" />
+                      </svg>
+                      <p style={{ fontWeight: 700, fontSize: "1rem", color: "var(--color-foreground)" }}>
+                        No keywords added yet
+                      </p>
+                      <p style={{ fontSize: "0.875rem", color: "var(--color-muted)", maxWidth: "22rem" }}>
+                        Add keywords in{" "}
+                        <a href="/settings" style={{ color: "var(--color-primary)", textDecoration: "none", fontWeight: 600 }}>
+                          Settings
+                        </a>{" "}
+                        so we can calculate your ReputScore.
+                      </p>
+                    </div>
+                  ) : (
+                    <>
+                      <RepuGauge
 
-                  {/* Score label — pulled up to overlap the arc gap */}
-                  <div
-                    style={{
-                      display: "inline-block",
-                      marginTop: "-3.25rem",
-                      position: "relative",
-                      zIndex: 1,
-                      padding: "0.625rem 2rem",
-                      borderRadius: "0.625rem",
-                      backgroundColor: "var(--color-surface)",
-                      border: "1px solid var(--color-border)",
-                    }}
-                  >
-                    <p
-                      style={{
-                        fontSize: "2.5rem",
-                        fontWeight: 800,
-                        color: scoreLabel(score).color,
-                        lineHeight: 1,
-                        marginBottom: "0.25rem",
-                      }}
-                    >
-                      {score}%
-                    </p>
-                    <p
-                      style={{
-                        fontSize: "0.75rem",
-                        fontWeight: 700,
-                        letterSpacing: "0.12em",
-                        color: scoreLabel(score).color,
-                        textTransform: "uppercase",
-                      }}
-                    >
-                      {scoreLabel(score).label}
-                    </p>
-                  </div>
+                        score={score}
+                        avatar={avatar}
+                        initials={scanName
+                          .split(" ")
+                          .map((w) => w[0])
+                          .join("")
+                          .slice(0, 2)}
+                      />
+
+                      {/* Score label — pulled up to overlap the arc gap */}
+                      <div
+                        style={{
+                          display: "inline-block",
+                          marginTop: "-3.25rem",
+                          position: "relative",
+                          zIndex: 1,
+                          padding: "0.625rem 2rem",
+                          borderRadius: "0.625rem",
+                          backgroundColor: "var(--color-surface)",
+                          border: "1px solid var(--color-border)",
+                        }}
+                      >
+                        <p
+                          style={{
+                            fontSize: "2.5rem",
+                            fontWeight: 800,
+                            color: scoreLabel(score).color,
+                            lineHeight: 1,
+                            marginBottom: "0.25rem",
+                          }}
+                        >
+                          {score}%
+                        </p>
+                        <p
+                          style={{
+                            fontSize: "0.75rem",
+                            fontWeight: 700,
+                            letterSpacing: "0.12em",
+                            color: scoreLabel(score).color,
+                            textTransform: "uppercase",
+                          }}
+                        >
+                          {scoreLabel(score).label}
+                        </p>
+                      </div>
+                    </>
+                  )}
 
                   {/* Keywords */}
                   <div
@@ -611,11 +616,11 @@ export default function DashboardPage() {
                 </div>
               )}
             </div>
-          )}
+          </div>
 
           {/* ── Tab: Link List ─────────────────────────────── */}
-          {activeTab === "links" &&
-            (() => {
+          <div style={{ display: activeTab === "links" ? undefined : "none" }}>
+            {(() => {
               const disabledBtn: React.CSSProperties = {
                 width: "100%",
                 padding: "0.75rem 2rem",
@@ -827,28 +832,23 @@ export default function DashboardPage() {
                       {[
                         {
                           label: "Total Found",
-                          value: MOCK_RESULTS.length,
+                          value: scanData?.summary?.total_results ?? 0,
                           color: "var(--color-primary)",
                         },
                         {
                           label: "Negative",
-                          value: MOCK_RESULTS.filter(
-                            (r) => r.risk === "Negative",
-                          ).length,
+                          value: scanData?.summary?.high_risk ?? 0,
                           color: "#FF6B4A",
                         },
                         {
                           label: "Poor",
-                          value: MOCK_RESULTS.filter((r) => r.risk === "Poor")
-                            .length,
+                          value: scanData?.summary?.medium_risk ?? 0,
                           color: "#FF8C00",
                         },
                         {
-                          label: "Mediocre",
-                          value: MOCK_RESULTS.filter(
-                            (r) => r.risk === "Mediocre",
-                          ).length,
-                          color: "#FFD600",
+                          label: "Good",
+                          value: scanData?.summary?.low_risk ?? 0,
+                          color: "#4CAF50",
                         },
                       ].map(({ label, value, color }) => (
                         <div
@@ -888,8 +888,9 @@ export default function DashboardPage() {
                         gap: "0.875rem",
                       }}
                     >
-                      {MOCK_RESULTS.map((result, i) => {
-                        const risk = RISK_COLORS[result.risk];
+                      {(scanData?.results ?? []).map((result, i) => {
+                        const uiRisk = apiRiskToUi(result.risk);
+                        const risk = RISK_COLORS[uiRisk];
                         return (
                           <div
                             key={i}
@@ -921,7 +922,7 @@ export default function DashboardPage() {
                                   {result.title}
                                 </p>
                                 <a
-                                  href={`https://${result.url}`}
+                                  href={result.url}
                                   target="_blank"
                                   rel="noopener noreferrer"
                                   style={{
@@ -960,7 +961,7 @@ export default function DashboardPage() {
                                   whiteSpace: "nowrap",
                                 }}
                               >
-                                {result.risk}
+                                {uiRisk}
                               </span>
                             </div>
                           </div>
@@ -972,9 +973,10 @@ export default function DashboardPage() {
 
               return null;
             })()}
+          </div>
 
           {/* ── Tab: Contract ────────────────────────────────────────────── */}
-          {activeTab === "contract" && (
+          <div style={{ display: activeTab === "contract" ? undefined : "none" }}>
             <div
               className="glass glow-border"
               style={{
@@ -1111,7 +1113,7 @@ export default function DashboardPage() {
                 Request Removal Service →
               </Link>
             </div>
-          )}
+          </div>
         </div>
       </main>
 
