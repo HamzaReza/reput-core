@@ -187,7 +187,7 @@ export const auth = {
       body: JSON.stringify({ email, password, name }),
     }),
 
-  login: (email: string, password: string) => {
+  login: async (email: string, password: string) => {
     const form = new URLSearchParams();
     form.append("username", email);
     form.append("password", password);
@@ -206,6 +206,8 @@ export const auth = {
   },
 
   me: () => request<User>("/auth/me", {}, true),
+
+  verify: () => request<void>("/auth/verify", { method: "POST" }, true),
 };
 
 // ── User / Profile endpoints ──────────────────────────────────────────────────
