@@ -1,9 +1,26 @@
 import json
+from functools import lru_cache
 from typing import Any
 
-from pydantic import field_validator
+from pydantic import Field, PrivateAttr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from functools import lru_cache
+
+
+def _split_allowed_origins(raw: str) -> list[str]:
+    """Comma-separated URLs, or a JSON array string. Empty → localhost defaults."""
+    if raw is None:
+        return ["http://localhost:3000", "http://127.0.0.1:3000"]
+    s = str(raw).strip()
+    if not s:
+        return ["http://localhost:3000", "http://127.0.0.1:3000"]
+    if s.startswith("["):
+        try:
+            parsed = json.loads(s)
+            if isinstance(parsed, list):
+                return [str(x).strip() for x in parsed if str(x).strip()]
+        except json.JSONDecodeError:
+            pass
+    return [x.strip() for x in s.split(",") if x.strip()]
 
 
 class Settings(BaseSettings):
@@ -13,29 +30,33 @@ class Settings(BaseSettings):
     app_name: str = "RepuTrust API"
     app_version: str = "1.0.0"
     debug: bool = False
-    allowed_origins: list[str] = ["http://localhost:3000", "http://127.0.0.1:3000"]
+    #: Maps env ALLOWED_ORIGINS. Must be str — list[str] would make pydantic-settings call json.loads on the value (breaks on "" or comma-separated text).
+    allowed_origins_raw: str = Field(
+        default="http://localhost:3000,http://127.0.0.1:3000",
+        validation_alias="ALLOWED_ORIGINS",
+    )
     #: When True, allow any https://*.vercel.app origin (preview deploys). Use on staging only.
     cors_allow_vercel_previews: bool = False
 
-    @field_validator("allowed_origins", mode="before")
+    _allowed_origins: list[str] = PrivateAttr(
+        default_factory=lambda: ["http://localhost:3000", "http://127.0.0.1:3000"]
+    )
+
+    @field_validator("allowed_origins_raw", mode="before")
     @classmethod
-    def parse_allowed_origins(cls, v: Any) -> list[str]:
-        """Env vars are often a single string; pydantic may not JSON-decode list fields."""
-        if v is None or v == "":
-            return ["http://localhost:3000", "http://127.0.0.1:3000"]
-        if isinstance(v, list):
-            return [str(x).strip() for x in v if str(x).strip()]
-        if isinstance(v, str):
-            s = v.strip()
-            if s.startswith("["):
-                try:
-                    parsed = json.loads(s)
-                    if isinstance(parsed, list):
-                        return [str(x).strip() for x in parsed if str(x).strip()]
-                except json.JSONDecodeError:
-                    pass
-            return [x.strip() for x in s.split(",") if x.strip()]
-        return ["http://localhost:3000", "http://127.0.0.1:3000"]
+    def empty_allowed_origins_raw(cls, v: Any) -> Any:
+        if v is None or (isinstance(v, str) and not v.strip()):
+            return "http://localhost:3000,http://127.0.0.1:3000"
+        return v
+
+    @model_validator(mode="after")
+    def build_allowed_origins(self) -> "Settings":
+        self._allowed_origins = _split_allowed_origins(self.allowed_origins_raw)
+        return self
+
+    @property
+    def allowed_origins(self) -> list[str]:
+        return self._allowed_origins
 
     # Database — Railway provides postgresql:// so we normalise it to asyncpg
     database_url: str = "postgresql+asyncpg://reput_user:reput_pass@localhost:5432/reput_db"
