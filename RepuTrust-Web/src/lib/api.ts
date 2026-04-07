@@ -55,6 +55,7 @@ export interface User {
   nationality: string | null;
   date_of_birth: string | null;
   scan_depth: ScanDepth;
+  profile_complete: boolean;
   is_active: boolean;
   is_verified: boolean;
   created_at: string;
@@ -210,7 +211,7 @@ export const auth = {
 // ── User / Profile endpoints ──────────────────────────────────────────────────
 
 export const users = {
-  updateMe: (data: { name?: string; phone?: string; nationality?: string; date_of_birth?: string; scan_depth?: ScanDepth }) =>
+  updateMe: async (data: { name?: string; phone?: string; nationality?: string; date_of_birth?: string; scan_depth?: ScanDepth; profile_complete?: boolean }) =>
     request<User>(
       "/users/me",
       { method: "PATCH", body: JSON.stringify(data) },

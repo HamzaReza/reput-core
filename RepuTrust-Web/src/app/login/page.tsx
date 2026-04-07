@@ -56,7 +56,7 @@ export default function LoginPage() {
   const [linkedinLoading, setLinkedinLoading] = useState(false);
   const [error, setError] = useState("");
 
-  const handleLogin = async (e: React.FormEvent<HTMLFormElement>) => {
+  const handleLogin = async (e: React.SyntheticEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError("");
     setLoginLoading(true);
@@ -74,7 +74,11 @@ export default function LoginPage() {
         }
       } catch {}
       window.dispatchEvent(new Event("reput-auth-change"));
-      router.push("/dashboard");
+      if (!res.user.profile_complete) {
+        router.push("/auth?step=3");
+      } else {
+        router.push("/dashboard");
+      }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Login failed.");
       setLoginLoading(false);

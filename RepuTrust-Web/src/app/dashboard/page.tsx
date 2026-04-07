@@ -271,6 +271,10 @@ export default function DashboardPage() {
           auth.me(),
           reputation.getLatest(),
         ]);
+        if (!user.profile_complete) {
+          router.replace("/auth?step=3");
+          return;
+        }
         if (user.name) setScanName(user.name.toUpperCase());
         if (user.profile?.keywords?.length) setScanKeywords(user.profile.keywords);
         if (user.profile?.avatar_url) setAvatar(user.profile.avatar_url);
