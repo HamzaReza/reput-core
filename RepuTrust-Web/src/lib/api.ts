@@ -99,13 +99,36 @@ export interface ApiError {
   detail: string;
 }
 
+/** FastAPI returns `detail` as a string (HTTPException) or a list (validation). */
+function parseFastApiDetail(body: unknown): string {
+  if (!body || typeof body !== "object") return "";
+  const d = (body as { detail?: unknown }).detail;
+  if (typeof d === "string") return d;
+  if (Array.isArray(d)) {
+    return d
+      .map((item) => {
+        if (typeof item === "string") return item;
+        if (item && typeof item === "object" && "msg" in item) {
+          return String((item as { msg: string }).msg);
+        }
+        return "";
+      })
+      .filter(Boolean)
+      .join(" ");
+  }
+  return "";
+}
+
 // ── Core fetch wrapper ────────────────────────────────────────────────────────
 
 function networkErrorMessage(): string {
   return `Cannot reach the API at ${BASE_URL}. Start the backend: cd reput-projects && docker compose up`;
 }
 
-async function fetchWithHelp(url: string, init?: RequestInit): Promise<Response> {
+async function fetchWithHelp(
+  url: string,
+  init?: RequestInit,
+): Promise<Response> {
   try {
     return await fetch(url, init);
   } catch (e) {
@@ -119,7 +142,7 @@ async function fetchWithHelp(url: string, init?: RequestInit): Promise<Response>
 async function request<T>(
   path: string,
   options: RequestInit = {},
-  withAuth = false
+  withAuth = false,
 ): Promise<T> {
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
@@ -131,13 +154,16 @@ async function request<T>(
     if (token) headers["Authorization"] = `Bearer ${token}`;
   }
 
-  const res = await fetchWithHelp(`${BASE_URL}${path}`, { ...options, headers });
+  const res = await fetchWithHelp(`${BASE_URL}${path}`, {
+    ...options,
+    headers,
+  });
 
   if (!res.ok) {
-    const err: ApiError = await res.json().catch(() => ({
-      detail: `Request failed with status ${res.status}`,
-    }));
-    throw new Error(err.detail || "An unexpected error occurred.");
+    const parsed = await res.json().catch(() => null);
+    const msg =
+      parseFastApiDetail(parsed) || `Request failed with status ${res.status}`;
+    throw new Error(msg);
   }
 
   // 204 No Content
@@ -165,10 +191,9 @@ export const auth = {
       body: form.toString(),
     }).then(async (res) => {
       if (!res.ok) {
-        const err: ApiError = await res.json().catch(() => ({
-          detail: "Login failed.",
-        }));
-        throw new Error(err.detail || "Login failed.");
+        const parsed = await res.json().catch(() => null);
+        const msg = parseFastApiDetail(parsed) || "Login failed.";
+        throw new Error(msg);
       }
       return res.json() as Promise<AuthResponse>;
     });
@@ -181,7 +206,11 @@ export const auth = {
 
 export const users = {
   updateMe: (data: { name?: string; phone?: string }) =>
-    request<User>("/users/me", { method: "PATCH", body: JSON.stringify(data) }, true),
+    request<User>(
+      "/users/me",
+      { method: "PATCH", body: JSON.stringify(data) },
+      true,
+    ),
 
   getProfile: () => request<UserProfile>("/users/me/profile", {}, true),
 
@@ -189,7 +218,7 @@ export const users = {
     request<UserProfile>(
       "/users/me/profile",
       { method: "PUT", body: JSON.stringify(data) },
-      true
+      true,
     ),
 };
 
@@ -206,7 +235,7 @@ export const reputation = {
     request<ReputationScan[]>(
       `/reputation/history?limit=${limit}&offset=${offset}`,
       {},
-      true
+      true,
     ),
 };
 
@@ -217,7 +246,7 @@ export const quotes = {
     request<{ id: string }>(
       "/quotes/authenticated",
       { method: "POST", body: JSON.stringify(payload) },
-      true
+      true,
     ),
 
   submitGuest: (payload: QuotePayload) =>

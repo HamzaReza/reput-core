@@ -64,16 +64,23 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS: in debug, also allow any localhost / 127.0.0.1 / ::1 port (Next.js dev, alternate ports)
+# CORS: JSON requests trigger a preflight (OPTIONS); form login often does not — origins must match.
 _cors_kw: dict = {
     "allow_origins": settings.allowed_origins,
     "allow_credentials": True,
     "allow_methods": ["*"],
     "allow_headers": ["*"],
 }
+_cors_regex_parts: list[str] = []
 if settings.debug:
+    _cors_regex_parts.append(r"https?://(localhost|127\.0\.0\.1|\[::1\])(:\d+)?")
+if settings.cors_allow_vercel_previews:
+    _cors_regex_parts.append(r"https://[a-zA-Z0-9-]+\.vercel\.app")
+if _cors_regex_parts:
     _cors_kw["allow_origin_regex"] = (
-        r"https?://(localhost|127\.0\.0\.1|\[::1\])(:\d+)?"
+        "|".join(f"({p})" for p in _cors_regex_parts)
+        if len(_cors_regex_parts) > 1
+        else _cors_regex_parts[0]
     )
 app.add_middleware(CORSMiddleware, **_cors_kw)
 

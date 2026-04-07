@@ -14,6 +14,8 @@ class Settings(BaseSettings):
     app_version: str = "1.0.0"
     debug: bool = False
     allowed_origins: list[str] = ["http://localhost:3000", "http://127.0.0.1:3000"]
+    #: When True, allow any https://*.vercel.app origin (preview deploys). Use on staging only.
+    cors_allow_vercel_previews: bool = False
 
     @field_validator("allowed_origins", mode="before")
     @classmethod
