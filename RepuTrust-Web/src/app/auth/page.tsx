@@ -259,7 +259,10 @@ function AuthPageInner() {
     setStep(next);
   };
 
-  const goToDashboard = () => {
+  const goToDashboard = async () => {
+    try {
+      await users.updateMe({ profile_complete: true });
+    } catch {}
     window.dispatchEvent(new Event("reput-auth-change"));
     router.push("/dashboard");
   };

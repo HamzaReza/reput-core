@@ -54,12 +54,14 @@ class UserUpdate(BaseModel):
     nationality: str | None = None
     date_of_birth: date | None = None
     scan_depth: ScanDepthLiteral | None = None
+    profile_complete: bool | None = None
 
 
 class UserOut(UserBase):
     id: uuid.UUID
     is_active: bool
     is_verified: bool
+    profile_complete: bool
     created_at: datetime
     profile: UserProfileOut | None = None
 
