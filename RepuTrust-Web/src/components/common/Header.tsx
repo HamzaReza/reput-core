@@ -99,7 +99,7 @@ export default function Header() {
         >
           {/* Logo */}
           <Link
-            href="/"
+            href={isAuthed ? "/dashboard" : "/"}
             style={{ display: "flex", alignItems: "center", flexShrink: 0 }}
           >
             <Image
