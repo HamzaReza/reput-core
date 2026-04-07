@@ -36,7 +36,7 @@ class Settings(BaseSettings):
         validation_alias="ALLOWED_ORIGINS",
     )
     #: When True, allow any https://*.vercel.app origin (preview deploys). Use on staging only.
-    cors_allow_vercel_previews: bool = False
+    cors_allow_vercel_previews: bool = true
 
     _allowed_origins: list[str] = PrivateAttr(
         default_factory=lambda: ["http://localhost:3000", "http://127.0.0.1:3000"]
