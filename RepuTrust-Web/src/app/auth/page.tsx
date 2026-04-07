@@ -305,17 +305,18 @@ function AuthPageInner() {
     e.preventDefault();
   };
 
-  const verifyOtp = (digits?: string[]) => {
+  const verifyOtp = async (digits?: string[]) => {
     const code = (digits ?? otp).join("");
     if (code.length < 6) {
       setOtpError("Please enter the 6-digit code.");
       return;
     }
     setOtpVerifying(true);
-    setTimeout(() => {
-      setOtpVerifying(false);
-      advance();
-    }, 2000);
+    try {
+      await auth.verify();
+    } catch {}
+    setOtpVerifying(false);
+    advance();
   };
 
   // ── Notification permission ────────────────────────────────────────────────
@@ -705,7 +706,12 @@ function AuthPageInner() {
             setStep3Loading(true);
             try {
               const fullName = `${firstName.trim()} ${lastName.trim()}`.trim();
-              await users.updateMe({ name: fullName, phone: phone.trim() });
+              await users.updateMe({
+                name: fullName,
+                phone: phone.trim() || undefined,
+                nationality: nationality || undefined,
+                date_of_birth: dob || undefined,
+              });
               await users.upsertProfile({
                 keywords: finalKeywords,
                 avatar_url: avatar || null,

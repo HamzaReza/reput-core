@@ -74,7 +74,9 @@ export default function LoginPage() {
         }
       } catch {}
       window.dispatchEvent(new Event("reput-auth-change"));
-      if (!res.user.profile_complete) {
+      if (!res.user.is_verified) {
+        router.push("/auth?step=2");
+      } else if (!res.user.profile_complete) {
         router.push("/auth?step=3");
       } else {
         router.push("/dashboard");

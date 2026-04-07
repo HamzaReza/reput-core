@@ -75,6 +75,15 @@ async def login(
     return UserWithToken(user=UserOut.model_validate(user), access_token=token)
 
 
+@router.post("/verify", status_code=status.HTTP_204_NO_CONTENT)
+async def verify_user(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    current_user.is_verified = True
+    db.add(current_user)
+
+
 @router.get("/me", response_model=UserOut)
 async def me(
     db: AsyncSession = Depends(get_db),
