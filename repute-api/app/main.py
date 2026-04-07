@@ -51,6 +51,7 @@ async def lifespan(app: FastAPI):
                 )
                 await asyncio.sleep(_DB_STARTUP_DELAY_SEC)
                 continue
+            logger.exception("Database initialization failed (app will not start)")
             raise
     yield
     await engine.dispose()
@@ -83,6 +84,13 @@ if _cors_regex_parts:
         else _cors_regex_parts[0]
     )
 app.add_middleware(CORSMiddleware, **_cors_kw)
+
+
+@app.get("/", tags=["health"])
+async def root():
+    """So opening the service URL in a browser returns 200 instead of 404 when the app is up."""
+    return {"status": "ok", "service": settings.app_name}
+
 
 API_PREFIX = "/api/v1"
 app.include_router(auth.router, prefix=API_PREFIX)
