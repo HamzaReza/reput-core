@@ -15,7 +15,7 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.execute("CREATE TYPE scandepth AS ENUM ('Standard', 'Deep', 'Thorough')")
+    op.execute("CREATE TYPE IF NOT EXISTS scandepth AS ENUM ('Standard', 'Deep', 'Thorough')")
     op.add_column(
         "users",
         sa.Column(
