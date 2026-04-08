@@ -37,6 +37,8 @@ class User(Base):
         server_default=ScanDepth.standard.value,
         nullable=False,
     )
+    plan: Mapped[str] = mapped_column(String(20), default="free", server_default="free", nullable=False)
+    pro_trial_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     is_verified: Mapped[bool] = mapped_column(Boolean, default=False)
     profile_complete: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")

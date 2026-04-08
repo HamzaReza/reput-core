@@ -2,7 +2,9 @@
 
 import Footer from "@/components/common/Footer";
 import Header from "@/components/common/Header";
+import { users, isAuthed } from "@/lib/api";
 import { useRouter } from "next/navigation";
+import { useState } from "react";
 
 const plans = [
   {
@@ -53,6 +55,22 @@ const plans = [
 
 export default function QuotePage() {
   const router = useRouter();
+  const [trialLoading, setTrialLoading] = useState(false);
+  const [trialError, setTrialError] = useState("");
+
+  const handleStartTrial = async () => {
+    if (!isAuthed()) { router.push("/auth"); return; }
+    setTrialLoading(true);
+    setTrialError("");
+    try {
+      await users.startTrial();
+      router.push("/dashboard");
+    } catch (e) {
+      setTrialError(e instanceof Error ? e.message : "Could not activate trial.");
+    } finally {
+      setTrialLoading(false);
+    }
+  };
 
   return (
     <div
@@ -176,7 +194,10 @@ export default function QuotePage() {
                 </ul>
 
                 <button
-                  onClick={() => plan.cta === "Request a Quote" ? router.push("/quote/request") : undefined}
+                  onClick={() => {
+                    if (plan.cta === "Request a Quote") router.push("/quote/request");
+                    else if (plan.cta === "Start Pro Trial") handleStartTrial();
+                  }}
                   className={plan.highlight ? "glow-button" : ""}
                   style={
                     plan.highlight
@@ -195,8 +216,13 @@ export default function QuotePage() {
                         }
                   }
                 >
-                  {plan.cta}
+                  {plan.cta === "Start Pro Trial" && trialLoading ? "Activating…" : plan.cta}
                 </button>
+                {plan.cta === "Start Pro Trial" && trialError && (
+                  <p style={{ fontSize: "0.8125rem", color: "#FF6B4A", marginTop: "0.5rem", textAlign: "center" }}>
+                    {trialError}
+                  </p>
+                )}
               </div>
             ))}
           </div>

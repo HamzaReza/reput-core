@@ -24,7 +24,6 @@ def upgrade() -> None:
             UUID(as_uuid=True),
             sa.ForeignKey("users.id", ondelete="CASCADE"),
             nullable=False,
-            index=True,
         ),
         sa.Column("links", JSONB, nullable=False, server_default="[]"),
         sa.Column("notes", sa.Text, nullable=True),
@@ -42,6 +41,7 @@ def upgrade() -> None:
         ),
         if_not_exists=True,
     )
+    op.create_index("ix_contracts_user_id", "contracts", ["user_id"], if_not_exists=True)
 
 
 def downgrade() -> None:

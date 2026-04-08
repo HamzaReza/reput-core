@@ -58,6 +58,8 @@ export interface User {
   profile_complete: boolean;
   is_active: boolean;
   is_verified: boolean;
+  plan: string;
+  pro_trial_expires_at: string | null;
   created_at: string;
   profile: UserProfile | null;
 }
@@ -245,6 +247,9 @@ export const users = {
 
   deleteMe: () =>
     request<void>("/users/me", { method: "DELETE" }, true),
+
+  startTrial: () =>
+    request<User>("/users/me/start-trial", { method: "POST" }, true),
 };
 
 // ── Reputation endpoints ──────────────────────────────────────────────────────
