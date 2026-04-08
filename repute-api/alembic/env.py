@@ -9,6 +9,7 @@ from alembic import context
 
 # Import all models so Alembic detects them
 from app.models import User, UserProfile, ReputationScan, QuoteRequest  # noqa: F401
+from app.models.contract import Contract  # noqa: F401
 from app.database import Base
 from app.config import get_settings
 
