@@ -1,3 +1,5 @@
+from datetime import datetime, timedelta, timezone
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -61,6 +63,28 @@ async def delete_me(
 ):
     await db.delete(current_user)
     await db.flush()
+
+
+@router.post("/me/start-trial", response_model=UserOut)
+async def start_trial(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Grant the user a 24-hour Pro trial. Can only be activated once."""
+    if current_user.pro_trial_expires_at is not None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Pro trial has already been used.",
+        )
+    current_user.plan = "pro"
+    current_user.pro_trial_expires_at = datetime.now(timezone.utc) + timedelta(hours=24)
+    db.add(current_user)
+    await db.flush()
+
+    result = await db.execute(
+        select(User).options(selectinload(User.profile)).where(User.id == current_user.id)
+    )
+    return UserOut.model_validate(result.scalar_one())
 
 
 @router.put("/me/profile", response_model=UserProfileOut)

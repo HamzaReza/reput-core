@@ -62,6 +62,8 @@ class UserOut(UserBase):
     is_active: bool
     is_verified: bool
     profile_complete: bool
+    plan: str = "free"
+    pro_trial_expires_at: datetime | None = None
     created_at: datetime
     profile: UserProfileOut | None = None
 

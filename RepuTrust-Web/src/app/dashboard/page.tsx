@@ -252,6 +252,7 @@ const CONTRACT_STATUS_COLORS: Record<
 export default function DashboardPage() {
   const router = useRouter();
   const [authed, setAuthed] = useState<boolean | null>(null);
+  const [isPro, setIsPro] = useState(false);
   const [activeTab, setActiveTab] = useState<Tab>("score");
   const [scanName, setScanName] = useState("");
   const [scanKeywords, setScanKeywords] = useState<string[]>([]);
@@ -268,6 +269,7 @@ export default function DashboardPage() {
   const [contractSuccess, setContractSuccess] = useState(false);
 
   const infoMoreTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const hasLoadedRef = useRef(false);
   useEffect(() => {
     if (!isAuthed()) {
       router.replace("/auth");
@@ -276,6 +278,8 @@ export default function DashboardPage() {
     setAuthed(true);
 
     const loadData = async () => {
+      if (hasLoadedRef.current) return;
+      hasLoadedRef.current = true;
       try {
         // Load cached scan from sessionStorage — avoids re-fetching on tab navigation
         const cached = sessionStorage.getItem("reput_scan");
@@ -292,21 +296,58 @@ export default function DashboardPage() {
         }
         if (user.name) setScanName(user.name.toUpperCase());
         if (user.profile?.avatar_url) setAvatar(user.profile.avatar_url);
+        const trialActive = user.plan === "pro" && !!user.pro_trial_expires_at && new Date(user.pro_trial_expires_at) > new Date();
+        setIsPro(trialActive);
 
         const currentKeywords: string[] = user.profile?.keywords ?? [];
         if (currentKeywords.length) setScanKeywords(currentKeywords);
+
+        const currentName = user.name ?? "";
+        const prevName = localStorage.getItem("reput_last_scan_name") ?? "";
+        const nameChanged = prevName !== currentName;
 
         const keywordsKey = [...currentKeywords].sort().join(",");
         const prevKeywordsKey = localStorage.getItem("reput_last_scan_keywords") ?? "";
         const keywordsChanged = prevKeywordsKey !== keywordsKey;
 
-        // Trigger scan only on first visit (no cache) or when keywords changed
-        if (!cached || keywordsChanged) {
-          const scan = await reputation.triggerScan();
-          setScanData(scan);
-          setScore(scan.score);
-          sessionStorage.setItem("reput_scan", JSON.stringify(scan));
+        // Trigger scan on first visit, or when name or keywords changed
+        if (!cached || nameChanged || keywordsChanged) {
+          const [scan, negRes] = await Promise.allSettled([
+            reputation.triggerScan(),
+            fetch("/api/negative-links", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ name: user.name ?? "", keywords: currentKeywords, nationality: user.nationality ?? "" }),
+            }).then((r) => r.json() as Promise<{ links: Array<{ url: string; title: string; snippet: string; risk: string; source: string; type: string }> }>),
+          ]);
+
+          const scanResult = scan.status === "fulfilled" ? scan.value : null;
+          const negLinks = negRes.status === "fulfilled" ? (negRes.value.links ?? []) : [];
+
+          if (scanResult) {
+            // Score derived from Claude's findings: start at 100, deduct per risk level
+            const highCount = negLinks.filter((l) => l.risk === "high").length;
+            const medCount = negLinks.filter((l) => l.risk === "medium").length;
+            const derivedScore = Math.max(0, 100 - highCount * 15 - medCount * 7);
+
+            const merged = {
+              ...scanResult,
+              score: derivedScore,
+              risk_level: derivedScore >= 75 ? "low" : derivedScore >= 50 ? "medium" : "high",
+              results: negLinks.map((l) => ({ ...l, risk: l.risk as string })),
+              summary: {
+                total_results: negLinks.length,
+                high_risk: highCount,
+                medium_risk: medCount,
+                low_risk: negLinks.filter((l) => l.risk === "low").length,
+              },
+            };
+            setScanData(merged);
+            setScore(merged.score);
+            sessionStorage.setItem("reput_scan", JSON.stringify(merged));
+          }
           localStorage.setItem("reput_last_scan_keywords", keywordsKey);
+          localStorage.setItem("reput_last_scan_name", currentName);
         }
       } catch {
         // Fallback — keep defaults
@@ -391,8 +432,8 @@ export default function DashboardPage() {
   const availableForContract = negativeResults.filter(
     (r) => !contractedUrls.has(r.url)
   );
-  const visibleNegativeLinks = negativeResults.slice(0, 3);
-  const blurredNegativeLinks = negativeResults.slice(3);
+  const visibleNegativeLinks = isPro ? negativeResults : negativeResults.slice(0, 3);
+  const blurredNegativeLinks = isPro ? [] : negativeResults.slice(3);
 
   return (
     <div
@@ -762,16 +803,16 @@ export default function DashboardPage() {
                       </div>
 
                       {/* Remaining — blurred (premium) */}
-                      {blurredNegativeLinks.length > 0 && (
+                      {blurredNegativeLinks.length > 0 && !isPro && (
                         <div style={{ position: "relative", marginTop: "0.75rem" }}>
                           <div
                             style={{
                               display: "flex",
                               flexDirection: "column",
                               gap: "0.75rem",
-                              filter: "blur(4px)",
-                              userSelect: "none",
-                              pointerEvents: "none",
+                              filter: isPro ? "none" : "blur(4px)",
+                              userSelect: isPro ? "auto" : "none",
+                              pointerEvents: isPro ? "auto" : "none",
                             }}
                           >
                             {blurredNegativeLinks.map((result, i) => {
@@ -1044,7 +1085,7 @@ export default function DashboardPage() {
                       marginBottom: "1.25rem",
                     }}
                   >
-                    {availableForContract.map((result, i) => {
+                    {(isPro ? availableForContract : availableForContract.slice(0, 3)).map((result, i) => {
                       const uiRisk = apiRiskToUi(result.risk);
                       const risk = RISK_COLORS[uiRisk];
                       const checked = selectedLinks.has(result.url);
@@ -1127,6 +1168,85 @@ export default function DashboardPage() {
                       );
                     })}
                   </div>
+
+                  {/* Blurred premium links */}
+                  {availableForContract.length > 3 && !isPro && (
+                    <div style={{ position: "relative", marginBottom: "1rem" }}>
+                      <div
+                        style={{
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: "0.625rem",
+                          filter: isPro ? "none" : "blur(4px)",
+                          userSelect: isPro ? "auto" : "none",
+                          pointerEvents: isPro ? "auto" : "none",
+                        }}
+                      >
+                        {availableForContract.slice(3).map((result, i) => {
+                          const uiRisk = apiRiskToUi(result.risk);
+                          const risk = RISK_COLORS[uiRisk];
+                          return (
+                            <div
+                              key={i}
+                              style={{
+                                display: "flex",
+                                alignItems: "flex-start",
+                                gap: "0.75rem",
+                                padding: "0.875rem 1rem",
+                                borderRadius: "0.5rem",
+                                border: "1px solid var(--color-border)",
+                              }}
+                            >
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.2rem" }}>
+                                  <span style={{ fontSize: "0.9375rem", fontWeight: 600, color: "var(--color-foreground)" }}>
+                                    {result.title}
+                                  </span>
+                                  <span
+                                    style={{
+                                      fontSize: "0.7rem",
+                                      fontWeight: 700,
+                                      padding: "0.15rem 0.6rem",
+                                      borderRadius: "9999px",
+                                      backgroundColor: risk.bg,
+                                      color: risk.color,
+                                      border: `1px solid ${risk.border}`,
+                                    }}
+                                  >
+                                    {uiRisk}
+                                  </span>
+                                </div>
+                                <span style={{ fontSize: "0.75rem", color: "var(--color-primary)" }}>
+                                  {result.url}
+                                </span>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                      <div
+                        style={{
+                          position: "absolute",
+                          inset: 0,
+                          display: "flex",
+                          flexDirection: "column",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          gap: "0.5rem",
+                          borderRadius: "0.5rem",
+                          backgroundColor: "rgba(10,10,20,0.55)",
+                        }}
+                      >
+                        <svg width="20" height="20" fill="none" stroke="var(--color-muted)" viewBox="0 0 24 24">
+                          <rect x="3" y="11" width="18" height="11" rx="2" strokeWidth="2" />
+                          <path d="M7 11V7a5 5 0 0110 0v4" strokeWidth="2" strokeLinecap="round" />
+                        </svg>
+                        <p style={{ fontSize: "0.8125rem", fontWeight: 700, color: "var(--color-foreground)" }}>
+                          Premium — {availableForContract.length - 3} more link{availableForContract.length - 3 !== 1 ? "s" : ""} hidden
+                        </p>
+                      </div>
+                    </div>
+                  )}
 
                   {/* Notes */}
                   <textarea
