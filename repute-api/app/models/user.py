@@ -56,6 +56,9 @@ class User(Base):
     quote_requests: Mapped[list["QuoteRequest"]] = relationship(
         "QuoteRequest", back_populates="user", cascade="all, delete-orphan"
     )
+    contracts: Mapped[list["Contract"]] = relationship(
+        "Contract", back_populates="user", cascade="all, delete-orphan"
+    )
 
 
 class UserProfile(Base):

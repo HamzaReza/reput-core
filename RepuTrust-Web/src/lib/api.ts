@@ -105,6 +105,20 @@ export interface ApiError {
   detail: string;
 }
 
+export interface ContractLink {
+  url: string;
+  title: string;
+}
+
+export interface Contract {
+  id: string;
+  user_id: string;
+  links: ContractLink[];
+  notes: string | null;
+  status: string;
+  created_at: string;
+}
+
 /** FastAPI returns `detail` as a string (HTTPException) or a list (validation). */
 function parseFastApiDetail(body: unknown): string {
   if (!body || typeof body !== "object") return "";
@@ -267,4 +281,17 @@ export const quotes = {
     }),
 
   getMyQuotes: () => request<unknown[]>("/quotes/my", {}, true),
+};
+
+// ── Contracts endpoints ───────────────────────────────────────────────────────
+
+export const contracts = {
+  create: (payload: { links: ContractLink[]; notes?: string }) =>
+    request<Contract>(
+      "/contracts",
+      { method: "POST", body: JSON.stringify(payload) },
+      true,
+    ),
+
+  getMy: () => request<Contract[]>("/contracts/my", {}, true),
 };

@@ -15,26 +15,35 @@ from app.utils.auth import get_current_user
 router = APIRouter(prefix="/reputation", tags=["reputation"])
 
 
-def _mock_scan(keywords: list[str]) -> tuple[int, str, list[dict], dict]:
+def _mock_scan(name: str, keywords: list[str]) -> tuple[int, str, list[dict], dict]:
     """
     Placeholder scan engine.  Replace with real scraping / API calls.
+    Every result always contains the user's name AND one of their keywords.
     Returns (score, risk_level, results, summary).
     """
     score = random.randint(40, 95)
     risk_level = "low" if score >= 75 else ("medium" if score >= 50 else "high")
 
     sources = ["Google", "Twitter", "LinkedIn", "Reddit", "Yelp", "TrustPilot"]
-    risk_options = ["low", "medium", "high"]
+
+    # Good score (>=75) → only low risk results; anything else can have medium/high
+    risk_options = ["low"] if score >= 75 else ["low", "medium", "high"]
+
+    # Fall back to a generic keyword if none provided
+    kw_pool = keywords if keywords else ["reputation"]
 
     results = []
     for i in range(random.randint(4, 10)):
-        kw = keywords[i % len(keywords)] if keywords else "reputation"
+        kw = kw_pool[i % len(kw_pool)]
         results.append(
             {
                 "source": random.choice(sources),
                 "url": f"https://example.com/result-{i+1}",
                 "title": f"{kw.title()} mention #{i+1}",
-                "snippet": f"This is a placeholder result mentioning '{kw}'.",
+                "snippet": (
+                    f"This result mentions '{kw}' in relation to {name}. "
+                    "This is placeholder content that will be replaced with real scan data."
+                ),
                 "risk": random.choice(risk_options),
                 "type": random.choice(["search", "social", "news"]),
             }
@@ -60,10 +69,9 @@ async def trigger_scan(
     )
     profile = profile_result.scalar_one_or_none()
     keywords: list[str] = profile.keywords if profile and profile.keywords else []
-    if current_user.name:
-        keywords = [current_user.name] + keywords
+    name: str = current_user.name or "Unknown"
 
-    score, risk_level, results, summary = _mock_scan(keywords)
+    score, risk_level, results, summary = _mock_scan(name, keywords)
 
     scan = ReputationScan(
         user_id=current_user.id,
