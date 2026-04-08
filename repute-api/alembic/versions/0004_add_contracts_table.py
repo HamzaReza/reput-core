@@ -40,6 +40,7 @@ def upgrade() -> None:
             server_default=sa.text("now()"),
             nullable=False,
         ),
+        if_not_exists=True,
     )
 
 
