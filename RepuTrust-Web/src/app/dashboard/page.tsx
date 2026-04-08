@@ -259,7 +259,6 @@ export default function DashboardPage() {
   const [score, setScore] = useState(0);
   const [scanData, setScanData] = useState<ReputationScan | null>(null);
   const [scoreLoading, setScoreLoading] = useState(true);
-
   // Contract state
   const [myContracts, setMyContracts] = useState<Contract[]>([]);
   const [contractsLoading, setContractsLoading] = useState(false);
@@ -269,7 +268,6 @@ export default function DashboardPage() {
   const [contractSuccess, setContractSuccess] = useState(false);
 
   const infoMoreTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
   useEffect(() => {
     if (!isAuthed()) {
       router.replace("/auth");
@@ -277,39 +275,38 @@ export default function DashboardPage() {
     }
     setAuthed(true);
 
-    // Load cached user info
-    try {
-      const n = localStorage.getItem("reput_name");
-      const k = localStorage.getItem("reput_keywords");
-      const a = localStorage.getItem("reput_avatar");
-      if (n) setScanName(n.toUpperCase());
-      if (k) setScanKeywords(k.split(",").map((s) => s.trim()).filter(Boolean));
-      if (a) setAvatar(a);
-    } catch {}
-
-    // Fetch user + latest scan from API
     const loadData = async () => {
       try {
-        const [user, latestScan] = await Promise.all([
-          auth.me(),
-          reputation.getLatest(),
-        ]);
+        // Load cached scan from sessionStorage — avoids re-fetching on tab navigation
+        const cached = sessionStorage.getItem("reput_scan");
+        if (cached) {
+          const parsed: ReputationScan = JSON.parse(cached);
+          setScanData(parsed);
+          setScore(parsed.score);
+        }
+
+        const user = await auth.me();
         if (!user.profile_complete) {
           router.replace("/auth?step=3");
           return;
         }
         if (user.name) setScanName(user.name.toUpperCase());
-        if (user.profile?.keywords?.length)
-          setScanKeywords(user.profile.keywords);
         if (user.profile?.avatar_url) setAvatar(user.profile.avatar_url);
 
-        if (latestScan) {
-          setScanData(latestScan);
-          setScore(latestScan.score);
-        } else {
-          const newScan = await reputation.triggerScan();
-          setScanData(newScan);
-          setScore(newScan.score);
+        const currentKeywords: string[] = user.profile?.keywords ?? [];
+        if (currentKeywords.length) setScanKeywords(currentKeywords);
+
+        const keywordsKey = [...currentKeywords].sort().join(",");
+        const prevKeywordsKey = localStorage.getItem("reput_last_scan_keywords") ?? "";
+        const keywordsChanged = prevKeywordsKey !== keywordsKey;
+
+        // Trigger scan only on first visit (no cache) or when keywords changed
+        if (!cached || keywordsChanged) {
+          const scan = await reputation.triggerScan();
+          setScanData(scan);
+          setScore(scan.score);
+          sessionStorage.setItem("reput_scan", JSON.stringify(scan));
+          localStorage.setItem("reput_last_scan_keywords", keywordsKey);
         }
       } catch {
         // Fallback — keep defaults
@@ -320,6 +317,7 @@ export default function DashboardPage() {
 
     loadData();
   }, [router]);
+
 
   useEffect(() => {
     return () => {
@@ -596,7 +594,8 @@ export default function DashboardPage() {
                           {scoreLabel(score).label}
                         </p>
                       </div>
-                    </>
+
+</>
                   )}
 
                   {/* Keywords */}
