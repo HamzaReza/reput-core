@@ -917,8 +917,11 @@ function AuthPageInner() {
               </span>
             )}
             <input
-              type="date"
+              type="text"
               value={dob}
+              placeholder=""
+              onFocus={(e) => { e.currentTarget.type = "date"; e.currentTarget.showPicker?.(); }}
+              onBlur={(e) => { if (!e.currentTarget.value) e.currentTarget.type = "text"; }}
               onChange={(e) => setDob(e.target.value)}
               style={{
                 ...inputStyle,

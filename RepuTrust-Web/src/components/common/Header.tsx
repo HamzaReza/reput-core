@@ -131,13 +131,6 @@ export default function Header() {
                 Scanner
               </Link>
             )}
-            <Link
-              href="/quote"
-              className="header-nav-link"
-              style={navLinkStyle}
-            >
-              Removal Plans
-            </Link>
             {isAuthed && (
               <Link
                 href="/settings"
@@ -289,14 +282,6 @@ export default function Header() {
               Scanner
             </Link>
           )}
-          <Link
-            href="/quote"
-            onClick={close}
-            className="drawer-nav-link"
-            style={drawerLinkStyle}
-          >
-            Removal Plans
-          </Link>
           {isAuthed && (
             <Link
               href="/settings"
