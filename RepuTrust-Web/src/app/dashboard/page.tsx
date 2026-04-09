@@ -50,12 +50,48 @@ const RISK_COLORS: Record<
   },
 };
 
-// Inverted: low score = negative (red), high score = good (green)
+// Score bands (from image):
+// Green  → 10+ positive, 0 negative  → score 86–100
+// Yellow → 1–5 negative              → score 61–85
+// Orange → 6–10 negative             → score 26–60
+// Red    → 11+ negative              → score 0–25
 function scoreLabel(score: number): { label: string; color: string } {
-  if (score >= 75) return { label: "Good", color: "#4CAF50" };
-  if (score >= 50) return { label: "Mediocre", color: "#FFD600" };
-  if (score >= 25) return { label: "Poor", color: "#FF8C00" };
+  if (score >= 86) return { label: "Good", color: "#4CAF50" };
+  if (score >= 61) return { label: "Mediocre", color: "#FFD600" };
+  if (score >= 26) return { label: "Poor", color: "#FF8C00" };
   return { label: "Negative", color: "#FF6B4A" };
+}
+
+/**
+ * Derive a 0–100 reputation score based on the image rubric:
+ *   Green  (86–100): 10+ positive results AND 0 negative
+ *   Yellow (61–85):  1–5 negative results
+ *   Orange (26–60):  6–10 negative results
+ *   Red    (0–25):   11+ negative results
+ *
+ * Within each band the score is further fine-tuned by the positive count.
+ */
+function deriveScore(negCount: number, posCount: number): number {
+  if (negCount === 0) {
+    // No negatives — Green band. More positives → higher score.
+    const posBonus = Math.min(posCount, 20); // cap at 20
+    return Math.min(100, 86 + Math.round((posBonus / 20) * 14));
+  }
+  if (negCount <= 5) {
+    // Yellow band (61–85). Fewer negatives & more positives → higher end.
+    const base = 85 - (negCount - 1) * 4; // 85, 81, 77, 73, 69
+    const posBonus = Math.min(posCount, 10);
+    return Math.min(85, Math.max(61, base + Math.round((posBonus / 10) * 5)));
+  }
+  if (negCount <= 10) {
+    // Orange band (26–60).
+    const base = 60 - (negCount - 6) * 7; // 60, 53, 46, 39, 32
+    const posBonus = Math.min(posCount, 10);
+    return Math.min(60, Math.max(26, base + Math.round((posBonus / 10) * 5)));
+  }
+  // Red band (0–25): 11+ negatives.
+  const base = Math.max(0, 25 - (negCount - 11) * 2);
+  return base;
 }
 
 // ── SVG Gauge ─────────────────────────────────────────────────────────────────
@@ -312,33 +348,38 @@ export default function DashboardPage() {
 
         // Trigger scan on first visit, or when name or keywords changed
         if (!cached || nameChanged || keywordsChanged) {
-          const [scan, negRes] = await Promise.allSettled([
+          type LinkItem = { url: string; title: string; snippet: string; sentiment?: string; risk: string; source: string; type: string };
+          type LinksResponse = { links: LinkItem[]; negative: LinkItem[]; positive: LinkItem[]; neutral: LinkItem[] };
+
+          const [scan, linksRes] = await Promise.allSettled([
             reputation.triggerScan(),
             fetch("/api/negative-links", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ name: user.name ?? "", keywords: currentKeywords, nationality: user.nationality ?? "" }),
-            }).then((r) => r.json() as Promise<{ links: Array<{ url: string; title: string; snippet: string; risk: string; source: string; type: string }> }>),
+            }).then((r) => r.json() as Promise<LinksResponse>),
           ]);
 
           const scanResult = scan.status === "fulfilled" ? scan.value : null;
-          const negLinks = negRes.status === "fulfilled" ? (negRes.value.links ?? []) : [];
+          const linksData = linksRes.status === "fulfilled" ? linksRes.value : null;
+          const allLinks: LinkItem[] = linksData?.links ?? [];
+          const negLinks = linksData?.negative ?? allLinks.filter((l) => l.sentiment === "negative" || (!l.sentiment && l.risk !== "none" && l.risk !== "low"));
+          const posLinks = linksData?.positive ?? allLinks.filter((l) => l.sentiment === "positive");
 
           if (scanResult) {
-            // Score derived from Claude's findings: start at 100, deduct per risk level
-            const highCount = negLinks.filter((l) => l.risk === "high").length;
-            const medCount = negLinks.filter((l) => l.risk === "medium").length;
-            const derivedScore = Math.max(0, 100 - highCount * 15 - medCount * 7);
+            const negCount = negLinks.length;
+            const posCount = posLinks.length;
+            const derivedScore = deriveScore(negCount, posCount);
 
             const merged = {
               ...scanResult,
               score: derivedScore,
-              risk_level: derivedScore >= 75 ? "low" : derivedScore >= 50 ? "medium" : "high",
-              results: negLinks.map((l) => ({ ...l, risk: l.risk as string })),
+              risk_level: derivedScore >= 86 ? "low" : derivedScore >= 61 ? "medium" : "high",
+              results: allLinks.map((l) => ({ ...l, risk: l.risk as string })),
               summary: {
-                total_results: negLinks.length,
-                high_risk: highCount,
-                medium_risk: medCount,
+                total_results: allLinks.length,
+                high_risk: negLinks.filter((l) => l.risk === "high").length,
+                medium_risk: negLinks.filter((l) => l.risk === "medium").length,
                 low_risk: negLinks.filter((l) => l.risk === "low").length,
               },
             };
@@ -417,12 +458,13 @@ export default function DashboardPage() {
 
   if (!authed) return null;
 
-  // Only show flagged links when score is not Good (< 75)
-  const isGoodScore = score >= 75;
+  // Only show flagged links when score is not Good (< 86)
+  const isGoodScore = score >= 86;
   const negativeResults = isGoodScore
     ? []
     : (scanData?.results ?? []).filter(
-        (r) => r.risk === "high" || r.risk === "medium"
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (r) => (r as any).sentiment === "negative" || (r.risk === "high" || r.risk === "medium")
       );
 
   // URLs already used in existing contracts — excluded from the contract form
