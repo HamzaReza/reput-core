@@ -3,13 +3,14 @@
 import Footer from "@/components/common/Footer";
 import Header from "@/components/common/Header";
 import {
-  isAuthed,
-  reputation,
   auth,
   contracts,
-  type ReputationScan,
+  isAuthed,
+  reputation,
+  users,
   type Contract,
   type ContractLink,
+  type ReputationScan,
 } from "@/lib/api";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
@@ -289,6 +290,7 @@ export default function DashboardPage() {
   const router = useRouter();
   const [authed, setAuthed] = useState<boolean | null>(null);
   const [isPro, setIsPro] = useState(false);
+  const [upgradingPro, setUpgradingPro] = useState(false);
   const [activeTab, setActiveTab] = useState<Tab>("score");
   const [scanName, setScanName] = useState("");
   const [scanKeywords, setScanKeywords] = useState<string[]>([]);
@@ -332,7 +334,10 @@ export default function DashboardPage() {
         }
         if (user.name) setScanName(user.name.toUpperCase());
         if (user.profile?.avatar_url) setAvatar(user.profile.avatar_url);
-        const trialActive = user.plan === "pro" && !!user.pro_trial_expires_at && new Date(user.pro_trial_expires_at) > new Date();
+        const trialActive =
+          user.plan === "pro" &&
+          !!user.pro_trial_expires_at &&
+          new Date(user.pro_trial_expires_at) > new Date();
         setIsPro(trialActive);
 
         const currentKeywords: string[] = user.profile?.keywords ?? [];
@@ -343,28 +348,55 @@ export default function DashboardPage() {
         const nameChanged = prevName !== currentName;
 
         const keywordsKey = [...currentKeywords].sort().join(",");
-        const prevKeywordsKey = localStorage.getItem("reput_last_scan_keywords") ?? "";
+        const prevKeywordsKey =
+          localStorage.getItem("reput_last_scan_keywords") ?? "";
         const keywordsChanged = prevKeywordsKey !== keywordsKey;
 
         // Trigger scan on first visit, or when name or keywords changed
         if (!cached || nameChanged || keywordsChanged) {
-          type LinkItem = { url: string; title: string; snippet: string; sentiment?: string; risk: string; source: string; type: string };
-          type LinksResponse = { links: LinkItem[]; negative: LinkItem[]; positive: LinkItem[]; neutral: LinkItem[] };
+          type LinkItem = {
+            url: string;
+            title: string;
+            snippet: string;
+            sentiment?: string;
+            risk: string;
+            source: string;
+            type: string;
+          };
+          type LinksResponse = {
+            links: LinkItem[];
+            negative: LinkItem[];
+            positive: LinkItem[];
+            neutral: LinkItem[];
+          };
 
           const [scan, linksRes] = await Promise.allSettled([
             reputation.triggerScan(),
             fetch("/api/negative-links", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ name: user.name ?? "", keywords: currentKeywords, nationality: user.nationality ?? "" }),
+              body: JSON.stringify({
+                name: user.name ?? "",
+                keywords: currentKeywords,
+                nationality: user.nationality ?? "",
+              }),
             }).then((r) => r.json() as Promise<LinksResponse>),
           ]);
 
           const scanResult = scan.status === "fulfilled" ? scan.value : null;
-          const linksData = linksRes.status === "fulfilled" ? linksRes.value : null;
+          const linksData =
+            linksRes.status === "fulfilled" ? linksRes.value : null;
           const allLinks: LinkItem[] = linksData?.links ?? [];
-          const negLinks = linksData?.negative ?? allLinks.filter((l) => l.sentiment === "negative" || (!l.sentiment && l.risk !== "none" && l.risk !== "low"));
-          const posLinks = linksData?.positive ?? allLinks.filter((l) => l.sentiment === "positive");
+          const negLinks =
+            linksData?.negative ??
+            allLinks.filter(
+              (l) =>
+                l.sentiment === "negative" ||
+                (!l.sentiment && l.risk !== "none" && l.risk !== "low"),
+            );
+          const posLinks =
+            linksData?.positive ??
+            allLinks.filter((l) => l.sentiment === "positive");
 
           if (scanResult) {
             const negCount = negLinks.length;
@@ -374,7 +406,12 @@ export default function DashboardPage() {
             const merged = {
               ...scanResult,
               score: derivedScore,
-              risk_level: derivedScore >= 86 ? "low" : derivedScore >= 61 ? "medium" : "high",
+              risk_level:
+                derivedScore >= 86
+                  ? "low"
+                  : derivedScore >= 61
+                    ? "medium"
+                    : "high",
               results: allLinks.map((l) => ({ ...l, risk: l.risk as string })),
               summary: {
                 total_results: allLinks.length,
@@ -399,7 +436,6 @@ export default function DashboardPage() {
 
     loadData();
   }, [router]);
-
 
   useEffect(() => {
     return () => {
@@ -456,18 +492,32 @@ export default function DashboardPage() {
     }
   };
 
+  async function handleUpgradePro() {
+    setUpgradingPro(true);
+    await new Promise((r) => setTimeout(r, 2000));
+    try {
+      await users.startTrial();
+    } catch {
+      // ignore — still set pro locally for the day
+    }
+    setIsPro(true);
+    setUpgradingPro(false);
+  }
+
   if (!authed) return null;
 
   const negativeResults = scanData?.results ?? [];
 
   // URLs already used in existing contracts — excluded from the contract form
   const contractedUrls = new Set(
-    myContracts.flatMap((c) => c.links.map((l) => l.url))
+    myContracts.flatMap((c) => c.links.map((l) => l.url)),
   );
   const availableForContract = negativeResults.filter(
-    (r) => !contractedUrls.has(r.url)
+    (r) => !contractedUrls.has(r.url),
   );
-  const visibleNegativeLinks = isPro ? negativeResults : negativeResults.slice(0, 3);
+  const visibleNegativeLinks = isPro
+    ? negativeResults
+    : negativeResults.slice(0, 3);
   const blurredNegativeLinks = isPro ? [] : negativeResults.slice(3);
 
   return (
@@ -670,8 +720,7 @@ export default function DashboardPage() {
                           {scoreLabel(score).label}
                         </p>
                       </div>
-
-</>
+                    </>
                   )}
 
                   {/* Keywords */}
@@ -839,7 +888,9 @@ export default function DashboardPage() {
 
                       {/* Remaining — blurred (premium) */}
                       {blurredNegativeLinks.length > 0 && !isPro && (
-                        <div style={{ position: "relative", marginTop: "0.75rem" }}>
+                        <div
+                          style={{ position: "relative", marginTop: "0.75rem" }}
+                        >
                           <div
                             style={{
                               display: "flex",
@@ -928,7 +979,8 @@ export default function DashboardPage() {
                               display: "flex",
                               flexDirection: "column",
                               alignItems: "center",
-                              justifyContent: "center",
+                              justifyContent: "flex-start",
+                              paddingTop: "1.25rem",
                               gap: "0.75rem",
                               borderRadius: "0.625rem",
                               backgroundColor: "rgba(0,0,0,0.35)",
@@ -966,19 +1018,47 @@ export default function DashboardPage() {
                               {blurredNegativeLinks.length > 1 ? "s" : ""} —
                               Premium only
                             </p>
-                            <a
-                              href="/quote"
+                            <button
+                              onClick={handleUpgradePro}
+                              disabled={upgradingPro}
                               className="glow-button"
                               style={{
-                                textDecoration: "none",
                                 fontWeight: 700,
                                 padding: "0.5rem 1.5rem",
                                 borderRadius: "0.625rem",
                                 fontSize: "0.875rem",
+                                cursor: upgradingPro
+                                  ? "not-allowed"
+                                  : "pointer",
+                                opacity: upgradingPro ? 0.7 : 1,
+                                display: "flex",
+                                alignItems: "center",
+                                gap: "0.5rem",
                               }}
                             >
-                              Upgrade to Premium
-                            </a>
+                              {upgradingPro ? (
+                                <>
+                                  <svg
+                                    width="16"
+                                    height="16"
+                                    viewBox="0 0 24 24"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    strokeWidth="2"
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    style={{
+                                      animation: "spin 1s linear infinite",
+                                    }}
+                                  >
+                                    <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+                                  </svg>
+                                  Upgrading…
+                                </>
+                              ) : (
+                                "Upgrade to Premium"
+                              )}
+                            </button>
                           </div>
                         </div>
                       )}
@@ -986,69 +1066,71 @@ export default function DashboardPage() {
                   )}
 
                   {/* ── Conditional: positive score → congratulations ── */}
-                  {negativeResults.length === 0 && !scoreLoading && scanKeywords.length > 0 && (
-                    <div
-                      className="glass"
-                      style={{
-                        borderRadius: "0.75rem",
-                        padding: "1.5rem",
-                        marginTop: "1.25rem",
-                        border: "1px solid rgba(76,175,80,0.3)",
-                        textAlign: "center",
-                        backgroundColor: "rgba(76,175,80,0.05)",
-                      }}
-                    >
+                  {negativeResults.length === 0 &&
+                    !scoreLoading &&
+                    scanKeywords.length > 0 && (
                       <div
+                        className="glass"
                         style={{
-                          width: "3rem",
-                          height: "3rem",
-                          borderRadius: "50%",
-                          backgroundColor: "rgba(76,175,80,0.12)",
+                          borderRadius: "0.75rem",
+                          padding: "1.5rem",
+                          marginTop: "1.25rem",
                           border: "1px solid rgba(76,175,80,0.3)",
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          margin: "0 auto 1rem",
+                          textAlign: "center",
+                          backgroundColor: "rgba(76,175,80,0.05)",
                         }}
                       >
-                        <svg
-                          width="20"
-                          height="20"
-                          fill="none"
-                          stroke="#4CAF50"
-                          viewBox="0 0 24 24"
+                        <div
+                          style={{
+                            width: "3rem",
+                            height: "3rem",
+                            borderRadius: "50%",
+                            backgroundColor: "rgba(76,175,80,0.12)",
+                            border: "1px solid rgba(76,175,80,0.3)",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            margin: "0 auto 1rem",
+                          }}
                         >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2.5}
-                            d="M5 13l4 4L19 7"
-                          />
-                        </svg>
+                          <svg
+                            width="20"
+                            height="20"
+                            fill="none"
+                            stroke="#4CAF50"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2.5}
+                              d="M5 13l4 4L19 7"
+                            />
+                          </svg>
+                        </div>
+                        <h3
+                          style={{
+                            fontSize: "1.125rem",
+                            fontWeight: 700,
+                            color: "#4CAF50",
+                            marginBottom: "0.5rem",
+                          }}
+                        >
+                          Congratulations!
+                        </h3>
+                        <p
+                          style={{
+                            fontSize: "0.9375rem",
+                            color: "var(--color-muted)",
+                            lineHeight: 1.65,
+                          }}
+                        >
+                          Your online reputation looks great. We found no
+                          significant negative content associated with your
+                          name. Keep up the good work!
+                        </p>
                       </div>
-                      <h3
-                        style={{
-                          fontSize: "1.125rem",
-                          fontWeight: 700,
-                          color: "#4CAF50",
-                          marginBottom: "0.5rem",
-                        }}
-                      >
-                        Congratulations!
-                      </h3>
-                      <p
-                        style={{
-                          fontSize: "0.9375rem",
-                          color: "var(--color-muted)",
-                          lineHeight: 1.65,
-                        }}
-                      >
-                        Your online reputation looks great. We found no
-                        significant negative content associated with your name.
-                        Keep up the good work!
-                      </p>
-                    </div>
-                  )}
+                    )}
                 </div>
               )}
             </div>
@@ -1120,7 +1202,10 @@ export default function DashboardPage() {
                       marginBottom: "1.25rem",
                     }}
                   >
-                    {(isPro ? availableForContract : availableForContract.slice(0, 3)).map((result, i) => {
+                    {(isPro
+                      ? availableForContract
+                      : availableForContract.slice(0, 3)
+                    ).map((result, i) => {
                       const uiRisk = apiRiskToUi(result.risk);
                       const risk = RISK_COLORS[uiRisk];
                       const checked = selectedLinks.has(result.url);
@@ -1233,8 +1318,21 @@ export default function DashboardPage() {
                               }}
                             >
                               <div style={{ flex: 1, minWidth: 0 }}>
-                                <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.2rem" }}>
-                                  <span style={{ fontSize: "0.9375rem", fontWeight: 600, color: "var(--color-foreground)" }}>
+                                <div
+                                  style={{
+                                    display: "flex",
+                                    alignItems: "center",
+                                    gap: "0.5rem",
+                                    marginBottom: "0.2rem",
+                                  }}
+                                >
+                                  <span
+                                    style={{
+                                      fontSize: "0.9375rem",
+                                      fontWeight: 600,
+                                      color: "var(--color-foreground)",
+                                    }}
+                                  >
                                     {result.title}
                                   </span>
                                   <span
@@ -1251,7 +1349,12 @@ export default function DashboardPage() {
                                     {uiRisk}
                                   </span>
                                 </div>
-                                <span style={{ fontSize: "0.75rem", color: "var(--color-primary)" }}>
+                                <span
+                                  style={{
+                                    fontSize: "0.75rem",
+                                    color: "var(--color-primary)",
+                                  }}
+                                >
                                   {result.url}
                                 </span>
                               </div>
@@ -1266,18 +1369,44 @@ export default function DashboardPage() {
                           display: "flex",
                           flexDirection: "column",
                           alignItems: "center",
-                          justifyContent: "center",
+                          justifyContent: "flex-start",
+                          paddingTop: "1rem",
                           gap: "0.5rem",
                           borderRadius: "0.5rem",
                           backgroundColor: "rgba(10,10,20,0.55)",
                         }}
                       >
-                        <svg width="20" height="20" fill="none" stroke="var(--color-muted)" viewBox="0 0 24 24">
-                          <rect x="3" y="11" width="18" height="11" rx="2" strokeWidth="2" />
-                          <path d="M7 11V7a5 5 0 0110 0v4" strokeWidth="2" strokeLinecap="round" />
+                        <svg
+                          width="20"
+                          height="20"
+                          fill="none"
+                          stroke="var(--color-muted)"
+                          viewBox="0 0 24 24"
+                        >
+                          <rect
+                            x="3"
+                            y="11"
+                            width="18"
+                            height="11"
+                            rx="2"
+                            strokeWidth="2"
+                          />
+                          <path
+                            d="M7 11V7a5 5 0 0110 0v4"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                          />
                         </svg>
-                        <p style={{ fontSize: "0.8125rem", fontWeight: 700, color: "var(--color-foreground)" }}>
-                          Premium — {availableForContract.length - 3} more link{availableForContract.length - 3 !== 1 ? "s" : ""} hidden
+                        <p
+                          style={{
+                            fontSize: "0.8125rem",
+                            fontWeight: 700,
+                            color: "var(--color-foreground)",
+                          }}
+                        >
+                          Premium — {availableForContract.length - 3} more link
+                          {availableForContract.length - 3 !== 1 ? "s" : ""}{" "}
+                          hidden
                         </p>
                       </div>
                     </div>
@@ -1458,7 +1587,7 @@ export default function DashboardPage() {
                                 year: "numeric",
                                 month: "short",
                                 day: "numeric",
-                              }
+                              },
                             )}
                           </span>
                           <span
