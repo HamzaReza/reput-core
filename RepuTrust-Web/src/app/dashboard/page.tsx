@@ -458,10 +458,7 @@ export default function DashboardPage() {
 
   if (!authed) return null;
 
-  const negativeResults = (scanData?.results ?? []).filter(
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (r) => (r as any).sentiment === "negative" || (r.risk === "high" || r.risk === "medium")
-  );
+  const negativeResults = scanData?.results ?? [];
 
   // URLs already used in existing contracts — excluded from the contract form
   const contractedUrls = new Set(
