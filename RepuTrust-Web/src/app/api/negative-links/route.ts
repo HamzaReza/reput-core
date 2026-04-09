@@ -108,6 +108,8 @@ export async function POST(req: NextRequest) {
 
   const negativePrompt = `Search the web thoroughly and deeply for NEGATIVE content about "${name}"${keywordStr}${nationality ? ` — focus on results from ${nationality}` : ""}.
 
+IMPORTANT: Always search using the EXACT full name "${name}" as a single query string. Never split it into parts, never search first name or last name separately. Only return results that explicitly mention "${name}" (the complete name) together.
+
 Search multiple sources: news sites, court records, complaint boards, review platforms (Trustpilot, Yelp, BBB, Google Reviews, Glassdoor), social media (Reddit, Twitter/X, Facebook), government databases, legal portals, and industry forums.
 
 Look for: complaints, lawsuits, fraud allegations, scams, criminal records, bad reviews, controversies, regulatory fines, bankruptcy, misconduct reports, data breaches, or any reputational risk.
@@ -126,6 +128,8 @@ Be thorough — search broadly and deeply. Return ONLY the JSON array, no explan
 
   const positivePrompt = `Search the web thoroughly for POSITIVE content about "${name}"${keywordStr}${nationality ? ` — focus on results from ${nationality}` : ""}.
 
+IMPORTANT: Always search using the EXACT full name "${name}" as a single query string. Never split it into parts, never search first name or last name separately. Only return results that explicitly mention "${name}" (the complete name) together.
+
 Search multiple sources: news sites, LinkedIn, company websites, award databases, review platforms (Trustpilot, Google Reviews, Glassdoor), social media, industry publications, and professional directories.
 
 Look for: positive news coverage, awards, achievements, endorsements, good reviews, community recognition, professional accomplishments, positive social media mentions, or any reputation-boosting content.
@@ -143,6 +147,8 @@ For each positive result found, return a JSON array with objects having these ex
 Be thorough — search broadly. Return ONLY the JSON array, no explanation. If nothing found, return [].`;
 
   const neutralPrompt = `Search the web for NEUTRAL or informational content about "${name}"${keywordStr}${nationality ? ` — focus on results from ${nationality}` : ""}.
+
+IMPORTANT: Always search using the EXACT full name "${name}" as a single query string. Never split it into parts, never search first name or last name separately. Only return results that explicitly mention "${name}" (the complete name) together.
 
 Search: Wikipedia, professional directories, LinkedIn, company registries, news articles (factual/informational), government records, and business databases.
 

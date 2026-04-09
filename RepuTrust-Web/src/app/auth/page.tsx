@@ -900,16 +900,33 @@ function AuthPageInner() {
             </svg>
           </div>
 
-          <input
-            type="date"
-            value={dob}
-            onChange={(e) => setDob(e.target.value)}
-            style={{
-              ...inputStyle,
-              colorScheme: "light",
-              color: dob ? "#1e293b" : "#94a3b8",
-            }}
-          />
+          <div style={{ position: "relative" }}>
+            {!dob && (
+              <span
+                style={{
+                  position: "absolute",
+                  left: "1rem",
+                  top: "50%",
+                  transform: "translateY(-50%)",
+                  color: "#94a3b8",
+                  pointerEvents: "none",
+                  fontSize: "0.95rem",
+                }}
+              >
+                Date of Birth
+              </span>
+            )}
+            <input
+              type="date"
+              value={dob}
+              onChange={(e) => setDob(e.target.value)}
+              style={{
+                ...inputStyle,
+                colorScheme: "light",
+                color: dob ? "#1e293b" : "transparent",
+              }}
+            />
+          </div>
 
           <div>
             <div
