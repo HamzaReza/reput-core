@@ -2,15 +2,16 @@
 
 import Footer from "@/components/common/Footer";
 import Header from "@/components/common/Header";
-import { users, isAuthed } from "@/lib/api";
+import { auth, isAuthed, users } from "@/lib/api";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 const plans = [
   {
     name: "Basic Scan",
     price: "Free",
-    description: "Self-service scanning for individuals monitoring their own name.",
+    description:
+      "Self-service scanning for individuals monitoring their own name.",
     features: [
       "1 scan per month",
       "Up to 3 keywords",
@@ -24,7 +25,8 @@ const plans = [
   {
     name: "Pro Monitor",
     price: "$29 / mo",
-    description: "Continuous monitoring with alerts for professionals and public figures.",
+    description:
+      "Continuous monitoring with alerts for professionals and public figures.",
     features: [
       "Unlimited scans",
       "Up to 20 keywords",
@@ -36,37 +38,39 @@ const plans = [
     cta: "Start Pro Trial",
     highlight: true,
   },
-  {
-    name: "Removal Service",
-    price: "Custom",
-    description: "Managed takedowns and de-indexing for damaging content found in your scan.",
-    features: [
-      "Everything in Pro",
-      "Dedicated removal specialist",
-      "DMCA & de-indexing requests filed",
-      "Google suppression strategy",
-      "Monthly progress reports",
-      "SLA-backed response times",
-    ],
-    cta: "Request a Quote",
-    highlight: false,
-  },
 ];
 
 export default function QuotePage() {
   const router = useRouter();
   const [trialLoading, setTrialLoading] = useState(false);
   const [trialError, setTrialError] = useState("");
+  const [userPlan, setUserPlan] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (isAuthed()) {
+      auth
+        .me()
+        .then((user) => setUserPlan(user.plan))
+        .catch(() => {});
+    }
+  }, []);
+
+  const isPro = userPlan === "pro";
 
   const handleStartTrial = async () => {
-    if (!isAuthed()) { router.push("/auth"); return; }
+    if (!isAuthed()) {
+      router.push("/auth");
+      return;
+    }
     setTrialLoading(true);
     setTrialError("");
     try {
       await users.startTrial();
       router.push("/dashboard");
     } catch (e) {
-      setTrialError(e instanceof Error ? e.message : "Could not activate trial.");
+      setTrialError(
+        e instanceof Error ? e.message : "Could not activate trial.",
+      );
     } finally {
       setTrialLoading(false);
     }
@@ -85,16 +89,33 @@ export default function QuotePage() {
     >
       <Header />
       <main style={{ flex: 1, paddingTop: "4.5rem" }}>
-        <div style={{ maxWidth: "72rem", margin: "0 auto", padding: "2rem 1.5rem" }}>
+        <div
+          style={{
+            maxWidth: "72rem",
+            margin: "0 auto",
+            padding: "2rem 1.5rem",
+          }}
+        >
           <div style={{ textAlign: "center", marginBottom: "3rem" }}>
             <h1
               className="neon-text"
-              style={{ fontSize: "2rem", fontWeight: 700, marginBottom: "0.75rem" }}
+              style={{
+                fontSize: "2rem",
+                fontWeight: 700,
+                marginBottom: "0.75rem",
+              }}
             >
               Removal Plans
             </h1>
-            <p style={{ color: "var(--color-muted)", maxWidth: "32rem", margin: "0 auto" }}>
-              From self-service scanning to fully managed content removal — pick the plan that fits your needs.
+            <p
+              style={{
+                color: "var(--color-muted)",
+                maxWidth: "32rem",
+                margin: "0 auto",
+              }}
+            >
+              From self-service scanning to fully managed content removal — pick
+              the plan that fits your needs.
             </p>
           </div>
 
@@ -102,7 +123,8 @@ export default function QuotePage() {
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(min(260px, 100%), 1fr))",
+              gridTemplateColumns:
+                "repeat(auto-fit, minmax(min(260px, 100%), 1fr))",
               gap: "1.5rem",
               marginBottom: "3rem",
             }}
@@ -163,19 +185,34 @@ export default function QuotePage() {
                     style={{
                       fontSize: "2rem",
                       fontWeight: 800,
-                      color: plan.highlight ? "var(--color-primary)" : "var(--color-foreground)",
+                      color: plan.highlight
+                        ? "var(--color-primary)"
+                        : "var(--color-foreground)",
                       marginBottom: "0.5rem",
                       lineHeight: 1,
                     }}
                   >
                     {plan.price}
                   </p>
-                  <p style={{ fontSize: "0.8125rem", color: "var(--color-muted)", lineHeight: 1.55 }}>
+                  <p
+                    style={{
+                      fontSize: "0.8125rem",
+                      color: "var(--color-muted)",
+                      lineHeight: 1.55,
+                    }}
+                  >
                     {plan.description}
                   </p>
                 </div>
 
-                <ul style={{ display: "flex", flexDirection: "column", gap: "0.625rem", flex: 1 }}>
+                <ul
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "0.625rem",
+                    flex: 1,
+                  }}
+                >
                   {plan.features.map((f) => (
                     <li
                       key={f}
@@ -187,39 +224,79 @@ export default function QuotePage() {
                         color: "var(--color-foreground)",
                       }}
                     >
-                      <span style={{ color: "var(--color-primary)", flexShrink: 0, marginTop: "0.05rem" }}>✓</span>
+                      <span
+                        style={{
+                          color: "var(--color-primary)",
+                          flexShrink: 0,
+                          marginTop: "0.05rem",
+                        }}
+                      >
+                        ✓
+                      </span>
                       {f}
                     </li>
                   ))}
                 </ul>
 
                 <button
+                  disabled={isPro}
                   onClick={() => {
-                    if (plan.cta === "Request a Quote") router.push("/quote/request");
+                    if (isPro) return;
+                    if (plan.cta === "Request a Quote")
+                      router.push("/quote/request");
                     else if (plan.cta === "Start Pro Trial") handleStartTrial();
                   }}
-                  className={plan.highlight ? "glow-button" : ""}
+                  className={plan.highlight && !isPro ? "glow-button" : ""}
                   style={
-                    plan.highlight
-                      ? { fontWeight: 700, padding: "0.75rem", borderRadius: "0.625rem", transition: "all 0.3s", width: "100%", cursor: "pointer" }
-                      : {
+                    isPro
+                      ? {
                           width: "100%",
                           fontWeight: 700,
                           padding: "0.75rem",
                           borderRadius: "0.625rem",
-                          border: "1px solid rgba(68,121,218,0.35)",
-                          backgroundColor: "transparent",
-                          color: "var(--color-primary)",
-                          cursor: "pointer",
-                          transition: "all 0.3s",
+                          border: "1px solid rgba(68,121,218,0.2)",
+                          backgroundColor: "rgba(68,121,218,0.08)",
+                          color: "var(--color-muted)",
+                          cursor: "not-allowed",
                           fontSize: "0.9375rem",
+                          opacity: 0.6,
                         }
+                      : plan.highlight
+                        ? {
+                            fontWeight: 700,
+                            padding: "0.75rem",
+                            borderRadius: "0.625rem",
+                            transition: "all 0.3s",
+                            width: "100%",
+                            cursor: "pointer",
+                          }
+                        : {
+                            width: "100%",
+                            fontWeight: 700,
+                            padding: "0.75rem",
+                            borderRadius: "0.625rem",
+                            border: "1px solid rgba(68,121,218,0.35)",
+                            backgroundColor: "transparent",
+                            color: "var(--color-primary)",
+                            cursor: "pointer",
+                            transition: "all 0.3s",
+                            fontSize: "0.9375rem",
+                          }
                   }
                 >
-                  {plan.cta === "Start Pro Trial" && trialLoading ? "Activating…" : plan.cta}
+                  {plan.cta === "Start Pro Trial" && trialLoading
+                    ? "Activating…"
+                    : plan.cta}
                 </button>
                 {plan.cta === "Start Pro Trial" && trialError && (
-                  <p style={{ fontSize: "0.8125rem", color: "#FF6B4A", marginTop: "0.5rem", textAlign: "center" }}>
+                  <p
+                    style={{
+                      fontSize: "0.8125rem",
+                      color: "#FF6B4A",
+                      marginTop: "0.5rem",
+                      textAlign: "center",
+                    }}
+                  >
                     {trialError}
                   </p>
                 )}
@@ -227,6 +304,34 @@ export default function QuotePage() {
             ))}
           </div>
 
+          {isPro && (
+            <div
+              style={{
+                textAlign: "center",
+                padding: "1rem 1.5rem",
+                borderRadius: "0.75rem",
+                border: "1px solid rgba(68,121,218,0.4)",
+                backgroundColor: "rgba(68,121,218,0.08)",
+                maxWidth: "28rem",
+                margin: "0 auto",
+              }}
+            >
+              <p
+                style={{
+                  fontSize: "1rem",
+                  fontWeight: 600,
+                  color: "var(--color-foreground)",
+                  margin: 0,
+                }}
+              >
+                You are currently subscribed to the{" "}
+                <span style={{ color: "var(--color-primary)" }}>
+                  Pro Monitor
+                </span>{" "}
+                plan.
+              </p>
+            </div>
+          )}
         </div>
       </main>
 
