@@ -21,8 +21,8 @@ type RiskLevel = "Negative" | "Poor" | "Mediocre" | "Good";
 function apiRiskToUi(risk: string): RiskLevel {
   if (risk === "high") return "Negative";
   if (risk === "medium") return "Poor";
-  if (risk === "low") return "Good";
-  return "Mediocre";
+  if (risk === "low") return "Mediocre";
+  return "Good";
 }
 
 const RISK_COLORS: Record<
