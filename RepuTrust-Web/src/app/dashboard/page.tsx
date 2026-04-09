@@ -458,14 +458,10 @@ export default function DashboardPage() {
 
   if (!authed) return null;
 
-  // Only show flagged links when score is not Good (< 86)
-  const isGoodScore = score >= 86;
-  const negativeResults = isGoodScore
-    ? []
-    : (scanData?.results ?? []).filter(
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (r) => (r as any).sentiment === "negative" || (r.risk === "high" || r.risk === "medium")
-      );
+  const negativeResults = (scanData?.results ?? []).filter(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (r) => (r as any).sentiment === "negative" || (r.risk === "high" || r.risk === "medium")
+  );
 
   // URLs already used in existing contracts — excluded from the contract form
   const contractedUrls = new Set(
