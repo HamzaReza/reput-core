@@ -9,6 +9,7 @@ from app.schemas.user import (
 )
 from app.schemas.reputation import ReputationScanOut, ReputationScanCreate, ReputationResult
 from app.schemas.quote import QuoteRequestCreate, QuoteRequestOut, QuoteRequestUpdate
+from app.schemas.meeting import MeetingOut, CalWebhookPayload
 
 __all__ = [
     "UserCreate",
@@ -24,4 +25,6 @@ __all__ = [
     "QuoteRequestCreate",
     "QuoteRequestOut",
     "QuoteRequestUpdate",
+    "MeetingOut",
+    "CalWebhookPayload",
 ]

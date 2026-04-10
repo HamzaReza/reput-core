@@ -2,6 +2,8 @@
 
 import Footer from "@/components/common/Footer";
 import Header from "@/components/common/Header";
+import MeetingsTab from "@/components/dashboard/MeetingsTab";
+import ScheduleMeetingCTA from "@/components/dashboard/ScheduleMeetingCTA";
 import {
   auth,
   contracts,
@@ -15,7 +17,7 @@ import {
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
-type Tab = "score" | "contract";
+type Tab = "score" | "contract" | "meetings";
 type RiskLevel = "Negative" | "Poor" | "Mediocre" | "Good";
 
 function apiRiskToUi(risk: string): RiskLevel {
@@ -721,6 +723,11 @@ export default function DashboardPage() {
                         </p>
                       </div>
                     </>
+                  )}
+
+                  {/* Schedule Meeting CTA — shown when risk links are found */}
+                  {scanData && negativeResults.length > 0 && (
+                    <ScheduleMeetingCTA />
                   )}
 
                   {/* Keywords */}
@@ -1663,6 +1670,10 @@ export default function DashboardPage() {
               )}
             </div>
           </div>
+          {/* ── Tab: Meetings ──────────────────────────────────────────────────── */}
+          <div style={{ display: activeTab === "meetings" ? undefined : "none" }}>
+            <MeetingsTab />
+          </div>
         </div>
       </main>
 
@@ -1686,7 +1697,8 @@ export default function DashboardPage() {
         {(
           [
             { key: "score", label: "ReputScore" },
-            { key: "contract", label: "Contract" },
+            // { key: "contract", label: "Contract" }, // hidden — code preserved below
+            { key: "meetings", label: "Meetings" },
           ] as { key: Tab; label: string }[]
         ).map((tab) => (
           <button

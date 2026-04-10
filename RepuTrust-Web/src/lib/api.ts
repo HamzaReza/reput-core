@@ -288,6 +288,30 @@ export const quotes = {
   getMyQuotes: () => request<unknown[]>("/quotes/my", {}, true),
 };
 
+// ── Meetings types & endpoints ───────────────────────────────────────────────
+
+export interface MeetingAttendee {
+  name: string;
+  email: string;
+}
+
+export interface Meeting {
+  id: string;
+  user_id: string;
+  cal_booking_uid: string;
+  title: string;
+  status: "upcoming" | "cancelled" | "completed";
+  event_type: string | null;
+  start_time: string;
+  end_time: string;
+  attendees: MeetingAttendee[];
+  created_at: string;
+}
+
+export const meetings = {
+  getMy: () => request<Meeting[]>("/meetings/my", {}, true),
+};
+
 // ── Contracts endpoints ───────────────────────────────────────────────────────
 
 export const contracts = {
