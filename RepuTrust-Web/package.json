@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.86.1",
+    "@calcom/embed-react": "^1.5.3",
     "next": "16.2.2",
     "react": "19.2.4",
     "react-dom": "19.2.4"
