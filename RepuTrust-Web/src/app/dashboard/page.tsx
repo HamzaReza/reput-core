@@ -76,9 +76,8 @@ function scoreLabel(score: number): { label: string; color: string } {
  */
 function deriveScore(negCount: number, posCount: number): number {
   if (negCount === 0) {
-    // No negatives — Green band. More positives → higher score.
-    const posBonus = Math.min(posCount, 20); // cap at 20
-    return Math.min(100, 86 + Math.round((posBonus / 20) * 14));
+    // No negatives — perfect score.
+    return 100;
   }
   if (negCount <= 5) {
     // Yellow band (61–85). Fewer negatives & more positives → higher end.
@@ -725,9 +724,15 @@ export default function DashboardPage() {
                     </>
                   )}
 
-                  {/* Schedule Meeting CTA — shown when risk links are found */}
-                  {scanData && negativeResults.length > 0 && (
-                    <ScheduleMeetingCTA />
+                  {/* Schedule Meeting CTA */}
+                  {scanData && (
+                    <ScheduleMeetingCTA
+                      score={score}
+                      totalLinks={negativeResults.length}
+                      hasNegative={negativeResults.some(
+                        (l) => l.risk === "high" || l.risk === "medium",
+                      )}
+                    />
                   )}
 
                   {/* Keywords */}

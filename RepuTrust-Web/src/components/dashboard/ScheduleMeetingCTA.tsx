@@ -4,11 +4,23 @@ import Cal, { getCalApi } from "@calcom/embed-react";
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 
-export default function ScheduleMeetingCTA() {
+interface Props {
+  score: number;
+  totalLinks: number;
+  hasNegative: boolean;
+}
+
+export default function ScheduleMeetingCTA({
+  score,
+  totalLinks,
+  hasNegative,
+}: Props) {
   const [open, setOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
 
-  useEffect(() => { setMounted(true); }, []);
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     if (!open) return;
@@ -20,7 +32,9 @@ export default function ScheduleMeetingCTA() {
 
   useEffect(() => {
     document.body.style.overflow = open ? "hidden" : "";
-    return () => { document.body.style.overflow = ""; };
+    return () => {
+      document.body.style.overflow = "";
+    };
   }, [open]);
 
   const modal = (
@@ -107,8 +121,22 @@ export default function ScheduleMeetingCTA() {
 
   return (
     <div style={{ marginTop: "1.5rem", textAlign: "center" }}>
-      <p style={{ color: "var(--color-muted)", fontSize: "0.875rem", marginBottom: "0.75rem" }}>
-        We found issues affecting your reputation. Our team can help.
+      <p
+        style={{
+          color: "var(--color-muted)",
+          fontSize: "0.875rem",
+          marginBottom: "0.75rem",
+        }}
+      >
+        {totalLinks === 0
+          ? "We couldn't find anything with the data provided to us"
+          : score === 100 && hasNegative
+            ? "Your reput score is good but we found issues affecting your reputation. Our team can help."
+            : score === 100
+              ? "Your reput score is perfect with the data you gave us"
+              : score >= 86 && hasNegative
+                ? "Your reput score is good but we found issues affecting your reputation. Our team can help."
+                : "Your reput score is good - If you want it to be perfect, then contact our team"}
       </p>
       <button
         type="button"
