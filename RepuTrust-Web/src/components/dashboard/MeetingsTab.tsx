@@ -16,17 +16,23 @@ function formatDate(iso: string) {
   });
 }
 
-export default function MeetingsTab() {
+interface Props {
+  active: boolean;
+}
+
+export default function MeetingsTab({ active }: Props) {
   const [meetingList, setMeetingList] = useState<Meeting[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
+    if (!active) return;
+    setLoading(true);
     meetings
       .getMy()
       .then(setMeetingList)
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, []);
+  }, [active]);
 
   return (
     <div

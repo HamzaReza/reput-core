@@ -1672,7 +1672,7 @@ export default function DashboardPage() {
           </div>
           {/* ── Tab: Meetings ──────────────────────────────────────────────────── */}
           <div style={{ display: activeTab === "meetings" ? undefined : "none" }}>
-            <MeetingsTab />
+            <MeetingsTab active={activeTab === "meetings"} />
           </div>
         </div>
       </main>
