@@ -631,19 +631,6 @@ export default function DashboardPage() {
                     </>
                   )}
 
-                  {/* Schedule Meeting CTA */}
-                  {scanData && (
-                    <ScheduleMeetingCTA
-                      score={score}
-                      totalLinks={scanData.summary.total_results}
-                      hasNegative={negativeResults.some(
-                        (l) => l.risk === "high" || l.risk === "medium",
-                      )}
-                      imperativeOpen={meetingModalOpen}
-                      onImperativeClose={() => setMeetingModalOpen(false)}
-                    />
-                  )}
-
                   {/* Keywords */}
                   <div
                     className="glass"
@@ -1220,6 +1207,20 @@ export default function DashboardPage() {
                       </div>
                     )}
 
+                  {/* CTA after congratulations */}
+                  {negativeResults.length !== 0 &&
+                    !scoreLoading &&
+                    scanKeywords.length > 0 &&
+                    scanData && (
+                      <ScheduleMeetingCTA
+                        score={score}
+                        totalLinks={scanData.summary.total_results}
+                        hasNegative={false}
+                        imperativeOpen={meetingModalOpen}
+                        onImperativeClose={() => setMeetingModalOpen(false)}
+                      />
+                    )}
+
                   {/* ── Ealixir Services — shown only when ReputScore is Good (86+) ── */}
                   {score >= 86 && !scoreLoading && scanKeywords.length > 0 && (
                     <div style={{ marginTop: "2rem", textAlign: "left" }}>
@@ -1261,17 +1262,32 @@ export default function DashboardPage() {
                           style={{
                             borderRadius: "1.25rem",
                             overflow: "hidden",
-                            background: "linear-gradient(135deg, #4a8fd4 0%, #3aafc4 50%, #2fb8b0 100%)",
+                            background:
+                              "linear-gradient(135deg, #4a8fd4 0%, #3aafc4 50%, #2fb8b0 100%)",
                             padding: "1.5rem",
                             color: "#fff",
                             boxShadow: "0 4px 24px rgba(74,143,212,0.25)",
                           }}
                         >
-                          <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: "1rem" }}>
-                            <p style={{ fontSize: "1.25rem", fontWeight: 800, margin: 0, color: "#fff" }}>
-                              <span style={{ opacity: 0.9 }}>Ealixir</span>
-                              <span style={{ fontWeight: 400, margin: "0 0.4rem", opacity: 0.7 }}>—</span>
-                              <span>Story</span>
+                          <div
+                            style={{
+                              display: "flex",
+                              alignItems: "flex-start",
+                              justifyContent: "space-between",
+                              marginBottom: "1rem",
+                            }}
+                          >
+                            <p
+                              style={{
+                                fontSize: "1.25rem",
+                                fontWeight: 800,
+                                margin: 0,
+                                color: "#fff",
+                              }}
+                            >
+                              <span style={{ opacity: 0.9 }}>
+                                Ealixir Story
+                              </span>
                             </p>
                             <div
                               style={{
@@ -1285,15 +1301,41 @@ export default function DashboardPage() {
                                 flexShrink: 0,
                               }}
                             >
-                              <svg width="18" height="18" fill="none" stroke="#fff" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M12 20h9M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z" />
+                              <svg
+                                width="18"
+                                height="18"
+                                fill="none"
+                                stroke="#fff"
+                                viewBox="0 0 24 24"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={1.75}
+                                  d="M12 20h9M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"
+                                />
                               </svg>
                             </div>
                           </div>
-                          <p style={{ fontSize: "0.875rem", color: "rgba(255,255,255,0.88)", lineHeight: 1.7, margin: "0 0 1.25rem" }}>
-                            Shape how you appear across media and search. We create and place tailored content across selected publications to build a consistent, credible narrative around your name.
+                          <p
+                            style={{
+                              fontSize: "0.875rem",
+                              color: "rgba(255,255,255,0.88)",
+                              lineHeight: 1.7,
+                              margin: "0 0 1.25rem",
+                            }}
+                          >
+                            Shape how you appear across media and search. We
+                            create and place tailored content across selected
+                            publications to build a consistent, credible
+                            narrative around your name.
                           </p>
-                          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.75rem", flexWrap: "wrap" }}>
+                          <div
+                            style={{
+                              display: "flex",
+                              justifyContent: "center",
+                            }}
+                          >
                             <button
                               type="button"
                               onClick={() => setMeetingModalOpen(true)}
@@ -1314,9 +1356,6 @@ export default function DashboardPage() {
                             >
                               Schedule a meeting
                             </button>
-                            <span style={{ fontSize: "0.6875rem", fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "rgba(255,255,255,0.75)" }}>
-                              Media · Search · PR
-                            </span>
                           </div>
                         </div>
 
@@ -1325,17 +1364,32 @@ export default function DashboardPage() {
                           style={{
                             borderRadius: "1.25rem",
                             overflow: "hidden",
-                            background: "linear-gradient(135deg, #4a8fd4 0%, #3aafc4 50%, #2fb8b0 100%)",
+                            background:
+                              "linear-gradient(135deg, #4a8fd4 0%, #3aafc4 50%, #2fb8b0 100%)",
                             padding: "1.5rem",
                             color: "#fff",
                             boxShadow: "0 4px 24px rgba(74,143,212,0.25)",
                           }}
                         >
-                          <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: "1rem" }}>
-                            <p style={{ fontSize: "1.25rem", fontWeight: 800, margin: 0, color: "#fff" }}>
-                              <span style={{ opacity: 0.9 }}>Ealixir</span>
-                              <span style={{ fontWeight: 400, margin: "0 0.4rem", opacity: 0.7 }}>—</span>
-                              <span>Editions</span>
+                          <div
+                            style={{
+                              display: "flex",
+                              alignItems: "flex-start",
+                              justifyContent: "space-between",
+                              marginBottom: "1rem",
+                            }}
+                          >
+                            <p
+                              style={{
+                                fontSize: "1.25rem",
+                                fontWeight: 800,
+                                margin: 0,
+                                color: "#fff",
+                              }}
+                            >
+                              <span style={{ opacity: 0.9 }}>
+                                Ealixir Editions
+                              </span>
                             </p>
                             <div
                               style={{
@@ -1349,15 +1403,41 @@ export default function DashboardPage() {
                                 flexShrink: 0,
                               }}
                             >
-                              <svg width="18" height="18" fill="none" stroke="#fff" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                              <svg
+                                width="18"
+                                height="18"
+                                fill="none"
+                                stroke="#fff"
+                                viewBox="0 0 24 24"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={1.75}
+                                  d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"
+                                />
                               </svg>
                             </div>
                           </div>
-                          <p style={{ fontSize: "0.875rem", color: "rgba(255,255,255,0.88)", lineHeight: 1.7, margin: "0 0 1.25rem" }}>
-                            Turn your narrative into a lasting asset. We create and publish high-quality books designed to elevate your positioning, strengthen credibility and establish long-term authority.
+                          <p
+                            style={{
+                              fontSize: "0.875rem",
+                              color: "rgba(255,255,255,0.88)",
+                              lineHeight: 1.7,
+                              margin: "0 0 1.25rem",
+                            }}
+                          >
+                            Turn your narrative into a lasting asset. We create
+                            and publish high-quality books designed to elevate
+                            your positioning, strengthen credibility and
+                            establish long-term authority.
                           </p>
-                          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.75rem", flexWrap: "wrap" }}>
+                          <div
+                            style={{
+                              display: "flex",
+                              justifyContent: "center",
+                            }}
+                          >
                             <button
                               type="button"
                               onClick={() => setMeetingModalOpen(true)}
@@ -1378,9 +1458,6 @@ export default function DashboardPage() {
                             >
                               Schedule a meeting
                             </button>
-                            <span style={{ fontSize: "0.6875rem", fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "rgba(255,255,255,0.75)" }}>
-                              Books · Authority · Publishing
-                            </span>
                           </div>
                         </div>
                       </div>
