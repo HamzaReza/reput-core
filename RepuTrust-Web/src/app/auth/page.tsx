@@ -9,26 +9,6 @@ import { useRef, useState, Suspense } from "react";
 // 5 steps: 1=account, 2=otp, 3=information, 4=linkedin, 5=notifications
 type Step = 1 | 2 | 3 | 4 | 5;
 
-const MOCK_PROFILES = [
-  {
-    initials: "JD",
-    bg: "linear-gradient(135deg, #4479DA, #48D4B8)",
-    name: "John Doe",
-    title: "CEO · London, UK",
-  },
-  {
-    initials: "JD",
-    bg: "linear-gradient(135deg, #7B6CF6, #5A4BD1)",
-    name: "Jonathan Davies",
-    title: "Financial Analyst · New York, US",
-  },
-  {
-    initials: "JD",
-    bg: "linear-gradient(135deg, #FF8C42, #E06A1A)",
-    name: "James Douglas",
-    title: "Marketing Director · Berlin, DE",
-  },
-];
 
 const NATIONALITIES = [
   "Afghan",
@@ -236,10 +216,7 @@ function AuthPageInner() {
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [avatar, setAvatar] = useState<string>("");
 
-  // Step 4 — LinkedIn
-  const [profileIndex, setProfileIndex] = useState(0);
-
-  // Step 5 — notifications
+// Step 5 — notifications
   const [notifStatus, setNotifStatus] = useState<"idle" | "granted" | "denied">(
     "idle",
   );
@@ -248,8 +225,9 @@ function AuthPageInner() {
   const [step1Loading, setStep1Loading] = useState(false);
   const [linkedinLoading, setLinkedinLoading] = useState(false);
   const [step3Loading, setStep3Loading] = useState(false);
-  const [step4NoLoading, setStep4NoLoading] = useState(false);
   const [step4YesLoading, setStep4YesLoading] = useState(false);
+  const [step4NoLoading, setStep4NoLoading] = useState(false);
+  const [profileIndex, setProfileIndex] = useState(0);
   const [step5Loading, setStep5Loading] = useState(false);
   const [step1Error, setStep1Error] = useState("");
   const [step3Error, setStep3Error] = useState("");
@@ -1182,12 +1160,85 @@ function AuthPageInner() {
 
   // ── Step 4: LinkedIn ───────────────────────────────────────────────────────
   if (step === 4) {
-    const prev =
-      MOCK_PROFILES[
-        (profileIndex - 1 + MOCK_PROFILES.length) % MOCK_PROFILES.length
-      ];
-    const curr = MOCK_PROFILES[profileIndex];
-    const next = MOCK_PROFILES[(profileIndex + 1) % MOCK_PROFILES.length];
+    const fullName = [firstName, lastName].filter(Boolean).join(" ") || "You";
+    const profileSubtitle = nationality || undefined;
+
+    const fn = firstName || "J";
+    const ln = lastName || "Doe";
+    const initial = fn[0].toUpperCase();
+
+    // Generate plausible name variants that resemble the user's name
+    const SIMILAR_FIRST: Record<string, string[]> = {
+      A: ["Aaron", "Adrian", "Alex", "Adam"],
+      B: ["Benjamin", "Blake", "Brandon", "Brett"],
+      C: ["Carlos", "Cameron", "Chris", "Cole"],
+      D: ["Daniel", "David", "Dylan", "Dean"],
+      E: ["Ethan", "Edward", "Eric", "Evan"],
+      F: ["Frank", "Felix", "Finn", "Federico"],
+      G: ["George", "Gabriel", "Gavin", "Grant"],
+      H: ["Henry", "Harrison", "Hugo", "Hassan"],
+      I: ["Ian", "Isaac", "Ivan", "Ibrahim"],
+      J: ["James", "Jonathan", "Jason", "Jordan"],
+      K: ["Kevin", "Kyle", "Keith", "Kai"],
+      L: ["Lucas", "Liam", "Leon", "Luis"],
+      M: ["Michael", "Marcus", "Max", "Martin"],
+      N: ["Nathan", "Nicholas", "Neil", "Noah"],
+      O: ["Oliver", "Oscar", "Owen", "Omar"],
+      P: ["Patrick", "Peter", "Paul", "Philip"],
+      Q: ["Quentin", "Quinn"],
+      R: ["Ryan", "Robert", "Richard", "Rafael"],
+      S: ["Samuel", "Sebastian", "Scott", "Simon"],
+      T: ["Thomas", "Tyler", "Timothy", "Troy"],
+      U: ["Ulrich", "Uri"],
+      V: ["Victor", "Vincent", "Vince"],
+      W: ["William", "Walter", "Wayne", "Wesley"],
+      X: ["Xavier"],
+      Y: ["Yusuf", "Yannick"],
+      Z: ["Zachary", "Zane"],
+    };
+    const SIMILAR_LAST: Record<string, string[]> = {
+      A: ["Anderson", "Allen", "Ahmed", "Armstrong"],
+      B: ["Brown", "Baker", "Bell", "Brooks"],
+      C: ["Clark", "Collins", "Carter", "Chen"],
+      D: ["Davis", "Dixon", "Daniels", "Drake"],
+      E: ["Evans", "Edwards", "Ellis"],
+      F: ["Fisher", "Foster", "Flynn", "Ford"],
+      G: ["Garcia", "Gray", "Graham", "Green"],
+      H: ["Harris", "Hall", "Hughes", "Hunt"],
+      I: ["Ibrahim", "Ingram"],
+      J: ["Johnson", "Jones", "Jackson", "Jensen"],
+      K: ["Khan", "King", "Kelly", "Kim"],
+      L: ["Lee", "Lewis", "Lopez", "Lynch"],
+      M: ["Miller", "Moore", "Morgan", "Mitchell"],
+      N: ["Nelson", "Newman", "Nguyen"],
+      O: ["Owen", "O'Brien", "Oliver"],
+      P: ["Parker", "Patel", "Phillips", "Price"],
+      Q: ["Quinn"],
+      R: ["Roberts", "Robinson", "Rodriguez", "Ross"],
+      S: ["Smith", "Scott", "Stewart", "Stone"],
+      T: ["Taylor", "Thomas", "Thompson", "Turner"],
+      U: ["Upton"],
+      V: ["Vargas", "Vance"],
+      W: ["Walker", "Ward", "Watson", "White"],
+      X: ["Xavier"],
+      Y: ["Young", "Yang"],
+      Z: ["Zhang", "Zimmermann"],
+    };
+
+    const altFirsts = (SIMILAR_FIRST[initial] ?? ["Alex", "Andrew", "Aaron"]).filter((n) => n.toLowerCase() !== fn.toLowerCase()).slice(0, 3);
+    const lnInitial = ln[0].toUpperCase();
+    const altLasts = (SIMILAR_LAST[lnInitial] ?? ["Smith", "Jones", "Brown"]).filter((n) => n.toLowerCase() !== ln.toLowerCase()).slice(0, 3);
+
+    const PROFILES = [
+      { name: fullName, subtitle: profileSubtitle, img: 1 },
+      { name: `${altFirsts[0] ?? fn} ${ln}`, subtitle: undefined, img: 12 },
+      { name: `${fn} ${altLasts[0] ?? ln}`, subtitle: undefined, img: 33 },
+      { name: `${initial}. ${altLasts[1] ?? altLasts[0] ?? ln}`, subtitle: undefined, img: 57 },
+    ];
+
+    const prev = PROFILES[(profileIndex - 1 + PROFILES.length) % PROFILES.length];
+    const curr = PROFILES[profileIndex];
+    const next = PROFILES[(profileIndex + 1) % PROFILES.length];
 
     return (
       <Shell step={step}>
@@ -1223,28 +1274,14 @@ function AuthPageInner() {
             overflow: "hidden",
           }}
         >
-          <div
-            style={{
-              flexShrink: 0,
-              opacity: 0.35,
-              transform: "scale(0.82)",
-              transition: "all 0.3s",
-            }}
-          >
-            <ProfileCard profile={prev} size={110} />
+          <div style={{ flexShrink: 0, opacity: 0.35, transform: "scale(0.82)", transition: "all 0.3s" }}>
+            <ProfileCard name={prev.name} subtitle={prev.subtitle} imgIndex={prev.img} size={110} />
           </div>
           <div style={{ flexShrink: 0, transition: "all 0.3s" }}>
-            <ProfileCard profile={curr} size={148} showName />
+            <ProfileCard name={curr.name} subtitle={curr.subtitle} imgIndex={curr.img} size={148} showName />
           </div>
-          <div
-            style={{
-              flexShrink: 0,
-              opacity: 0.35,
-              transform: "scale(0.82)",
-              transition: "all 0.3s",
-            }}
-          >
-            <ProfileCard profile={next} size={110} />
+          <div style={{ flexShrink: 0, opacity: 0.35, transform: "scale(0.82)", transition: "all 0.3s" }}>
+            <ProfileCard name={next.name} subtitle={next.subtitle} imgIndex={next.img} size={110} />
           </div>
         </div>
 
@@ -1254,8 +1291,8 @@ function AuthPageInner() {
               setStep4NoLoading(true);
               setTimeout(() => {
                 setStep4NoLoading(false);
-                setProfileIndex((i) => (i + 1) % MOCK_PROFILES.length);
-              }, 500);
+                setProfileIndex((i) => (i + 1) % PROFILES.length);
+              }, 400);
             }}
             disabled={step4NoLoading || step4YesLoading}
             style={{
@@ -1572,11 +1609,15 @@ function AuthPageInner() {
 }
 
 function ProfileCard({
-  profile,
+  name,
+  subtitle,
+  imgIndex,
   size,
   showName,
 }: {
-  profile: (typeof MOCK_PROFILES)[0];
+  name: string;
+  subtitle?: string;
+  imgIndex: number;
   size: number;
   showName?: boolean;
 }) {
@@ -1594,17 +1635,19 @@ function ProfileCard({
           width: size,
           height: size,
           borderRadius: "0.875rem",
-          background: profile.bg,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          fontSize: size * 0.28,
-          fontWeight: 800,
-          color: "#fff",
-          letterSpacing: "-0.02em",
+          overflow: "hidden",
+          boxShadow: "0 8px 32px rgba(0,0,0,0.25)",
+          border: "3px solid rgba(255,255,255,0.4)",
         }}
       >
-        {profile.initials}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={`https://i.pravatar.cc/${size * 2}?img=${imgIndex}`}
+          alt={name}
+          width={size}
+          height={size}
+          style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+        />
       </div>
       {showName && (
         <div style={{ textAlign: "center" }}>
@@ -1615,11 +1658,13 @@ function ProfileCard({
               fontSize: "0.9375rem",
             }}
           >
-            {profile.name}
+            {name}
           </p>
-          <p style={{ color: "var(--color-muted)", fontSize: "0.75rem" }}>
-            {profile.title}
-          </p>
+          {subtitle && (
+            <p style={{ color: "var(--color-muted)", fontSize: "0.75rem" }}>
+              {subtitle}
+            </p>
+          )}
         </div>
       )}
     </div>

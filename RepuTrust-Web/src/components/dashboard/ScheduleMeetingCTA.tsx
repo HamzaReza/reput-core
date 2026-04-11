@@ -8,14 +8,27 @@ interface Props {
   score: number;
   totalLinks: number;
   hasNegative: boolean;
+  imperativeOpen?: boolean;
+  onImperativeClose?: () => void;
 }
 
 export default function ScheduleMeetingCTA({
   score,
   totalLinks,
   hasNegative,
+  imperativeOpen,
+  onImperativeClose,
 }: Props) {
   const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    if (imperativeOpen) setOpen(true);
+  }, [imperativeOpen]);
+
+  const handleClose = () => {
+    setOpen(false);
+    onImperativeClose?.();
+  };
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
@@ -48,9 +61,8 @@ export default function ScheduleMeetingCTA({
         justifyContent: "center",
       }}
     >
-      {/* Backdrop — fully covers everything */}
       <div
-        onClick={() => setOpen(false)}
+        onClick={handleClose}
         style={{
           position: "absolute",
           inset: 0,
@@ -58,8 +70,6 @@ export default function ScheduleMeetingCTA({
           backdropFilter: "blur(6px)",
         }}
       />
-
-      {/* Modal panel */}
       <div
         style={{
           position: "relative",
@@ -75,7 +85,6 @@ export default function ScheduleMeetingCTA({
           flexDirection: "column",
         }}
       >
-        {/* Header */}
         <div
           style={{
             display: "flex",
@@ -91,7 +100,7 @@ export default function ScheduleMeetingCTA({
           </span>
           <button
             type="button"
-            onClick={() => setOpen(false)}
+            onClick={handleClose}
             style={{
               background: "none",
               border: "none",
@@ -105,8 +114,6 @@ export default function ScheduleMeetingCTA({
             ✕
           </button>
         </div>
-
-        {/* Cal embed */}
         <div style={{ flex: 1, overflowY: "auto" }}>
           <Cal
             namespace="reputtrust-cta"
@@ -119,41 +126,134 @@ export default function ScheduleMeetingCTA({
     </div>
   );
 
+  const isBadScore = score < 86 && totalLinks > 0;
+
+  const message =
+    totalLinks === 0
+      ? "We couldn't find anything with the data provided to us"
+      : score === 100 && hasNegative
+        ? "Your reput score is good but we found issues affecting your reputation. Our team can help."
+        : score === 100
+          ? "Your reput score is perfect with the data you gave us"
+          : score >= 86 && hasNegative
+            ? "Your reput score is good but we found issues affecting your reputation. Our team can help."
+            : score >= 86
+              ? "Your reput score is good - If you want it to be perfect, then contact our team"
+              : null;
+
   return (
     <div style={{ marginTop: "1.5rem", textAlign: "center" }}>
-      <p
-        style={{
-          color: "var(--color-muted)",
-          fontSize: "0.875rem",
-          marginBottom: "0.75rem",
-        }}
-      >
-        {totalLinks === 0
-          ? "We couldn't find anything with the data provided to us"
-          : score === 100 && hasNegative
-            ? "Your reput score is good but we found issues affecting your reputation. Our team can help."
-            : score === 100
-              ? "Your reput score is perfect with the data you gave us"
-              : score >= 86 && hasNegative
-                ? "Your reput score is good but we found issues affecting your reputation. Our team can help."
-                : "Your reput score is good - If you want it to be perfect, then contact our team"}
-      </p>
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        style={{
-          padding: "0.75rem 2rem",
-          borderRadius: "9999px",
-          backgroundColor: "var(--color-button)",
-          color: "#fff",
-          fontWeight: 700,
-          fontSize: "0.9375rem",
-          border: "none",
-          cursor: "pointer",
-        }}
-      >
-        Schedule a Meeting
-      </button>
+      {isBadScore ? (
+        <div
+          style={{
+            borderRadius: "1.25rem",
+            overflow: "hidden",
+            background:
+              "linear-gradient(135deg, #4a8fd4 0%, #3aafc4 50%, #2fb8b0 100%)",
+            padding: "1.75rem 1.5rem 1.5rem",
+            color: "#fff",
+            marginBottom: "1rem",
+            textAlign: "center",
+          }}
+        >
+          <h3
+            style={{
+              fontSize: "1.3rem",
+              fontWeight: 800,
+              marginBottom: "1.5rem",
+              lineHeight: 1.2,
+            }}
+          >
+            Did it ever happen?
+          </h3>
+          {[
+            <>
+              That you <strong>couldn&apos;t open a bank account</strong>?
+            </>,
+            <>
+              That you <strong>couldn&apos;t find a job</strong> due to negative
+              links?
+            </>,
+            <>
+              That you were <strong>shamed</strong> for{" "}
+              <strong>negative news about you</strong>?
+            </>,
+            <>
+              That your kids <strong>weren&apos;t accepted</strong> to private
+              schools?
+            </>,
+          ].map((line, i) => (
+            <p
+              key={i}
+              style={{
+                fontSize: "0.975rem",
+                lineHeight: 1.55,
+                marginBottom: "1rem",
+                color: "rgba(255,255,255,0.95)",
+              }}
+            >
+              {line}
+            </p>
+          ))}
+          <p
+            style={{
+              fontSize: "1rem",
+              fontWeight: 700,
+              marginBottom: "1.5rem",
+            }}
+          >
+            If so you, <strong>WE</strong> can help you!
+          </p>
+          <button
+            type="button"
+            onClick={() => setOpen(true)}
+            style={{
+              width: "100%",
+              padding: "0.875rem",
+              borderRadius: "9999px",
+              background: "#fff",
+              color: "#2a8fa8",
+              fontWeight: 800,
+              fontSize: "0.9375rem",
+              border: "none",
+              cursor: "pointer",
+              boxShadow: "0 4px 16px rgba(0,0,0,0.2)",
+            }}
+          >
+            Schedule a Meeting
+          </button>
+        </div>
+      ) : (
+        <>
+          {message && (
+            <p
+              style={{
+                color: "var(--color-muted)",
+                fontSize: "0.875rem",
+                marginBottom: "0.75rem",
+              }}
+            >
+              {message}
+            </p>
+          )}
+          <button
+            type="button"
+            onClick={() => setOpen(true)}
+            style={{
+              padding: "0.75rem 2rem",
+              borderRadius: "9999px",
+              backgroundColor: "var(--color-button)",
+              color: "#fff",
+              fontWeight: 700,
+              fontSize: "0.9375rem",
+              border: "none",
+              cursor: "pointer",
+            }}
+          >
+            Schedule a Meeting
+          </button>
+        </>
+      )}
 
       {mounted && open && createPortal(modal, document.body)}
     </div>

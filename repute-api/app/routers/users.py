@@ -70,14 +70,28 @@ async def start_trial(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Grant the user a 24-hour Pro trial. Can only be activated once."""
+    """Grant the user a 24-hour Pro trial."""
+    now = datetime.now(timezone.utc)
+
+    # If a previous trial has expired, reset so the user can purchase again
+    if (
+        current_user.pro_trial_expires_at is not None
+        and current_user.pro_trial_expires_at < now
+    ):
+        current_user.plan = "free"
+        current_user.pro_trial_expires_at = None
+        db.add(current_user)
+        await db.flush()
+
+    # Block if trial is still active
     if current_user.pro_trial_expires_at is not None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Pro trial has already been used.",
         )
+
     current_user.plan = "pro"
-    current_user.pro_trial_expires_at = datetime.now(timezone.utc) + timedelta(hours=24)
+    current_user.pro_trial_expires_at = now + timedelta(hours=24)
     db.add(current_user)
     await db.flush()
 
