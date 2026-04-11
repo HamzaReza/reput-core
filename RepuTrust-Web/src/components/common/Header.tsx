@@ -133,6 +133,15 @@ export default function Header() {
             )}
             {isAuthed && (
               <Link
+                href="/dashboard?tab=meetings"
+                className="header-nav-link"
+                style={navLinkStyle}
+              >
+                Meetings
+              </Link>
+            )}
+            {isAuthed && (
+              <Link
                 href="/settings"
                 className="header-nav-link"
                 style={navLinkStyle}
@@ -280,6 +289,16 @@ export default function Header() {
               style={drawerLinkStyle}
             >
               Scanner
+            </Link>
+          )}
+          {isAuthed && (
+            <Link
+              href="/dashboard?tab=meetings"
+              onClick={close}
+              className="drawer-nav-link"
+              style={drawerLinkStyle}
+            >
+              Meetings
             </Link>
           )}
           {isAuthed && (

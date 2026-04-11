@@ -2,22 +2,17 @@
 
 import Footer from "@/components/common/Footer";
 import Header from "@/components/common/Header";
-import MeetingsTab from "@/components/dashboard/MeetingsTab";
 import ScheduleMeetingCTA from "@/components/dashboard/ScheduleMeetingCTA";
 import {
   auth,
-  contracts,
   isAuthed,
   reputation,
   users,
-  type Contract,
-  type ContractLink,
   type ReputationScan,
 } from "@/lib/api";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
-type Tab = "score" | "contract" | "meetings";
 type RiskLevel = "Negative" | "Poor" | "Mediocre" | "Good";
 
 function apiRiskToUi(risk: string): RiskLevel {
@@ -265,47 +260,18 @@ function RepuGauge({
   );
 }
 
-// ── Status badge colors for contracts ─────────────────────────────────────────
-const CONTRACT_STATUS_COLORS: Record<
-  string,
-  { bg: string; color: string; border: string }
-> = {
-  pending: {
-    bg: "rgba(255,214,0,0.1)",
-    color: "#FFD600",
-    border: "rgba(255,214,0,0.3)",
-  },
-  in_progress: {
-    bg: "rgba(68,121,218,0.1)",
-    color: "var(--color-primary)",
-    border: "rgba(68,121,218,0.3)",
-  },
-  completed: {
-    bg: "rgba(76,175,80,0.1)",
-    color: "#4CAF50",
-    border: "rgba(76,175,80,0.3)",
-  },
-};
-
 export default function DashboardPage() {
   const router = useRouter();
   const [authed, setAuthed] = useState<boolean | null>(null);
   const [isPro, setIsPro] = useState(false);
   const [upgradingPro, setUpgradingPro] = useState(false);
-  const [activeTab, setActiveTab] = useState<Tab>("score");
   const [scanName, setScanName] = useState("");
   const [scanKeywords, setScanKeywords] = useState<string[]>([]);
   const [avatar, setAvatar] = useState("");
   const [score, setScore] = useState(0);
   const [scanData, setScanData] = useState<ReputationScan | null>(null);
   const [scoreLoading, setScoreLoading] = useState(true);
-  // Contract state
-  const [myContracts, setMyContracts] = useState<Contract[]>([]);
-  const [contractsLoading, setContractsLoading] = useState(false);
-  const [selectedLinks, setSelectedLinks] = useState<Set<string>>(new Set());
-  const [contractNotes, setContractNotes] = useState("");
-  const [contractSubmitting, setContractSubmitting] = useState(false);
-  const [contractSuccess, setContractSuccess] = useState(false);
+  const [meetingModalOpen, setMeetingModalOpen] = useState(false);
 
   const infoMoreTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hasLoadedRef = useRef(false);
@@ -335,12 +301,11 @@ export default function DashboardPage() {
         }
         if (user.name) setScanName(user.name.toUpperCase());
         if (user.profile?.avatar_url) setAvatar(user.profile.avatar_url);
-        const trialActive =
+        setIsPro(
           user.plan === "pro" &&
-          !!user.pro_trial_expires_at &&
-          new Date(user.pro_trial_expires_at) > new Date();
-        setIsPro(trialActive);
-
+            !!user.pro_trial_expires_at &&
+            new Date(user.pro_trial_expires_at) > new Date(),
+        );
         const currentKeywords: string[] = user.profile?.keywords ?? [];
         if (currentKeywords.length) setScanKeywords(currentKeywords);
 
@@ -413,7 +378,7 @@ export default function DashboardPage() {
                   : derivedScore >= 61
                     ? "medium"
                     : "high",
-              results: allLinks.map((l) => ({ ...l, risk: l.risk as string })),
+              results: negLinks.map((l) => ({ ...l, risk: l.risk as string })),
               summary: {
                 total_results: allLinks.length,
                 high_risk: negLinks.filter((l) => l.risk === "high").length,
@@ -444,78 +409,21 @@ export default function DashboardPage() {
     };
   }, []);
 
-  const contractsFetchedRef = useRef(false);
-
-  // Load contracts when switching to the contract tab — fetch once only
-  useEffect(() => {
-    if (activeTab === "contract" && !contractsFetchedRef.current) {
-      contractsFetchedRef.current = true;
-      setContractsLoading(true);
-      contracts
-        .getMy()
-        .then(setMyContracts)
-        .catch(() => {})
-        .finally(() => setContractsLoading(false));
-    }
-  }, [activeTab]);
-
-  const handleToggleLink = (url: string) => {
-    setSelectedLinks((prev) => {
-      const next = new Set(prev);
-      if (next.has(url)) next.delete(url);
-      else next.add(url);
-      return next;
-    });
-  };
-
-  const handleSubmitContract = async () => {
-    if (selectedLinks.size === 0 || contractSubmitting) return;
-    setContractSubmitting(true);
-    setContractSuccess(false);
-    try {
-      const links: ContractLink[] = (scanData?.results ?? [])
-        .filter((r) => selectedLinks.has(r.url))
-        .map((r) => ({ url: r.url, title: r.title }));
-      const newContract = await contracts.create({
-        links,
-        notes: contractNotes.trim() || undefined,
-      });
-      setMyContracts((prev) => [newContract, ...prev]);
-      setSelectedLinks(new Set());
-      setContractNotes("");
-      setContractSuccess(true);
-      // Re-enable future fetches so a manual refresh would work
-      contractsFetchedRef.current = true;
-    } catch {
-      // keep submitting false
-    } finally {
-      setContractSubmitting(false);
-    }
-  };
+  if (!authed) return null;
 
   async function handleUpgradePro() {
     setUpgradingPro(true);
-    await new Promise((r) => setTimeout(r, 2000));
     try {
       await users.startTrial();
     } catch {
-      // ignore — still set pro locally for the day
+      // 400 = already has a trial or already pro — treat as success
+    } finally {
+      setIsPro(true);
+      setUpgradingPro(false);
     }
-    setIsPro(true);
-    setUpgradingPro(false);
   }
 
-  if (!authed) return null;
-
   const negativeResults = scanData?.results ?? [];
-
-  // URLs already used in existing contracts — excluded from the contract form
-  const contractedUrls = new Set(
-    myContracts.flatMap((c) => c.links.map((l) => l.url)),
-  );
-  const availableForContract = negativeResults.filter(
-    (r) => !contractedUrls.has(r.url),
-  );
   const visibleNegativeLinks = isPro
     ? negativeResults
     : negativeResults.slice(0, 3);
@@ -541,8 +449,7 @@ export default function DashboardPage() {
             padding: "1.5rem clamp(1rem, 4vw, 1.5rem)",
           }}
         >
-          {/* ── Tab: Score ─────────────────────────────────────────────────── */}
-          <div style={{ display: activeTab === "score" ? undefined : "none" }}>
+          <div>
             <div
               className="glass glow-border animate-scale-in"
               style={{
@@ -728,10 +635,12 @@ export default function DashboardPage() {
                   {scanData && (
                     <ScheduleMeetingCTA
                       score={score}
-                      totalLinks={negativeResults.length}
+                      totalLinks={scanData.summary.total_results}
                       hasNegative={negativeResults.some(
                         (l) => l.risk === "high" || l.risk === "medium",
                       )}
+                      imperativeOpen={meetingModalOpen}
+                      onImperativeClose={() => setMeetingModalOpen(false)}
                     />
                   )}
 
@@ -809,7 +718,6 @@ export default function DashboardPage() {
                         Flagged Links
                       </h2>
 
-                      {/* First 3 — visible */}
                       <div
                         style={{
                           display: "flex",
@@ -820,80 +728,164 @@ export default function DashboardPage() {
                         {visibleNegativeLinks.map((result, i) => {
                           const uiRisk = apiRiskToUi(result.risk);
                           const risk = RISK_COLORS[uiRisk];
+                          const domain = (() => {
+                            try {
+                              return new URL(result.url).hostname.replace(
+                                "www.",
+                                "",
+                              );
+                            } catch {
+                              return result.source ?? "";
+                            }
+                          })();
+                          const idx = String(i + 1).padStart(2, "0");
                           return (
-                            <div
+                            <a
                               key={i}
-                              className="glass"
+                              href={result.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="link-card"
                               style={{
-                                borderRadius: "0.625rem",
-                                padding: "1rem 1.25rem",
-                                border: "1px solid var(--color-border)",
+                                display: "flex",
+                                borderRadius: "0.75rem",
+                                overflow: "hidden",
+                                border: `1px solid ${risk.border}`,
+                                background: `linear-gradient(135deg, ${risk.bg} 0%, rgba(255,255,255,0) 60%)`,
+                                boxShadow: `inset 0 0 0 0.5px ${risk.border}, 0 1px 4px rgba(0,0,0,0.06)`,
+                                textDecoration: "none",
+                                cursor: "pointer",
                               }}
                             >
+                              {/* Left accent */}
                               <div
                                 style={{
-                                  display: "flex",
-                                  alignItems: "flex-start",
-                                  justifyContent: "space-between",
-                                  gap: "0.75rem",
-                                  flexWrap: "wrap",
+                                  width: "2px",
+                                  flexShrink: 0,
+                                  background: `linear-gradient(180deg, ${risk.color} 0%, transparent 100%)`,
+                                }}
+                              />
+
+                              <div
+                                style={{
+                                  flex: 1,
+                                  padding: "0.9rem 1rem 0.85rem",
+                                  minWidth: 0,
                                 }}
                               >
-                                <div style={{ flex: 1, minWidth: 0 }}>
-                                  <p
-                                    style={{
-                                      fontSize: "0.9375rem",
-                                      fontWeight: 600,
-                                      color: "var(--color-foreground)",
-                                      marginBottom: "0.2rem",
-                                    }}
-                                  >
-                                    {result.title}
-                                  </p>
-                                  <a
-                                    href={result.url}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    style={{
-                                      display: "block",
-                                      fontSize: "0.75rem",
-                                      color: "var(--color-primary)",
-                                      marginBottom: "0.4rem",
-                                      overflow: "hidden",
-                                      textOverflow: "ellipsis",
-                                      whiteSpace: "nowrap",
-                                      textDecoration: "none",
-                                    }}
-                                  >
-                                    {result.url}
-                                  </a>
-                                  <p
-                                    style={{
-                                      fontSize: "0.8125rem",
-                                      color: "var(--color-muted)",
-                                      lineHeight: 1.55,
-                                    }}
-                                  >
-                                    {result.snippet}
-                                  </p>
-                                </div>
-                                <span
+                                {/* Meta row */}
+                                <div
                                   style={{
-                                    flexShrink: 0,
-                                    fontSize: "0.75rem",
-                                    fontWeight: 700,
-                                    padding: "0.25rem 0.75rem",
-                                    borderRadius: "9999px",
-                                    backgroundColor: risk.bg,
-                                    color: risk.color,
-                                    border: `1px solid ${risk.border}`,
-                                    whiteSpace: "nowrap",
+                                    display: "flex",
+                                    alignItems: "center",
+                                    justifyContent: "space-between",
+                                    gap: "0.4rem",
+                                    marginBottom: "0.45rem",
+                                    flexWrap: "wrap",
+                                    rowGap: "0.3rem",
                                   }}
                                 >
-                                  {uiRisk}
-                                </span>
+                                  <div
+                                    style={{
+                                      display: "flex",
+                                      alignItems: "center",
+                                      gap: "0.4rem",
+                                      minWidth: 0,
+                                      flex: 1,
+                                    }}
+                                  >
+                                    <span
+                                      style={{
+                                        fontFamily:
+                                          "ui-monospace, 'SF Mono', monospace",
+                                        fontSize: "0.6rem",
+                                        fontWeight: 700,
+                                        letterSpacing: "0.08em",
+                                        color: risk.color,
+                                        opacity: 0.7,
+                                        flexShrink: 0,
+                                      }}
+                                    >
+                                      #{idx}
+                                    </span>
+                                    <span
+                                      style={{
+                                        fontFamily:
+                                          "ui-monospace, 'SF Mono', monospace",
+                                        fontSize: "0.65rem",
+                                        fontWeight: 600,
+                                        color: "var(--color-muted)",
+                                        background: "rgba(0,0,0,0.04)",
+                                        padding: "0.1rem 0.45rem",
+                                        borderRadius: "4px",
+                                        border: "1px solid var(--color-border)",
+                                        letterSpacing: "0.02em",
+                                        overflow: "hidden",
+                                        textOverflow: "ellipsis",
+                                        whiteSpace: "nowrap",
+                                        minWidth: 0,
+                                      }}
+                                    >
+                                      {domain}
+                                    </span>
+                                  </div>
+                                  <span
+                                    style={{
+                                      flexShrink: 0,
+                                      fontFamily:
+                                        "ui-monospace, 'SF Mono', monospace",
+                                      fontSize: "0.6rem",
+                                      fontWeight: 800,
+                                      letterSpacing: "0.1em",
+                                      textTransform: "uppercase",
+                                      padding: "0.2rem 0.55rem",
+                                      borderRadius: "4px",
+                                      backgroundColor: risk.bg,
+                                      color: risk.color,
+                                      border: `1px solid ${risk.border}`,
+                                      whiteSpace: "nowrap",
+                                    }}
+                                  >
+                                    ▲ {uiRisk}
+                                  </span>
+                                </div>
+
+                                {/* Title */}
+                                <p
+                                  style={{
+                                    fontSize: "0.875rem",
+                                    fontWeight: 700,
+                                    color: "var(--color-foreground)",
+                                    lineHeight: 1.35,
+                                    margin: "0 0 0.4rem",
+                                    letterSpacing: "-0.01em",
+                                  }}
+                                >
+                                  {result.title}
+                                </p>
+
+                                {/* Divider */}
+                                <div
+                                  style={{
+                                    height: "1px",
+                                    background: `linear-gradient(90deg, ${risk.border} 0%, transparent 80%)`,
+                                    marginBottom: "0.4rem",
+                                  }}
+                                />
+
+                                {/* Snippet */}
+                                <p
+                                  style={{
+                                    fontSize: "0.775rem",
+                                    color: "var(--color-muted)",
+                                    lineHeight: 1.6,
+                                    margin: 0,
+                                  }}
+                                >
+                                  {result.snippet}
+                                </p>
                               </div>
-                            </div>
+                            </a>
                           );
                         })}
                       </div>
@@ -908,79 +900,163 @@ export default function DashboardPage() {
                               display: "flex",
                               flexDirection: "column",
                               gap: "0.75rem",
-                              filter: isPro ? "none" : "blur(4px)",
-                              userSelect: isPro ? "auto" : "none",
-                              pointerEvents: isPro ? "auto" : "none",
+                              filter: "blur(4px)",
+                              userSelect: "none",
+                              pointerEvents: "none",
+                              maxHeight: "11rem",
+                              overflow: "hidden",
                             }}
                           >
-                            {blurredNegativeLinks.map((result, i) => {
-                              const uiRisk = apiRiskToUi(result.risk);
-                              const risk = RISK_COLORS[uiRisk];
-                              return (
-                                <div
-                                  key={i}
-                                  className="glass"
-                                  style={{
-                                    borderRadius: "0.625rem",
-                                    padding: "1rem 1.25rem",
-                                    border: "1px solid var(--color-border)",
-                                  }}
-                                >
+                            {blurredNegativeLinks
+                              .slice(0, 2)
+                              .map((result, i) => {
+                                const uiRisk = apiRiskToUi(result.risk);
+                                const risk = RISK_COLORS[uiRisk];
+                                const domain = (() => {
+                                  try {
+                                    return new URL(result.url).hostname.replace(
+                                      "www.",
+                                      "",
+                                    );
+                                  } catch {
+                                    return result.source ?? "";
+                                  }
+                                })();
+                                const idx = String(
+                                  visibleNegativeLinks.length + i + 1,
+                                ).padStart(2, "0");
+                                return (
                                   <div
+                                    key={i}
                                     style={{
                                       display: "flex",
-                                      alignItems: "flex-start",
-                                      justifyContent: "space-between",
-                                      gap: "0.75rem",
+                                      borderRadius: "0.75rem",
+                                      overflow: "hidden",
+                                      border: `1px solid ${risk.border}`,
+                                      background: `linear-gradient(135deg, ${risk.bg} 0%, rgba(255,255,255,0) 60%)`,
                                     }}
                                   >
-                                    <div style={{ flex: 1, minWidth: 0 }}>
+                                    <div
+                                      style={{
+                                        width: "2px",
+                                        flexShrink: 0,
+                                        background: `linear-gradient(180deg, ${risk.color} 0%, transparent 100%)`,
+                                      }}
+                                    />
+                                    <div
+                                      style={{
+                                        flex: 1,
+                                        padding: "0.9rem 1rem 0.85rem",
+                                        minWidth: 0,
+                                      }}
+                                    >
+                                      <div
+                                        style={{
+                                          display: "flex",
+                                          alignItems: "center",
+                                          justifyContent: "space-between",
+                                          gap: "0.4rem",
+                                          marginBottom: "0.45rem",
+                                          flexWrap: "wrap",
+                                          rowGap: "0.3rem",
+                                        }}
+                                      >
+                                        <div
+                                          style={{
+                                            display: "flex",
+                                            alignItems: "center",
+                                            gap: "0.4rem",
+                                            minWidth: 0,
+                                            flex: 1,
+                                          }}
+                                        >
+                                          <span
+                                            style={{
+                                              fontFamily:
+                                                "ui-monospace, 'SF Mono', monospace",
+                                              fontSize: "0.6rem",
+                                              fontWeight: 700,
+                                              color: risk.color,
+                                              opacity: 0.7,
+                                              flexShrink: 0,
+                                            }}
+                                          >
+                                            #{idx}
+                                          </span>
+                                          <span
+                                            style={{
+                                              fontFamily:
+                                                "ui-monospace, 'SF Mono', monospace",
+                                              fontSize: "0.65rem",
+                                              fontWeight: 600,
+                                              color: "var(--color-muted)",
+                                              background: "rgba(0,0,0,0.04)",
+                                              padding: "0.1rem 0.45rem",
+                                              borderRadius: "4px",
+                                              border:
+                                                "1px solid var(--color-border)",
+                                              overflow: "hidden",
+                                              textOverflow: "ellipsis",
+                                              whiteSpace: "nowrap",
+                                              minWidth: 0,
+                                            }}
+                                          >
+                                            {domain}
+                                          </span>
+                                        </div>
+                                        <span
+                                          style={{
+                                            flexShrink: 0,
+                                            fontFamily:
+                                              "ui-monospace, 'SF Mono', monospace",
+                                            fontSize: "0.6rem",
+                                            fontWeight: 800,
+                                            letterSpacing: "0.1em",
+                                            textTransform: "uppercase",
+                                            padding: "0.2rem 0.55rem",
+                                            borderRadius: "4px",
+                                            backgroundColor: risk.bg,
+                                            color: risk.color,
+                                            border: `1px solid ${risk.border}`,
+                                            whiteSpace: "nowrap",
+                                          }}
+                                        >
+                                          ▲ {uiRisk}
+                                        </span>
+                                      </div>
                                       <p
                                         style={{
-                                          fontSize: "0.9375rem",
-                                          fontWeight: 600,
+                                          fontSize: "0.875rem",
+                                          fontWeight: 700,
                                           color: "var(--color-foreground)",
-                                          marginBottom: "0.2rem",
+                                          lineHeight: 1.35,
+                                          margin: "0 0 0.4rem",
+                                          letterSpacing: "-0.01em",
                                         }}
                                       >
                                         {result.title}
                                       </p>
-                                      <p
+                                      <div
                                         style={{
-                                          fontSize: "0.75rem",
-                                          color: "var(--color-primary)",
+                                          height: "1px",
+                                          background: `linear-gradient(90deg, ${risk.border} 0%, transparent 80%)`,
                                           marginBottom: "0.4rem",
                                         }}
-                                      >
-                                        {result.url}
-                                      </p>
+                                      />
                                       <p
                                         style={{
-                                          fontSize: "0.8125rem",
+                                          fontSize: "0.775rem",
                                           color: "var(--color-muted)",
+                                          lineHeight: 1.6,
+                                          margin: 0,
                                         }}
                                       >
                                         {result.snippet}
                                       </p>
                                     </div>
-                                    <span
-                                      style={{
-                                        flexShrink: 0,
-                                        fontSize: "0.75rem",
-                                        fontWeight: 700,
-                                        padding: "0.25rem 0.75rem",
-                                        borderRadius: "9999px",
-                                        backgroundColor: risk.bg,
-                                        color: risk.color,
-                                        border: `1px solid ${risk.border}`,
-                                      }}
-                                    >
-                                      {uiRisk}
-                                    </span>
                                   </div>
-                                </div>
-                              );
-                            })}
+                                );
+                              })}
                           </div>
 
                           {/* Premium overlay */}
@@ -1143,590 +1219,181 @@ export default function DashboardPage() {
                         </p>
                       </div>
                     )}
-                </div>
-              )}
-            </div>
-          </div>
 
-          {/* ── Tab: Contract ─────────────────────────────────────────────── */}
-          <div
-            style={{ display: activeTab === "contract" ? undefined : "none" }}
-          >
-            <div
-              className="glass glow-border"
-              style={{
-                borderRadius: "0.875rem",
-                padding: "2rem",
-              }}
-            >
-              <h2
-                style={{
-                  fontSize: "1.25rem",
-                  fontWeight: 700,
-                  color: "var(--color-foreground)",
-                  marginBottom: "0.375rem",
-                }}
-              >
-                Removal Contracts
-              </h2>
-              <p
-                style={{
-                  fontSize: "0.875rem",
-                  color: "var(--color-muted)",
-                  marginBottom: "1.75rem",
-                  lineHeight: 1.6,
-                }}
-              >
-                Select one or more negative links from your scan results and
-                submit a removal contract. Our team will file takedown requests
-                on your behalf.
-              </p>
-
-              {/* Create contract form */}
-              {availableForContract.length > 0 ? (
-                <div
-                  style={{
-                    border: "1px solid var(--color-border)",
-                    borderRadius: "0.75rem",
-                    padding: "1.5rem",
-                    marginBottom: "2rem",
-                    backgroundColor: "var(--color-surface)",
-                  }}
-                >
-                  <h3
-                    style={{
-                      fontSize: "0.75rem",
-                      fontWeight: 700,
-                      letterSpacing: "0.1em",
-                      textTransform: "uppercase",
-                      color: "var(--color-muted)",
-                      marginBottom: "1rem",
-                    }}
-                  >
-                    Select Links to Remove
-                  </h3>
-
-                  <div
-                    style={{
-                      display: "flex",
-                      flexDirection: "column",
-                      gap: "0.625rem",
-                      marginBottom: "1.25rem",
-                    }}
-                  >
-                    {(isPro
-                      ? availableForContract
-                      : availableForContract.slice(0, 3)
-                    ).map((result, i) => {
-                      const uiRisk = apiRiskToUi(result.risk);
-                      const risk = RISK_COLORS[uiRisk];
-                      const checked = selectedLinks.has(result.url);
-                      return (
-                        <label
-                          key={i}
-                          style={{
-                            display: "flex",
-                            alignItems: "flex-start",
-                            gap: "0.75rem",
-                            padding: "0.875rem 1rem",
-                            borderRadius: "0.5rem",
-                            border: `1px solid ${checked ? "var(--color-primary)" : "var(--color-border)"}`,
-                            backgroundColor: checked
-                              ? "rgba(68,121,218,0.06)"
-                              : "transparent",
-                            cursor: "pointer",
-                            transition: "all 0.15s",
-                          }}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={checked}
-                            onChange={() => handleToggleLink(result.url)}
-                            style={{
-                              marginTop: "0.2rem",
-                              accentColor: "var(--color-primary)",
-                              width: "1rem",
-                              height: "1rem",
-                              flexShrink: 0,
-                            }}
-                          />
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <div
-                              style={{
-                                display: "flex",
-                                alignItems: "center",
-                                gap: "0.5rem",
-                                flexWrap: "wrap",
-                                marginBottom: "0.2rem",
-                              }}
-                            >
-                              <span
-                                style={{
-                                  fontSize: "0.9375rem",
-                                  fontWeight: 600,
-                                  color: "var(--color-foreground)",
-                                }}
-                              >
-                                {result.title}
-                              </span>
-                              <span
-                                style={{
-                                  fontSize: "0.7rem",
-                                  fontWeight: 700,
-                                  padding: "0.15rem 0.6rem",
-                                  borderRadius: "9999px",
-                                  backgroundColor: risk.bg,
-                                  color: risk.color,
-                                  border: `1px solid ${risk.border}`,
-                                }}
-                              >
-                                {uiRisk}
-                              </span>
-                            </div>
-                            <span
-                              style={{
-                                fontSize: "0.75rem",
-                                color: "var(--color-primary)",
-                                overflow: "hidden",
-                                textOverflow: "ellipsis",
-                                whiteSpace: "nowrap",
-                                display: "block",
-                              }}
-                            >
-                              {result.url}
-                            </span>
-                          </div>
-                        </label>
-                      );
-                    })}
-                  </div>
-
-                  {/* Blurred premium links */}
-                  {availableForContract.length > 3 && !isPro && (
-                    <div style={{ position: "relative", marginBottom: "1rem" }}>
-                      <div
-                        style={{
-                          display: "flex",
-                          flexDirection: "column",
-                          gap: "0.625rem",
-                          filter: isPro ? "none" : "blur(4px)",
-                          userSelect: isPro ? "auto" : "none",
-                          pointerEvents: isPro ? "auto" : "none",
-                        }}
-                      >
-                        {availableForContract.slice(3).map((result, i) => {
-                          const uiRisk = apiRiskToUi(result.risk);
-                          const risk = RISK_COLORS[uiRisk];
-                          return (
-                            <div
-                              key={i}
-                              style={{
-                                display: "flex",
-                                alignItems: "flex-start",
-                                gap: "0.75rem",
-                                padding: "0.875rem 1rem",
-                                borderRadius: "0.5rem",
-                                border: "1px solid var(--color-border)",
-                              }}
-                            >
-                              <div style={{ flex: 1, minWidth: 0 }}>
-                                <div
-                                  style={{
-                                    display: "flex",
-                                    alignItems: "center",
-                                    gap: "0.5rem",
-                                    marginBottom: "0.2rem",
-                                  }}
-                                >
-                                  <span
-                                    style={{
-                                      fontSize: "0.9375rem",
-                                      fontWeight: 600,
-                                      color: "var(--color-foreground)",
-                                    }}
-                                  >
-                                    {result.title}
-                                  </span>
-                                  <span
-                                    style={{
-                                      fontSize: "0.7rem",
-                                      fontWeight: 700,
-                                      padding: "0.15rem 0.6rem",
-                                      borderRadius: "9999px",
-                                      backgroundColor: risk.bg,
-                                      color: risk.color,
-                                      border: `1px solid ${risk.border}`,
-                                    }}
-                                  >
-                                    {uiRisk}
-                                  </span>
-                                </div>
-                                <span
-                                  style={{
-                                    fontSize: "0.75rem",
-                                    color: "var(--color-primary)",
-                                  }}
-                                >
-                                  {result.url}
-                                </span>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                      <div
-                        style={{
-                          position: "absolute",
-                          inset: 0,
-                          display: "flex",
-                          flexDirection: "column",
-                          alignItems: "center",
-                          justifyContent: "flex-start",
-                          paddingTop: "1rem",
-                          gap: "0.5rem",
-                          borderRadius: "0.5rem",
-                          backgroundColor: "rgba(10,10,20,0.55)",
-                        }}
-                      >
-                        <svg
-                          width="20"
-                          height="20"
-                          fill="none"
-                          stroke="var(--color-muted)"
-                          viewBox="0 0 24 24"
-                        >
-                          <rect
-                            x="3"
-                            y="11"
-                            width="18"
-                            height="11"
-                            rx="2"
-                            strokeWidth="2"
-                          />
-                          <path
-                            d="M7 11V7a5 5 0 0110 0v4"
-                            strokeWidth="2"
-                            strokeLinecap="round"
-                          />
-                        </svg>
+                  {/* ── Ealixir Services — shown only when ReputScore is Good (86+) ── */}
+                  {score >= 86 && !scoreLoading && scanKeywords.length > 0 && (
+                    <div style={{ marginTop: "2rem", textAlign: "left" }}>
+                      <div style={{ marginBottom: "1rem" }}>
                         <p
                           style={{
-                            fontSize: "0.8125rem",
+                            fontSize: "0.6875rem",
                             fontWeight: 700,
-                            color: "var(--color-foreground)",
+                            letterSpacing: "0.12em",
+                            textTransform: "uppercase",
+                            color: "var(--color-muted)",
+                            marginBottom: "0.25rem",
                           }}
                         >
-                          Premium — {availableForContract.length - 3} more link
-                          {availableForContract.length - 3 !== 1 ? "s" : ""}{" "}
-                          hidden
+                          Elevate further
                         </p>
+                        <h2
+                          style={{
+                            fontSize: "1.125rem",
+                            fontWeight: 800,
+                            color: "var(--color-foreground)",
+                            letterSpacing: "-0.02em",
+                            margin: 0,
+                          }}
+                        >
+                          Recommended for you
+                        </h2>
+                      </div>
+
+                      <div
+                        style={{
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: "1rem",
+                        }}
+                      >
+                        {/* ── Ealixir Story ── */}
+                        <div
+                          style={{
+                            borderRadius: "1.25rem",
+                            overflow: "hidden",
+                            background: "linear-gradient(135deg, #4a8fd4 0%, #3aafc4 50%, #2fb8b0 100%)",
+                            padding: "1.5rem",
+                            color: "#fff",
+                            boxShadow: "0 4px 24px rgba(74,143,212,0.25)",
+                          }}
+                        >
+                          <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: "1rem" }}>
+                            <p style={{ fontSize: "1.25rem", fontWeight: 800, margin: 0, color: "#fff" }}>
+                              <span style={{ opacity: 0.9 }}>Ealixir</span>
+                              <span style={{ fontWeight: 400, margin: "0 0.4rem", opacity: 0.7 }}>—</span>
+                              <span>Story</span>
+                            </p>
+                            <div
+                              style={{
+                                width: "2.75rem",
+                                height: "2.75rem",
+                                borderRadius: "50%",
+                                background: "rgba(255,255,255,0.2)",
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                flexShrink: 0,
+                              }}
+                            >
+                              <svg width="18" height="18" fill="none" stroke="#fff" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M12 20h9M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z" />
+                              </svg>
+                            </div>
+                          </div>
+                          <p style={{ fontSize: "0.875rem", color: "rgba(255,255,255,0.88)", lineHeight: 1.7, margin: "0 0 1.25rem" }}>
+                            Shape how you appear across media and search. We create and place tailored content across selected publications to build a consistent, credible narrative around your name.
+                          </p>
+                          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.75rem", flexWrap: "wrap" }}>
+                            <button
+                              type="button"
+                              onClick={() => setMeetingModalOpen(true)}
+                              style={{
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: "0.5rem",
+                                fontSize: "0.875rem",
+                                fontWeight: 700,
+                                color: "#3a9fb8",
+                                cursor: "pointer",
+                                padding: "0.6rem 1.25rem",
+                                borderRadius: "9999px",
+                                border: "none",
+                                background: "#fff",
+                                boxShadow: "0 2px 8px rgba(0,0,0,0.15)",
+                              }}
+                            >
+                              Schedule a meeting
+                            </button>
+                            <span style={{ fontSize: "0.6875rem", fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "rgba(255,255,255,0.75)" }}>
+                              Media · Search · PR
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* ── Ealixir Editions ── */}
+                        <div
+                          style={{
+                            borderRadius: "1.25rem",
+                            overflow: "hidden",
+                            background: "linear-gradient(135deg, #4a8fd4 0%, #3aafc4 50%, #2fb8b0 100%)",
+                            padding: "1.5rem",
+                            color: "#fff",
+                            boxShadow: "0 4px 24px rgba(74,143,212,0.25)",
+                          }}
+                        >
+                          <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: "1rem" }}>
+                            <p style={{ fontSize: "1.25rem", fontWeight: 800, margin: 0, color: "#fff" }}>
+                              <span style={{ opacity: 0.9 }}>Ealixir</span>
+                              <span style={{ fontWeight: 400, margin: "0 0.4rem", opacity: 0.7 }}>—</span>
+                              <span>Editions</span>
+                            </p>
+                            <div
+                              style={{
+                                width: "2.75rem",
+                                height: "2.75rem",
+                                borderRadius: "50%",
+                                background: "rgba(255,255,255,0.2)",
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                flexShrink: 0,
+                              }}
+                            >
+                              <svg width="18" height="18" fill="none" stroke="#fff" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                              </svg>
+                            </div>
+                          </div>
+                          <p style={{ fontSize: "0.875rem", color: "rgba(255,255,255,0.88)", lineHeight: 1.7, margin: "0 0 1.25rem" }}>
+                            Turn your narrative into a lasting asset. We create and publish high-quality books designed to elevate your positioning, strengthen credibility and establish long-term authority.
+                          </p>
+                          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.75rem", flexWrap: "wrap" }}>
+                            <button
+                              type="button"
+                              onClick={() => setMeetingModalOpen(true)}
+                              style={{
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: "0.5rem",
+                                fontSize: "0.875rem",
+                                fontWeight: 700,
+                                color: "#3a9fb8",
+                                cursor: "pointer",
+                                padding: "0.6rem 1.25rem",
+                                borderRadius: "9999px",
+                                border: "none",
+                                background: "#fff",
+                                boxShadow: "0 2px 8px rgba(0,0,0,0.15)",
+                              }}
+                            >
+                              Schedule a meeting
+                            </button>
+                            <span style={{ fontSize: "0.6875rem", fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "rgba(255,255,255,0.75)" }}>
+                              Books · Authority · Publishing
+                            </span>
+                          </div>
+                        </div>
                       </div>
                     </div>
                   )}
-
-                  {/* Notes */}
-                  <textarea
-                    value={contractNotes}
-                    onChange={(e) => setContractNotes(e.target.value)}
-                    placeholder="Optional notes for our removal team…"
-                    rows={3}
-                    style={{
-                      width: "100%",
-                      borderRadius: "0.5rem",
-                      border: "1px solid var(--color-border)",
-                      backgroundColor: "var(--color-background)",
-                      color: "var(--color-foreground)",
-                      fontSize: "0.875rem",
-                      padding: "0.75rem 1rem",
-                      resize: "vertical",
-                      marginBottom: "1rem",
-                      boxSizing: "border-box",
-                      outline: "none",
-                    }}
-                  />
-
-                  {contractSuccess && (
-                    <p
-                      style={{
-                        fontSize: "0.875rem",
-                        color: "#4CAF50",
-                        marginBottom: "0.75rem",
-                        fontWeight: 600,
-                      }}
-                    >
-                      Contract submitted successfully!
-                    </p>
-                  )}
-
-                  <button
-                    type="button"
-                    onClick={handleSubmitContract}
-                    disabled={selectedLinks.size === 0 || contractSubmitting}
-                    className={
-                      selectedLinks.size > 0 && !contractSubmitting
-                        ? "glow-button"
-                        : ""
-                    }
-                    style={{
-                      padding: "0.75rem 2rem",
-                      borderRadius: "0.625rem",
-                      fontWeight: 700,
-                      fontSize: "0.875rem",
-                      border:
-                        selectedLinks.size === 0
-                          ? "1px solid var(--color-border)"
-                          : "none",
-                      backgroundColor:
-                        selectedLinks.size === 0
-                          ? "var(--color-surface)"
-                          : undefined,
-                      color:
-                        selectedLinks.size === 0
-                          ? "var(--color-muted)"
-                          : undefined,
-                      cursor:
-                        selectedLinks.size === 0 ? "not-allowed" : "pointer",
-                    }}
-                  >
-                    {contractSubmitting
-                      ? "Submitting…"
-                      : `Submit Contract (${selectedLinks.size} link${selectedLinks.size !== 1 ? "s" : ""})`}
-                  </button>
-                </div>
-              ) : (
-                <div
-                  style={{
-                    padding: "2rem",
-                    textAlign: "center",
-                    border: "1px dashed var(--color-border)",
-                    borderRadius: "0.75rem",
-                    marginBottom: "2rem",
-                    color: "var(--color-muted)",
-                    fontSize: "0.9375rem",
-                  }}
-                >
-                  {negativeResults.length > 0
-                    ? "All flagged links have already been submitted for removal."
-                    : "No negative links found in your latest scan."}
-                </div>
-              )}
-
-              {/* Existing contracts list */}
-              <h3
-                style={{
-                  fontSize: "0.75rem",
-                  fontWeight: 700,
-                  letterSpacing: "0.1em",
-                  textTransform: "uppercase",
-                  color: "var(--color-muted)",
-                  marginBottom: "1rem",
-                }}
-              >
-                Your Contracts
-              </h3>
-
-              {contractsLoading ? (
-                <div
-                  style={{
-                    display: "flex",
-                    justifyContent: "center",
-                    padding: "2rem",
-                  }}
-                >
-                  <div
-                    style={{
-                      width: "2rem",
-                      height: "2rem",
-                      borderRadius: "50%",
-                      border: "2px solid var(--color-border)",
-                      borderTopColor: "var(--color-primary)",
-                      animation: "reput-spin 0.9s linear infinite",
-                    }}
-                  />
-                </div>
-              ) : myContracts.length === 0 ? (
-                <p
-                  style={{
-                    color: "var(--color-muted)",
-                    fontSize: "0.9375rem",
-                    textAlign: "center",
-                    padding: "1.5rem",
-                  }}
-                >
-                  No contracts yet.
-                </p>
-              ) : (
-                <div
-                  style={{
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: "0.875rem",
-                  }}
-                >
-                  {myContracts.map((c) => {
-                    const sc =
-                      CONTRACT_STATUS_COLORS[c.status] ??
-                      CONTRACT_STATUS_COLORS["pending"];
-                    return (
-                      <div
-                        key={c.id}
-                        className="glass"
-                        style={{
-                          borderRadius: "0.625rem",
-                          padding: "1.25rem 1.5rem",
-                          border: "1px solid var(--color-border)",
-                        }}
-                      >
-                        <div
-                          style={{
-                            display: "flex",
-                            justifyContent: "space-between",
-                            alignItems: "center",
-                            marginBottom: "0.75rem",
-                            flexWrap: "wrap",
-                            gap: "0.5rem",
-                          }}
-                        >
-                          <span
-                            style={{
-                              fontSize: "0.8125rem",
-                              color: "var(--color-muted)",
-                            }}
-                          >
-                            {new Date(c.created_at).toLocaleDateString(
-                              undefined,
-                              {
-                                year: "numeric",
-                                month: "short",
-                                day: "numeric",
-                              },
-                            )}
-                          </span>
-                          <span
-                            style={{
-                              fontSize: "0.75rem",
-                              fontWeight: 700,
-                              padding: "0.25rem 0.75rem",
-                              borderRadius: "9999px",
-                              backgroundColor: sc.bg,
-                              color: sc.color,
-                              border: `1px solid ${sc.border}`,
-                              textTransform: "capitalize",
-                            }}
-                          >
-                            {c.status.replace("_", " ")}
-                          </span>
-                        </div>
-                        <div
-                          style={{
-                            display: "flex",
-                            flexDirection: "column",
-                            gap: "0.375rem",
-                          }}
-                        >
-                          {c.links.map((link, li) => (
-                            <div
-                              key={li}
-                              style={{
-                                display: "flex",
-                                flexDirection: "column",
-                                gap: "0.1rem",
-                              }}
-                            >
-                              <span
-                                style={{
-                                  fontSize: "0.875rem",
-                                  fontWeight: 600,
-                                  color: "var(--color-foreground)",
-                                }}
-                              >
-                                {link.title}
-                              </span>
-                              <span
-                                style={{
-                                  fontSize: "0.75rem",
-                                  color: "var(--color-primary)",
-                                  overflow: "hidden",
-                                  textOverflow: "ellipsis",
-                                  whiteSpace: "nowrap",
-                                }}
-                              >
-                                {link.url}
-                              </span>
-                            </div>
-                          ))}
-                        </div>
-                        {c.notes && (
-                          <p
-                            style={{
-                              marginTop: "0.625rem",
-                              fontSize: "0.8125rem",
-                              color: "var(--color-muted)",
-                              fontStyle: "italic",
-                            }}
-                          >
-                            {c.notes}
-                          </p>
-                        )}
-                      </div>
-                    );
-                  })}
                 </div>
               )}
             </div>
-          </div>
-          {/* ── Tab: Meetings ──────────────────────────────────────────────────── */}
-          <div style={{ display: activeTab === "meetings" ? undefined : "none" }}>
-            <MeetingsTab active={activeTab === "meetings"} />
           </div>
         </div>
       </main>
 
-      {/* ── Floating bottom navigation ─────────────────────────────────────── */}
-      <div
-        style={{
-          position: "fixed",
-          bottom: "1.5rem",
-          left: "50%",
-          transform: "translateX(-50%)",
-          display: "flex",
-          gap: "0.625rem",
-          zIndex: 50,
-          padding: "0.375rem",
-          borderRadius: "9999px",
-          backgroundColor: "var(--color-surface)",
-          border: "1px solid var(--color-border)",
-          boxShadow: "0 4px 24px rgba(0,0,0,0.18)",
-        }}
-      >
-        {(
-          [
-            { key: "score", label: "ReputScore" },
-            // { key: "contract", label: "Contract" }, // hidden — code preserved below
-            { key: "meetings", label: "Meetings" },
-          ] as { key: Tab; label: string }[]
-        ).map((tab) => (
-          <button
-            key={tab.key}
-            type="button"
-            onClick={() => setActiveTab(tab.key)}
-            style={{
-              padding: "0.625rem 1.5rem",
-              borderRadius: "9999px",
-              border: "none",
-              cursor: "pointer",
-              fontWeight: 700,
-              fontSize: "0.875rem",
-              transition: "all 0.2s",
-              backgroundColor:
-                activeTab === tab.key ? "var(--color-button)" : "transparent",
-              color: activeTab === tab.key ? "#fff" : "var(--color-muted)",
-            }}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
+      {/* ── Floating bottom navigation — hidden (only one tab remains) ──── */}
 
       <Footer />
     </div>
