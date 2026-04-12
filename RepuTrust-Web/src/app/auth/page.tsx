@@ -683,7 +683,10 @@ function AuthPageInner() {
               }
               setKeywordInput("");
             }
-            if (finalKeywords.length === 0) return;
+            if (finalKeywords.length === 0) {
+              setStep3Error("Please add at least one keyword.");
+              return;
+            }
             setStep3Loading(true);
             try {
               const fullName = `${firstName.trim()} ${lastName.trim()}`.trim();
@@ -879,7 +882,7 @@ function AuthPageInner() {
           </div>
 
           <div
-            style={{ position: "relative", cursor: "pointer" }}
+            style={{ ...inputStyle, position: "relative", cursor: "pointer" }}
             onClick={() => {
               const el = document.getElementById("dob-input") as HTMLInputElement | null;
               el?.showPicker?.();
@@ -888,10 +891,6 @@ function AuthPageInner() {
           >
             <span
               style={{
-                position: "absolute",
-                left: "1rem",
-                top: "50%",
-                transform: "translateY(-50%)",
                 color: dob ? "#1e293b" : "#94a3b8",
                 pointerEvents: "none",
                 fontSize: "0.95rem",
@@ -911,15 +910,15 @@ function AuthPageInner() {
               value={dob}
               onChange={(e) => setDob(e.target.value)}
               style={{
-                ...inputStyle,
-                colorScheme: "light",
-                opacity: 0,
                 position: "absolute",
                 top: 0,
                 left: 0,
                 width: "100%",
                 height: "100%",
+                opacity: 0,
                 cursor: "pointer",
+                border: "none",
+                padding: 0,
               }}
             />
           </div>
