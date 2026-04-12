@@ -312,6 +312,24 @@ export const meetings = {
   getMy: () => request<Meeting[]>("/meetings/my", {}, true),
 };
 
+// ── Feedback endpoints ────────────────────────────────────────────────────────
+
+export interface FeedbackItem {
+  id: string;
+  message: string;
+  created_at: string;
+}
+
+export const feedback = {
+  submit: (message: string) =>
+    request<FeedbackItem>("/feedback", {
+      method: "POST",
+      body: JSON.stringify({ message }),
+    }),
+
+  list: () => request<FeedbackItem[]>("/feedback"),
+};
+
 // ── Contracts endpoints ───────────────────────────────────────────────────────
 
 export const contracts = {

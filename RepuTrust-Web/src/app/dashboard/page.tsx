@@ -5,6 +5,7 @@ import Header from "@/components/common/Header";
 import ScheduleMeetingCTA from "@/components/dashboard/ScheduleMeetingCTA";
 import {
   auth,
+  feedback,
   isAuthed,
   reputation,
   users,
@@ -272,6 +273,14 @@ export default function DashboardPage() {
   const [scanData, setScanData] = useState<ReputationScan | null>(null);
   const [scoreLoading, setScoreLoading] = useState(true);
   const [meetingModalOpen, setMeetingModalOpen] = useState(false);
+  const [feedbackText, setFeedbackText] = useState("");
+  const [feedbackSubmitting, setFeedbackSubmitting] = useState(false);
+  const [feedbackSubmitted, setFeedbackSubmitted] = useState(false);
+  const [feedbackError, setFeedbackError] = useState("");
+  const [showAllKeywords, setShowAllKeywords] = useState(false);
+  const [expandedLinkIndex, setExpandedLinkIndex] = useState<number | null>(
+    null,
+  );
 
   const infoMoreTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hasLoadedRef = useRef(false);
@@ -451,7 +460,7 @@ export default function DashboardPage() {
         >
           <div>
             <div
-              className="glass glow-border animate-scale-in"
+              className={`animate-scale-in${!scoreLoading ? "" : " glass glow-border"}`}
               style={{
                 borderRadius: "0.875rem",
                 padding: "2.5rem 2rem",
@@ -460,7 +469,7 @@ export default function DashboardPage() {
                 display: "flex",
                 flexDirection: "column",
                 alignItems: "center",
-                justifyContent: scoreLoading ? "center" : "flex-start",
+                justifyContent: !scoreLoading ? "center" : "flex-start",
               }}
             >
               {scoreLoading ? (
@@ -471,35 +480,97 @@ export default function DashboardPage() {
                     display: "flex",
                     flexDirection: "column",
                     alignItems: "center",
-                    gap: "1.5rem",
+                    gap: "2rem",
+                    width: "100%",
+                    maxWidth: "22rem",
                   }}
                 >
+                  <style>{`
+                    @keyframes reput-blob-morph {
+                      0%   { border-radius: 44% 56% 53% 47% / 50% 46% 54% 50%; transform: rotate(0deg); }
+                      20%  { border-radius: 57% 43% 44% 56% / 55% 53% 47% 45%; transform: rotate(72deg); }
+                      40%  { border-radius: 46% 54% 60% 40% / 42% 58% 46% 54%; transform: rotate(144deg); }
+                      60%  { border-radius: 60% 40% 46% 54% / 54% 44% 56% 46%; transform: rotate(216deg); }
+                      80%  { border-radius: 50% 50% 55% 45% / 48% 52% 44% 56%; transform: rotate(288deg); }
+                      100% { border-radius: 44% 56% 53% 47% / 50% 46% 54% 50%; transform: rotate(360deg); }
+                    }
+                    @keyframes reput-aura-breathe {
+                      0%, 100% { opacity: 0.55; transform: scale(1); }
+                      50%      { opacity: 0.85; transform: scale(1.12); }
+                    }
+                    @keyframes reput-label-breathe {
+                      0%, 100% { opacity: 0.4; }
+                      50%      { opacity: 0.85; }
+                    }
+                  `}</style>
+
                   <div
                     style={{
-                      width: "3rem",
-                      height: "3rem",
-                      borderRadius: "50%",
-                      border: "3px solid var(--color-border)",
-                      borderTopColor: "var(--color-primary)",
-                      animation: "reput-spin 0.9s linear infinite",
-                    }}
-                  />
-                  <p
-                    style={{
-                      fontSize: "1rem",
-                      fontWeight: 600,
-                      color: "var(--color-foreground)",
+                      position: "relative",
+                      width: "160px",
+                      height: "160px",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
                     }}
                   >
-                    Your ReputScore is being calculated…
-                  </p>
+                    {/* Wide diffuse aura */}
+                    <div
+                      style={{
+                        position: "absolute",
+                        width: "160px",
+                        height: "160px",
+                        borderRadius: "50%",
+                        background:
+                          "radial-gradient(ellipse at center, rgba(68,121,218,0.28) 0%, rgba(72,212,184,0.14) 45%, transparent 70%)",
+                        filter: "blur(22px)",
+                        animation:
+                          "reput-aura-breathe 3.5s ease-in-out infinite",
+                      }}
+                    />
+
+                    {/* Main morphing blob */}
+                    <div
+                      style={{
+                        width: "100px",
+                        height: "100px",
+                        borderRadius: "44% 56% 53% 47% / 50% 46% 54% 50%",
+                        background:
+                          "linear-gradient(135deg, #48D4B8 0%, #4479DA 100%)",
+                        boxShadow:
+                          "0 0 40px rgba(68,121,218,0.5), 0 0 80px rgba(72,212,184,0.25), inset 0 0 30px rgba(72,212,184,0.2)",
+                        animation: "reput-blob-morph 3s linear infinite",
+                        position: "relative",
+                        zIndex: 1,
+                      }}
+                    >
+                      {/* Specular highlight */}
+                      <div
+                        style={{
+                          position: "absolute",
+                          top: "14%",
+                          left: "18%",
+                          width: "32%",
+                          height: "22%",
+                          borderRadius: "50%",
+                          background: "rgba(255,255,255,0.18)",
+                          filter: "blur(5px)",
+                        }}
+                      />
+                    </div>
+                  </div>
+
                   <p
                     style={{
-                      fontSize: "0.875rem",
+                      fontSize: "0.7rem",
+                      fontWeight: 500,
                       color: "var(--color-muted)",
+                      letterSpacing: "0.14em",
+                      textTransform: "uppercase",
+                      animation: "reput-label-breathe 3s ease-in-out infinite",
                     }}
                   >
-                    Scanning the web for mentions of your name
+                    We're calculating your ReputScore
                   </p>
                 </div>
               ) : (
@@ -670,7 +741,10 @@ export default function DashboardPage() {
                         gap: "0.625rem",
                       }}
                     >
-                      {scanKeywords.map((kw) => (
+                      {(showAllKeywords
+                        ? scanKeywords
+                        : scanKeywords.slice(0, 3)
+                      ).map((kw) => (
                         <span
                           key={kw}
                           style={{
@@ -686,6 +760,60 @@ export default function DashboardPage() {
                           {kw}
                         </span>
                       ))}
+                      {scanKeywords.length > 3 && (
+                        <button
+                          onClick={() => setShowAllKeywords((v) => !v)}
+                          style={{
+                            padding: "0.4rem 0.9rem",
+                            borderRadius: "0.625rem",
+                            backgroundColor: "rgba(68,121,218,0.08)",
+                            border: "1px solid rgba(68,121,218,0.22)",
+                            color: "#4479DA",
+                            fontSize: "0.75rem",
+                            fontWeight: 600,
+                            cursor: "pointer",
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: "0.3rem",
+                            letterSpacing: "0.01em",
+                            transition: "background 0.15s",
+                          }}
+                        >
+                          {showAllKeywords ? (
+                            <>
+                              <svg
+                                width="11"
+                                height="11"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="2.5"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              >
+                                <path d="M18 15l-6-6-6 6" />
+                              </svg>
+                              Show less
+                            </>
+                          ) : (
+                            <>
+                              <svg
+                                width="11"
+                                height="11"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="2.5"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              >
+                                <path d="M6 9l6 6 6-6" />
+                              </svg>
+                              {scanKeywords.length - 3} more
+                            </>
+                          )}
+                        </button>
+                      )}
                     </div>
                   </div>
 
@@ -726,12 +854,10 @@ export default function DashboardPage() {
                             }
                           })();
                           const idx = String(i + 1).padStart(2, "0");
+                          const isExpanded = expandedLinkIndex === i;
                           return (
-                            <a
+                            <div
                               key={i}
-                              href={result.url}
-                              target="_blank"
-                              rel="noopener noreferrer"
                               className="link-card"
                               style={{
                                 display: "flex",
@@ -740,9 +866,11 @@ export default function DashboardPage() {
                                 border: `1px solid ${risk.border}`,
                                 background: `linear-gradient(135deg, ${risk.bg} 0%, rgba(255,255,255,0) 60%)`,
                                 boxShadow: `inset 0 0 0 0.5px ${risk.border}, 0 1px 4px rgba(0,0,0,0.06)`,
-                                textDecoration: "none",
                                 cursor: "pointer",
                               }}
+                              onClick={() =>
+                                setExpandedLinkIndex(isExpanded ? null : i)
+                              }
                             >
                               {/* Left accent */}
                               <div
@@ -816,63 +944,128 @@ export default function DashboardPage() {
                                       {domain}
                                     </span>
                                   </div>
-                                  <span
+                                  <div
                                     style={{
+                                      display: "flex",
+                                      alignItems: "center",
+                                      gap: "0.4rem",
                                       flexShrink: 0,
-                                      fontFamily:
-                                        "ui-monospace, 'SF Mono', monospace",
-                                      fontSize: "0.6rem",
-                                      fontWeight: 800,
-                                      letterSpacing: "0.1em",
-                                      textTransform: "uppercase",
-                                      padding: "0.2rem 0.55rem",
-                                      borderRadius: "4px",
-                                      backgroundColor: risk.bg,
-                                      color: risk.color,
-                                      border: `1px solid ${risk.border}`,
-                                      whiteSpace: "nowrap",
                                     }}
                                   >
-                                    ▲ {uiRisk}
-                                  </span>
+                                    <span
+                                      style={{
+                                        fontFamily:
+                                          "ui-monospace, 'SF Mono', monospace",
+                                        fontSize: "0.6rem",
+                                        fontWeight: 800,
+                                        letterSpacing: "0.1em",
+                                        textTransform: "uppercase",
+                                        padding: "0.2rem 0.55rem",
+                                        borderRadius: "4px",
+                                        backgroundColor: risk.bg,
+                                        color: risk.color,
+                                        border: `1px solid ${risk.border}`,
+                                        whiteSpace: "nowrap",
+                                      }}
+                                    >
+                                      ▲ {uiRisk}
+                                    </span>
+                                    <svg
+                                      width="12"
+                                      height="12"
+                                      viewBox="0 0 24 24"
+                                      fill="none"
+                                      stroke="currentColor"
+                                      strokeWidth="2.5"
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                      style={{
+                                        color: "var(--color-muted)",
+                                        transform: isExpanded
+                                          ? "rotate(180deg)"
+                                          : "rotate(0deg)",
+                                        transition: "transform 0.2s ease",
+                                        flexShrink: 0,
+                                      }}
+                                    >
+                                      <path d="M6 9l6 6 6-6" />
+                                    </svg>
+                                  </div>
                                 </div>
 
-                                {/* Title */}
-                                <p
-                                  style={{
-                                    fontSize: "0.875rem",
-                                    fontWeight: 700,
-                                    color: "var(--color-foreground)",
-                                    lineHeight: 1.35,
-                                    margin: "0 0 0.4rem",
-                                    letterSpacing: "-0.01em",
-                                  }}
-                                >
-                                  {result.title}
-                                </p>
-
-                                {/* Divider */}
+                                {/* Title + open link */}
                                 <div
                                   style={{
-                                    height: "1px",
-                                    background: `linear-gradient(90deg, ${risk.border} 0%, transparent 80%)`,
-                                    marginBottom: "0.4rem",
-                                  }}
-                                />
-
-                                {/* Snippet */}
-                                <p
-                                  style={{
-                                    fontSize: "0.775rem",
-                                    color: "var(--color-muted)",
-                                    lineHeight: 1.6,
-                                    margin: 0,
+                                    display: "flex",
+                                    alignItems: "flex-start",
+                                    justifyContent: "space-between",
+                                    gap: "0.5rem",
                                   }}
                                 >
-                                  {result.snippet}
-                                </p>
+                                  <p
+                                    style={{
+                                      fontSize: "0.875rem",
+                                      fontWeight: 700,
+                                      color: "var(--color-foreground)",
+                                      lineHeight: 1.35,
+                                      margin: 0,
+                                      letterSpacing: "-0.01em",
+                                    }}
+                                  >
+                                    {result.title}
+                                  </p>
+                                  <a
+                                    href={result.url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    onClick={(e) => e.stopPropagation()}
+                                    style={{
+                                      flexShrink: 0,
+                                      color: "var(--color-muted)",
+                                      marginTop: "0.1rem",
+                                    }}
+                                  >
+                                    <svg
+                                      width="11"
+                                      height="11"
+                                      viewBox="0 0 24 24"
+                                      fill="none"
+                                      stroke="currentColor"
+                                      strokeWidth="2.5"
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                    >
+                                      <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                                      <polyline points="15 3 21 3 21 9" />
+                                      <line x1="10" y1="14" x2="21" y2="3" />
+                                    </svg>
+                                  </a>
+                                </div>
+
+                                {/* Snippet — accordion */}
+                                {isExpanded && (
+                                  <>
+                                    <div
+                                      style={{
+                                        height: "1px",
+                                        background: `linear-gradient(90deg, ${risk.border} 0%, transparent 80%)`,
+                                        margin: "0.5rem 0 0.4rem",
+                                      }}
+                                    />
+                                    <p
+                                      style={{
+                                        fontSize: "0.775rem",
+                                        color: "var(--color-muted)",
+                                        lineHeight: 1.6,
+                                        margin: 0,
+                                      }}
+                                    >
+                                      {result.snippet}
+                                    </p>
+                                  </>
+                                )}
                               </div>
-                            </a>
+                            </div>
                           );
                         })}
                       </div>
@@ -1469,6 +1662,159 @@ export default function DashboardPage() {
           </div>
         </div>
       </main>
+
+      {/* ── Feedback form ─────────────────────────────────────────────────── */}
+      {!scoreLoading && scanKeywords.length > 0 && (
+        <div
+          style={{
+            maxWidth: "480px",
+            margin: "2rem auto 0",
+            padding: "0 1.25rem 3rem",
+          }}
+        >
+          <div
+            className="glass"
+            style={{
+              borderRadius: "0.75rem",
+              padding: "1.5rem",
+              border: "1px solid var(--color-border)",
+            }}
+          >
+            {feedbackSubmitted ? (
+              <div style={{ textAlign: "center", padding: "0.5rem 0" }}>
+                <div
+                  style={{
+                    width: "2.5rem",
+                    height: "2.5rem",
+                    borderRadius: "50%",
+                    backgroundColor: "rgba(72,212,184,0.12)",
+                    border: "1px solid rgba(72,212,184,0.3)",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    margin: "0 auto 0.75rem",
+                  }}
+                >
+                  <svg
+                    width="16"
+                    height="16"
+                    fill="none"
+                    stroke="#48D4B8"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2.5}
+                      d="M5 13l4 4L19 7"
+                    />
+                  </svg>
+                </div>
+                <p
+                  style={{
+                    fontSize: "0.875rem",
+                    fontWeight: 600,
+                    color: "var(--color-foreground)",
+                  }}
+                >
+                  Thank you for your feedback!
+                </p>
+              </div>
+            ) : (
+              <>
+                <h2
+                  style={{
+                    fontSize: "0.75rem",
+                    fontWeight: 700,
+                    letterSpacing: "0.1em",
+                    textTransform: "uppercase",
+                    color: "var(--color-muted)",
+                    marginBottom: "0.75rem",
+                  }}
+                >
+                  Feedback
+                </h2>
+                <p
+                  style={{
+                    fontSize: "0.9375rem",
+                    fontWeight: 600,
+                    color: "var(--color-foreground)",
+                    marginBottom: "1rem",
+                  }}
+                >
+                  We&apos;d love to hear your thoughts
+                </p>
+                <textarea
+                  value={feedbackText}
+                  onChange={(e) => setFeedbackText(e.target.value)}
+                  placeholder="Share your experience, suggestions, or anything on your mind..."
+                  rows={4}
+                  style={{
+                    width: "100%",
+                    background: "rgba(255,255,255,0.04)",
+                    border: "1px solid var(--color-border)",
+                    borderRadius: "0.625rem",
+                    padding: "0.75rem 1rem",
+                    color: "var(--color-foreground)",
+                    fontSize: "0.875rem",
+                    lineHeight: 1.6,
+                    resize: "vertical",
+                    outline: "none",
+                    boxSizing: "border-box",
+                  }}
+                />
+                {feedbackError && (
+                  <p
+                    style={{
+                      fontSize: "0.75rem",
+                      color: "#FF6B4A",
+                      marginTop: "0.5rem",
+                    }}
+                  >
+                    {feedbackError}
+                  </p>
+                )}
+                <button
+                  type="button"
+                  disabled={feedbackSubmitting || !feedbackText.trim()}
+                  onClick={async () => {
+                    if (!feedbackText.trim()) return;
+                    setFeedbackSubmitting(true);
+                    setFeedbackError("");
+                    try {
+                      await feedback.submit(feedbackText.trim());
+                      setFeedbackSubmitted(true);
+                      setFeedbackText("");
+                    } catch {
+                      setFeedbackError("Something went wrong. Please try again.");
+                    } finally {
+                      setFeedbackSubmitting(false);
+                    }
+                  }}
+                  style={{
+                    marginTop: "0.875rem",
+                    width: "100%",
+                    padding: "0.75rem",
+                    borderRadius: "0.625rem",
+                    border: "none",
+                    background:
+                      feedbackText.trim()
+                        ? "linear-gradient(135deg, #4479DA 0%, #48D4B8 100%)"
+                        : "rgba(255,255,255,0.06)",
+                    color: feedbackText.trim() ? "#fff" : "var(--color-muted)",
+                    fontSize: "0.875rem",
+                    fontWeight: 700,
+                    cursor: feedbackText.trim() ? "pointer" : "not-allowed",
+                    transition: "background 0.2s",
+                  }}
+                >
+                  {feedbackSubmitting ? "Sending…" : "Send Feedback"}
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* ── Floating bottom navigation — hidden (only one tab remains) ──── */}
 
