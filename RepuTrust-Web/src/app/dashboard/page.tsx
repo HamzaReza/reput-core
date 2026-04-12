@@ -364,20 +364,16 @@ export default function DashboardPage() {
           const linksData =
             linksRes.status === "fulfilled" ? linksRes.value : null;
           const allLinks: LinkItem[] = linksData?.links ?? [];
-          const negLinks =
-            linksData?.negative ??
-            allLinks.filter(
-              (l) =>
-                l.sentiment === "negative" ||
-                (!l.sentiment && l.risk !== "none" && l.risk !== "low"),
-            );
-          const posLinks =
-            linksData?.positive ??
-            allLinks.filter((l) => l.sentiment === "positive");
 
           if (scanResult) {
-            const negCount = negLinks.length;
-            const posCount = posLinks.length;
+            const negCount = allLinks.filter(
+              (l) =>
+                l.sentiment === "negative" ||
+                (l.risk !== "none" && l.risk !== "low"),
+            ).length;
+            const posCount = allLinks.filter(
+              (l) => l.sentiment === "positive",
+            ).length;
             const derivedScore = deriveScore(negCount, posCount);
 
             const merged = {
@@ -389,12 +385,12 @@ export default function DashboardPage() {
                   : derivedScore >= 61
                     ? "medium"
                     : "high",
-              results: negLinks.map((l) => ({ ...l, risk: l.risk as string })),
+              results: allLinks.map((l) => ({ ...l, risk: l.risk as string })),
               summary: {
                 total_results: allLinks.length,
-                high_risk: negLinks.filter((l) => l.risk === "high").length,
-                medium_risk: negLinks.filter((l) => l.risk === "medium").length,
-                low_risk: negLinks.filter((l) => l.risk === "low").length,
+                high_risk: allLinks.filter((l) => l.risk === "high").length,
+                medium_risk: allLinks.filter((l) => l.risk === "medium").length,
+                low_risk: allLinks.filter((l) => l.risk === "low").length,
               },
             };
             setScanData(merged);
@@ -1784,12 +1780,17 @@ export default function DashboardPage() {
                     setFeedbackSubmitting(true);
                     setFeedbackError("");
                     try {
-                      await feedback.submit(feedbackText.trim(), userEmail || undefined);
+                      await feedback.submit(
+                        feedbackText.trim(),
+                        userEmail || undefined,
+                      );
                       setFeedbackSubmitted(true);
                       setFeedbackText("");
                       setTimeout(() => setFeedbackSubmitted(false), 5000);
                     } catch {
-                      setFeedbackError("Something went wrong. Please try again.");
+                      setFeedbackError(
+                        "Something went wrong. Please try again.",
+                      );
                     } finally {
                       setFeedbackSubmitting(false);
                     }
@@ -1800,10 +1801,9 @@ export default function DashboardPage() {
                     padding: "0.75rem",
                     borderRadius: "0.625rem",
                     border: "none",
-                    background:
-                      feedbackText.trim()
-                        ? "linear-gradient(135deg, #4479DA 0%, #48D4B8 100%)"
-                        : "rgba(255,255,255,0.06)",
+                    background: feedbackText.trim()
+                      ? "linear-gradient(135deg, #4479DA 0%, #48D4B8 100%)"
+                      : "rgba(255,255,255,0.06)",
                     color: feedbackText.trim() ? "#fff" : "var(--color-muted)",
                     fontSize: "0.875rem",
                     fontWeight: 700,

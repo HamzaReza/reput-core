@@ -3,79 +3,13 @@
 import Footer from "@/components/common/Footer";
 import Header from "@/components/common/Header";
 import { auth, users, setToken } from "@/lib/api";
+import { COUNTRY_NAMES } from "@/lib/countries";
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 import { Toast, useToast } from "@/components/common/Toast";
 
 // 5 steps: 1=account, 2=otp, 3=information, 4=linkedin, 5=notifications
 type Step = 1 | 2 | 3 | 4 | 5;
-
-
-const NATIONALITIES = [
-  "Afghan",
-  "Albanian",
-  "Algerian",
-  "American",
-  "Argentine",
-  "Australian",
-  "Austrian",
-  "Belgian",
-  "Brazilian",
-  "British",
-  "Bulgarian",
-  "Canadian",
-  "Chilean",
-  "Chinese",
-  "Colombian",
-  "Croatian",
-  "Czech",
-  "Danish",
-  "Dutch",
-  "Egyptian",
-  "Finnish",
-  "French",
-  "German",
-  "Greek",
-  "Hungarian",
-  "Indian",
-  "Indonesian",
-  "Iranian",
-  "Iraqi",
-  "Irish",
-  "Israeli",
-  "Italian",
-  "Japanese",
-  "Jordanian",
-  "Kenyan",
-  "Korean",
-  "Lebanese",
-  "Malaysian",
-  "Mexican",
-  "Moroccan",
-  "New Zealander",
-  "Nigerian",
-  "Norwegian",
-  "Pakistani",
-  "Peruvian",
-  "Philippine",
-  "Polish",
-  "Portuguese",
-  "Romanian",
-  "Russian",
-  "Saudi",
-  "Serbian",
-  "Singaporean",
-  "South African",
-  "Spanish",
-  "Swedish",
-  "Swiss",
-  "Thai",
-  "Turkish",
-  "Ukranian",
-  "Emirati",
-  "Venezuelan",
-  "Vietnamese",
-];
 
 const PROGRESS_TOTAL = 5;
 
@@ -910,7 +844,7 @@ function AuthPageInner() {
               <option value="" disabled hidden>
                 Nationality
               </option>
-              {NATIONALITIES.map((n) => (
+              {COUNTRY_NAMES.map((n) => (
                 <option
                   key={n}
                   value={n}
@@ -944,33 +878,48 @@ function AuthPageInner() {
             </svg>
           </div>
 
-          <div style={{ position: "relative" }}>
-            {!dob && (
-              <span
-                style={{
-                  position: "absolute",
-                  left: "1rem",
-                  top: "50%",
-                  transform: "translateY(-50%)",
-                  color: "#94a3b8",
-                  pointerEvents: "none",
-                  fontSize: "0.95rem",
-                }}
-              >
-                Date of Birth
-              </span>
-            )}
+          <div
+            style={{ position: "relative", cursor: "pointer" }}
+            onClick={() => {
+              const el = document.getElementById("dob-input") as HTMLInputElement | null;
+              el?.showPicker?.();
+              el?.click();
+            }}
+          >
+            <span
+              style={{
+                position: "absolute",
+                left: "1rem",
+                top: "50%",
+                transform: "translateY(-50%)",
+                color: dob ? "#1e293b" : "#94a3b8",
+                pointerEvents: "none",
+                fontSize: "0.95rem",
+              }}
+            >
+              {dob
+                ? new Date(dob + "T00:00:00").toLocaleDateString(undefined, {
+                    year: "numeric",
+                    month: "long",
+                    day: "numeric",
+                  })
+                : "Date of Birth"}
+            </span>
             <input
-              type="text"
+              id="dob-input"
+              type="date"
               value={dob}
-              placeholder=""
-              onFocus={(e) => { e.currentTarget.type = "date"; e.currentTarget.showPicker?.(); }}
-              onBlur={(e) => { if (!e.currentTarget.value) e.currentTarget.type = "text"; }}
               onChange={(e) => setDob(e.target.value)}
               style={{
                 ...inputStyle,
                 colorScheme: "light",
-                color: dob ? "#1e293b" : "transparent",
+                opacity: 0,
+                position: "absolute",
+                top: 0,
+                left: 0,
+                width: "100%",
+                height: "100%",
+                cursor: "pointer",
               }}
             />
           </div>

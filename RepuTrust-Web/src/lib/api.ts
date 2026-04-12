@@ -229,7 +229,14 @@ export const auth = {
 // ── User / Profile endpoints ──────────────────────────────────────────────────
 
 export const users = {
-  updateMe: async (data: { name?: string; phone?: string; nationality?: string; date_of_birth?: string; scan_depth?: ScanDepth; profile_complete?: boolean }) =>
+  updateMe: async (data: {
+    name?: string;
+    phone?: string;
+    nationality?: string;
+    date_of_birth?: string;
+    scan_depth?: ScanDepth;
+    profile_complete?: boolean;
+  }) =>
     request<User>(
       "/users/me",
       { method: "PATCH", body: JSON.stringify(data) },
@@ -245,8 +252,7 @@ export const users = {
       true,
     ),
 
-  deleteMe: () =>
-    request<void>("/users/me", { method: "DELETE" }, true),
+  deleteMe: () => request<void>("/users/me", { method: "DELETE" }, true),
 
   startTrial: () =>
     request<User>("/users/me/start-trial", { method: "POST" }, true),

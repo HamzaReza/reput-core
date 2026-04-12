@@ -3,74 +3,9 @@
 import Footer from "@/components/common/Footer";
 import Header from "@/components/common/Header";
 import { isAuthed, auth, users, clearAuth, ScanDepth, reputation } from "@/lib/api";
+import { COUNTRY_NAMES } from "@/lib/countries";
 import { useRouter } from "next/navigation";
 import React, { useEffect, useState } from "react";
-
-const NATIONALITIES = [
-  "Afghan",
-  "Albanian",
-  "Algerian",
-  "American",
-  "Argentine",
-  "Australian",
-  "Austrian",
-  "Belgian",
-  "Brazilian",
-  "British",
-  "Bulgarian",
-  "Canadian",
-  "Chilean",
-  "Chinese",
-  "Colombian",
-  "Croatian",
-  "Czech",
-  "Danish",
-  "Dutch",
-  "Egyptian",
-  "Finnish",
-  "French",
-  "German",
-  "Greek",
-  "Hungarian",
-  "Indian",
-  "Indonesian",
-  "Iranian",
-  "Iraqi",
-  "Irish",
-  "Israeli",
-  "Italian",
-  "Japanese",
-  "Jordanian",
-  "Kenyan",
-  "Korean",
-  "Lebanese",
-  "Malaysian",
-  "Mexican",
-  "Moroccan",
-  "New Zealander",
-  "Nigerian",
-  "Norwegian",
-  "Pakistani",
-  "Peruvian",
-  "Philippine",
-  "Polish",
-  "Portuguese",
-  "Romanian",
-  "Russian",
-  "Saudi",
-  "Serbian",
-  "Singaporean",
-  "South African",
-  "Spanish",
-  "Swedish",
-  "Swiss",
-  "Thai",
-  "Turkish",
-  "Ukranian",
-  "Emirati",
-  "Venezuelan",
-  "Vietnamese",
-];
 
 const fieldStyle: React.CSSProperties = {
   width: "100%",
@@ -380,7 +315,7 @@ export default function SettingsPage() {
                     }}
                   >
                     <option value="">Select nationality</option>
-                    {NATIONALITIES.map((n) => (
+                    {COUNTRY_NAMES.map((n) => (
                       <option
                         key={n}
                         value={n}
