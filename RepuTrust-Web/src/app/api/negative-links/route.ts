@@ -1,5 +1,5 @@
-import Anthropic from "@anthropic-ai/sdk";
 import { COUNTRY_NAME_TO_ISO } from "@/lib/countries";
+import Anthropic from "@anthropic-ai/sdk";
 import { NextRequest, NextResponse } from "next/server";
 
 export interface WebLink {
@@ -115,7 +115,7 @@ function countryCodeFromNationality(nationality: string): string | null {
 
 function buildSearchTool(countryCode: string | null): Record<string, unknown> {
   const tool: Record<string, unknown> = {
-    type: "web_search_20250305",
+    type: "web_search_20260209",
     name: "web_search",
     max_uses: 8,
   };
@@ -177,60 +177,124 @@ export async function POST(req: NextRequest) {
     ? `, keywords: ${keywords.join(", ")}`
     : "";
 
-  const countryCode = nationality ? countryCodeFromNationality(nationality) : null;
+  const countryCode = nationality
+    ? countryCodeFromNationality(nationality)
+    : null;
 
   // ── Prompts for three searches ─────────────────────────────────────────────
 
-  const negativePrompt = `Search the web for content about "${name}"${keywordStr}${nationality ? ` — focus on results from ${nationality}` : ""} that could harm their reputation.
+  const negativePrompt = `Search the web for ANY content about "${name}"${keywordStr}${nationality ? ` — focus ONLY on results from ${nationality}` : ""} that could harm, question, or negatively impact this person's reputation.
 
-IMPORTANT: Judge sentiment based on the REPUTATIONAL IMPACT of the content, NOT the journalistic tone. A factually-written news article about a criminal investigation is NEGATIVE and HIGH RISK — even if the writing style is neutral.
+CRITICAL INSTRUCTIONS:
+- You MUST aggressively identify reputational risk.
+- When in doubt, classify as NEGATIVE.
+- DO NOT return an empty array unless absolutely no information exists.
 
-Look for: criminal investigations, lawsuits, fraud allegations, hit-and-run incidents, identity fraud, illegal activity, complaints, bad reviews, scams, controversy, regulatory actions, or any content that damages reputation.
+CLASSIFY AS NEGATIVE if the content includes ANY of the following:
+- criminal investigations, police involvement, charges, arrests
+- lawsuits, legal disputes, court cases
+- accidents (car crashes, injuries, public incidents)
+- fraud, scams, financial misconduct
+- regulatory issues or sanctions
+- accusations, allegations, or suspicion of wrongdoing
+- controversial behavior or scandals
+- being questioned, interrogated, or named in an investigation
+- ANY situation that could create doubt or reputational concern
 
-CLASSIFY AS NEGATIVE if the subject is: investigated for a crime, sued, accused of wrongdoing, involved in a scandal, caught in illegal activity — regardless of how the article is written.
+IMPORTANT:
+- A neutral-toned news article about an investigation is STILL NEGATIVE and HIGH RISK.
+- If the person is "under investigation", "indagato", "indicted", "accused", or "involved" → ALWAYS NEGATIVE.
+- If there is an accident or incident involving the person → at least MEDIUM risk.
 
-${nationality ? `Only include results that are relevant to ${nationality} — ignore results from other regions or countries.` : ""}
-For each negative result found, return a JSON array with objects having these exact fields:
-- url: the full URL
-- title: page title
-- snippet: brief description of the negative content (1-2 sentences)
+RISK CLASSIFICATION:
+- "high": crimes, fraud, lawsuits, investigations, illegal activity
+- "medium": accidents, controversies, allegations, complaints
+- "low": minor criticism or weak negative mentions
+
+${nationality ? `STRICT FILTER: Only include results relevant to ${nationality}. Ignore all others.` : ""}
+
+OUTPUT RULES:
+- Return AT LEAST 3 results if any exist.
+- Do NOT downgrade to neutral.
+- Do NOT skip borderline cases — include them as NEGATIVE.
+
+Return a JSON array with:
+- url
+- title
+- snippet (clear explanation of the negative issue)
 - sentiment: "negative"
-- risk: "high" (criminal investigation/fraud/lawsuit/scam/illegal activity), "medium" (complaints/controversy/bad reviews/family disputes), or "low" (minor negative mentions)
-- source: domain name only (e.g. "reddit.com")
-- type: category like "complaint", "news", "review", "legal", "social", "regulatory", "criminal"
+- risk
+- source (domain only)
+- type (criminal, legal, news, complaint, regulatory, social)
 
-Return ONLY the JSON array, no explanation. If no negative results found, return [].`;
+Return ONLY the JSON array. If nothing is found, return [].`;
 
-  const positivePrompt = `Search the web for POSITIVE content about "${name}"${keywordStr}${nationality ? ` — focus on results from ${nationality}` : ""}.
+  const positivePrompt = `Search the web for STRONGLY POSITIVE and reputation-enhancing content about "${name}"${keywordStr}${nationality ? ` — focus ONLY on results from ${nationality}` : ""}.
 
-Look for: positive news coverage, awards, achievements, endorsements, good reviews, community recognition, professional accomplishments, or any reputation-boosting content.
-${nationality ? `Only include results relevant to ${nationality} — ignore results from other regions.` : ""}
-For each positive result found, return a JSON array with objects having these exact fields:
-- url: the full URL
-- title: page title
-- snippet: brief description of the positive content (1-2 sentences)
+ONLY include content that CLEARLY improves reputation.
+
+VALID POSITIVE SIGNALS:
+- awards, honors, recognitions
+- major achievements or business success
+- leadership roles or executive positions
+- positive media coverage praising the person
+- verified professional accomplishments
+- strong endorsements or testimonials
+
+DO NOT INCLUDE:
+- basic profiles (LinkedIn, directories)
+- neutral mentions
+- articles that simply mention the name
+- content without clear praise or achievement
+
+STRICT RULE:
+- If it is not clearly impressive → DO NOT include it.
+- It must actively boost reputation.
+
+${nationality ? `Only include results relevant to ${nationality}.` : ""}
+
+Return a JSON array with:
+- url
+- title
+- snippet
 - sentiment: "positive"
 - risk: "none"
-- source: domain name only (e.g. "linkedin.com")
-- type: category like "award", "news", "review", "achievement", "social", "profile"
+- source
+- type (award, achievement, news, profile)
 
-Return ONLY the JSON array, no explanation. If nothing found, return [].`;
+Return ONLY the JSON array. If none found, return [].`;
 
-  const neutralPrompt = `Search the web for general informational content about "${name}"${keywordStr}${nationality ? ` — focus on results from ${nationality}` : ""}.
+  const neutralPrompt = `Search the web for GENERAL INFORMATION about "${name}"${keywordStr}${nationality ? ` — focus ONLY on results from ${nationality}` : ""}.
 
-Look for: Wikipedia pages, business listings, professional profiles, factual news mentions, company registrations, or any informational content.
-${nationality ? `Only include results relevant to ${nationality} — ignore results from other regions.` : ""}
-For each result found, return a JSON array with objects having these exact fields:
-- url: the full URL
-- title: page title
-- snippet: brief description of the content (1-2 sentences)
-- sentiment: assess honestly — "negative" if the content involves legal trouble, investigations, crimes, lawsuits, scandals, or reputational damage; "positive" if it shows achievements or praise; "neutral" if purely informational with no accusations
-- risk: assess honestly — "high" (fraud/criminal/lawsuit/scam), "medium" (complaints/controversy/bad reviews), "low" (minor negative mentions), "none" (neutral or positive content)
-- source: domain name only (e.g. "wikipedia.org")
-- type: category like "profile", "directory", "wiki", "news", "registry", "legal", "complaint"
+This is a FALLBACK classification — use carefully.
 
-Return ONLY the JSON array, no explanation. If nothing found, return [].`;
+INSTRUCTIONS:
+- If content contains ANY legal issue, investigation, controversy, or incident → classify as NEGATIVE instead.
+- Do NOT label risky content as neutral.
 
+ONLY classify as NEUTRAL if:
+- it is purely informational (Wikipedia, company listing, profile)
+- there is ZERO reputational concern
+- no accusations, incidents, or legal mentions
+
+CLASSIFY AS POSITIVE if:
+- it clearly shows achievements or praise
+
+CLASSIFY AS NEGATIVE if:
+- ANY risk, controversy, or legal issue exists (even minor)
+
+${nationality ? `Only include results relevant to ${nationality}.` : ""}
+
+Return a JSON array with:
+- url
+- title
+- snippet
+- sentiment ("positive" | "neutral" | "negative")
+- risk ("high" | "medium" | "low" | "none")
+- source
+- type (profile, wiki, directory, news)
+
+Return ONLY the JSON array. If none found, return [].`;
   try {
     // Run all three searches in parallel
     const [negLinks, posLinks, neutralLinks] = await Promise.all([
@@ -239,11 +303,58 @@ Return ONLY the JSON array, no explanation. If nothing found, return [].`;
       runSearch(client, neutralPrompt, countryCode),
     ]);
 
+    function dedupeLinks(all: WebLink[]): WebLink[] {
+      const map = new Map<string, WebLink>();
+
+      const sentimentPriority = {
+        negative: 3,
+        neutral: 2,
+        positive: 1,
+      };
+
+      const riskPriority = {
+        high: 4,
+        medium: 3,
+        low: 2,
+        none: 1,
+      };
+
+      for (const link of all) {
+        const existing = map.get(link.url);
+
+        if (!existing) {
+          map.set(link.url, link);
+          continue;
+        }
+
+        const existingScore =
+          sentimentPriority[existing.sentiment] * 10 +
+          riskPriority[existing.risk];
+
+        const newScore =
+          sentimentPriority[link.sentiment] * 10 + riskPriority[link.risk];
+
+        // Keep the WORSE one (higher score)
+        if (newScore > existingScore) {
+          map.set(link.url, link);
+        }
+      }
+
+      return Array.from(map.values());
+    }
+
+    const allLinksRaw = [...negLinks, ...posLinks, ...neutralLinks];
+    const deduped = dedupeLinks(allLinksRaw);
+
+    const negative = deduped.filter((l) => l.sentiment === "negative");
+    const positive = deduped.filter((l) => l.sentiment === "positive");
+    const neutral = deduped.filter((l) => l.sentiment === "neutral");
+
     return NextResponse.json({
-      links: [...negLinks, ...posLinks, ...neutralLinks],
-      negative: negLinks,
-      positive: posLinks,
-      neutral: neutralLinks,
+      links: deduped,
+      negative,
+      positive,
+      neutral,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";

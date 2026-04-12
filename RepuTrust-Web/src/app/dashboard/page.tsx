@@ -366,11 +366,26 @@ export default function DashboardPage() {
           const allLinks: LinkItem[] = linksData?.links ?? [];
 
           if (scanResult) {
-            const negCount = allLinks.filter(
-              (l) =>
+            const negCount = allLinks.filter((l) => {
+              const text = `${l.title} ${l.snippet}`.toLowerCase();
+
+              const keywordMatch =
+                text.includes("indagato") ||
+                text.includes("investigation") ||
+                text.includes("incidente") ||
+                text.includes("accident") ||
+                text.includes("fraud") ||
+                text.includes("lawsuit") ||
+                text.includes("charged") ||
+                text.includes("arrested");
+
+              return (
                 l.sentiment === "negative" ||
-                (l.risk !== "none" && l.risk !== "low"),
-            ).length;
+                l.risk === "high" ||
+                l.risk === "medium" ||
+                keywordMatch
+              );
+            }).length;
             const posCount = allLinks.filter(
               (l) => l.sentiment === "positive",
             ).length;
