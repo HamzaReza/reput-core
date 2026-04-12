@@ -10,6 +10,16 @@ export const metadata: Metadata = {
     shortcut: "/images/logo-icon.png",
     apple: "/images/logo-icon.png",
   },
+  openGraph: {
+    title: "RepuTrust — Find out what the web says about you",
+    description:
+      "RepuTrust — Find out what the web says about you analyze your online presence across thousands of sources and get a clear, reliable reputation score in minutes.",
+    images: ["/images/logo-icon.png"],
+  },
+  twitter: {
+    card: "summary",
+    images: ["/images/logo-icon.png"],
+  },
 };
 
 export default function RootLayout({

@@ -1,4 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
+import { COUNTRY_NAME_TO_ISO } from "@/lib/countries";
 import { NextRequest, NextResponse } from "next/server";
 
 export interface WebLink {
@@ -11,103 +12,112 @@ export interface WebLink {
   type: string;
 }
 
-// Map common nationality/country strings to ISO 3166-1 alpha-2 codes
-const COUNTRY_CODES: Record<string, string> = {
-  afghanistan: "AF",
-  albania: "AL",
-  algeria: "DZ",
-  argentina: "AR",
-  australia: "AU",
-  austria: "AT",
-  azerbaijan: "AZ",
-  bahrain: "BH",
-  bangladesh: "BD",
-  belgium: "BE",
-  brazil: "BR",
-  canada: "CA",
-  chile: "CL",
-  china: "CN",
-  colombia: "CO",
-  croatia: "HR",
-  czechia: "CZ",
-  "czech republic": "CZ",
-  denmark: "DK",
-  egypt: "EG",
-  ethiopia: "ET",
-  finland: "FI",
-  france: "FR",
-  germany: "DE",
-  ghana: "GH",
-  greece: "GR",
-  hungary: "HU",
-  india: "IN",
-  indonesia: "ID",
-  iran: "IR",
-  iraq: "IQ",
-  ireland: "IE",
-  israel: "IL",
-  italy: "IT",
-  japan: "JP",
-  jordan: "JO",
-  kazakhstan: "KZ",
-  kenya: "KE",
-  kuwait: "KW",
-  lebanon: "LB",
-  libya: "LY",
-  malaysia: "MY",
-  mexico: "MX",
-  morocco: "MA",
+/** Legacy demonyms and shorthand from the old nationality dropdown (still stored in profiles). */
+const NATIONALITY_ALIASES: Record<string, string> = {
+  afghan: "AF",
+  albanian: "AL",
+  algerian: "DZ",
+  american: "US",
+  argentine: "AR",
+  australian: "AU",
+  austrian: "AT",
+  belgian: "BE",
+  brazilian: "BR",
+  british: "GB",
+  bulgarian: "BG",
+  canadian: "CA",
+  chilean: "CL",
+  chinese: "CN",
+  colombian: "CO",
+  croatian: "HR",
+  czech: "CZ",
+  danish: "DK",
+  dutch: "NL",
+  egyptian: "EG",
+  emirati: "AE",
+  finnish: "FI",
+  french: "FR",
+  german: "DE",
+  greek: "GR",
+  hungarian: "HU",
+  indian: "IN",
+  indonesian: "ID",
+  iranian: "IR",
+  iraqi: "IQ",
+  irish: "IE",
+  israeli: "IL",
+  italian: "IT",
+  japanese: "JP",
+  jordanian: "JO",
+  kenyan: "KE",
+  korean: "KR",
+  lebanese: "LB",
+  malaysian: "MY",
+  mexican: "MX",
+  moroccan: "MA",
+  "new zealander": "NZ",
+  nigerian: "NG",
+  norwegian: "NO",
+  pakistani: "PK",
+  peruvian: "PE",
+  philippine: "PH",
+  polish: "PL",
+  portuguese: "PT",
+  romanian: "RO",
+  russian: "RU",
+  saudi: "SA",
+  serbian: "RS",
+  singaporean: "SG",
+  "south african": "ZA",
+  spanish: "ES",
+  swedish: "SE",
+  swiss: "CH",
+  thai: "TH",
+  turkish: "TR",
+  ukranian: "UA",
+  ukrainian: "UA",
+  venezuelan: "VE",
+  vietnamese: "VN",
   netherlands: "NL",
-  "new zealand": "NZ",
-  nigeria: "NG",
-  norway: "NO",
-  oman: "OM",
-  pakistan: "PK",
-  palestine: "PS",
-  peru: "PE",
-  philippines: "PH",
-  poland: "PL",
-  portugal: "PT",
-  qatar: "QA",
-  romania: "RO",
-  russia: "RU",
-  "saudi arabia": "SA",
-  senegal: "SN",
-  serbia: "RS",
-  singapore: "SG",
-  "south africa": "ZA",
-  "south korea": "KR",
-  spain: "ES",
-  "sri lanka": "LK",
-  sudan: "SD",
-  sweden: "SE",
-  switzerland: "CH",
-  syria: "SY",
-  taiwan: "TW",
-  thailand: "TH",
-  tunisia: "TN",
-  turkey: "TR",
-  turkiye: "TR",
-  ukraine: "UA",
-  "united arab emirates": "AE",
+  "czech republic": "CZ",
   uae: "AE",
-  "united kingdom": "GB",
   uk: "GB",
-  "united states": "US",
+  "united kingdom": "GB",
   usa: "US",
-  "united states of america": "US",
-  uzbekistan: "UZ",
-  venezuela: "VE",
+  "united states": "US",
+  "south korea": "KR",
+  turkiye: "TR",
+  turkey: "TR",
+  taiwan: "TW",
   vietnam: "VN",
-  yemen: "YE",
-  zimbabwe: "ZW",
+  philippines: "PH",
+  // Short names that differ from ISO 3166-1 official names in `COUNTRY_NAME_TO_ISO`
+  iran: "IR",
+  russia: "RU",
+  syria: "SY",
+  venezuela: "VE",
+  bolivia: "BO",
+  moldova: "MD",
+  tanzania: "TZ",
+  laos: "LA",
+  "north korea": "KP",
+  micronesia: "FM",
+  palestine: "PS",
+  ethiopia: "ET",
+  ghana: "GH",
+  senegal: "SN",
 };
+
+function countryCodeFromNationality(nationality: string): string | null {
+  const k = nationality.toLowerCase().trim();
+  return COUNTRY_NAME_TO_ISO[k] ?? NATIONALITY_ALIASES[k] ?? null;
+}
 
 function buildSearchTool(countryCode: string | null): Record<string, unknown> {
   const tool: Record<string, unknown> = {
     type: "web_search_20250305",
     name: "web_search",
-    max_uses: 12,
+    max_uses: 8,
   };
   if (countryCode) {
     tool.user_location = { type: "approximate", country: countryCode };
@@ -167,24 +177,27 @@ export async function POST(req: NextRequest) {
     ? `, keywords: ${keywords.join(", ")}`
     : "";
 
-  const countryCode = nationality
-    ? (COUNTRY_CODES[nationality.toLowerCase().trim()] ?? null)
-    : null;
+  const countryCode = nationality ? countryCodeFromNationality(nationality) : null;
 
   // ── Prompts for three searches ─────────────────────────────────────────────
 
-  const negativePrompt = `Search the web for negative content about "${name}"${keywordStr}${nationality ? ` — focus on results from ${nationality}` : ""}.
+  const negativePrompt = `Search the web for content about "${name}"${keywordStr}${nationality ? ` — focus on results from ${nationality}` : ""} that could harm their reputation.
 
-Look for: complaints, lawsuits, fraud allegations, negative news articles, bad reviews, scams, controversy, criminal records, or any reputational risk.
+IMPORTANT: Judge sentiment based on the REPUTATIONAL IMPACT of the content, NOT the journalistic tone. A factually-written news article about a criminal investigation is NEGATIVE and HIGH RISK — even if the writing style is neutral.
+
+Look for: criminal investigations, lawsuits, fraud allegations, hit-and-run incidents, identity fraud, illegal activity, complaints, bad reviews, scams, controversy, regulatory actions, or any content that damages reputation.
+
+CLASSIFY AS NEGATIVE if the subject is: investigated for a crime, sued, accused of wrongdoing, involved in a scandal, caught in illegal activity — regardless of how the article is written.
+
 ${nationality ? `Only include results that are relevant to ${nationality} — ignore results from other regions or countries.` : ""}
 For each negative result found, return a JSON array with objects having these exact fields:
 - url: the full URL
 - title: page title
 - snippet: brief description of the negative content (1-2 sentences)
 - sentiment: "negative"
-- risk: "high" (fraud/criminal/lawsuit/scam), "medium" (complaints/controversy/bad reviews), or "low" (minor negative mentions)
+- risk: "high" (criminal investigation/fraud/lawsuit/scam/illegal activity), "medium" (complaints/controversy/bad reviews/family disputes), or "low" (minor negative mentions)
 - source: domain name only (e.g. "reddit.com")
-- type: category like "complaint", "news", "review", "legal", "social", "regulatory"
+- type: category like "complaint", "news", "review", "legal", "social", "regulatory", "criminal"
 
 Return ONLY the JSON array, no explanation. If no negative results found, return [].`;
 
@@ -203,18 +216,18 @@ For each positive result found, return a JSON array with objects having these ex
 
 Return ONLY the JSON array, no explanation. If nothing found, return [].`;
 
-  const neutralPrompt = `Search the web for NEUTRAL or informational content about "${name}"${keywordStr}${nationality ? ` — focus on results from ${nationality}` : ""}.
+  const neutralPrompt = `Search the web for general informational content about "${name}"${keywordStr}${nationality ? ` — focus on results from ${nationality}` : ""}.
 
-Look for: Wikipedia pages, business listings, professional profiles, factual news mentions, company registrations, or any informational content that is neither clearly positive nor negative.
+Look for: Wikipedia pages, business listings, professional profiles, factual news mentions, company registrations, or any informational content.
 ${nationality ? `Only include results relevant to ${nationality} — ignore results from other regions.` : ""}
-For each neutral result found, return a JSON array with objects having these exact fields:
+For each result found, return a JSON array with objects having these exact fields:
 - url: the full URL
 - title: page title
 - snippet: brief description of the content (1-2 sentences)
-- sentiment: "neutral"
-- risk: "none"
+- sentiment: assess honestly — "negative" if the content involves legal trouble, investigations, crimes, lawsuits, scandals, or reputational damage; "positive" if it shows achievements or praise; "neutral" if purely informational with no accusations
+- risk: assess honestly — "high" (fraud/criminal/lawsuit/scam), "medium" (complaints/controversy/bad reviews), "low" (minor negative mentions), "none" (neutral or positive content)
 - source: domain name only (e.g. "wikipedia.org")
-- type: category like "profile", "directory", "wiki", "news", "registry"
+- type: category like "profile", "directory", "wiki", "news", "registry", "legal", "complaint"
 
 Return ONLY the JSON array, no explanation. If nothing found, return [].`;
 
