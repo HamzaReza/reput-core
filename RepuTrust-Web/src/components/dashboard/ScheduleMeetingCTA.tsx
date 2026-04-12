@@ -130,11 +130,11 @@ export default function ScheduleMeetingCTA({
 
   const message =
     totalLinks === 0
-      ? "We couldn't find anything with the data provided to us"
+      ? "We couldn't find any relevant links with under your name"
       : score === 100 && hasNegative
         ? "Your reput score is good but we found issues affecting your reputation. Our team can help."
         : score === 100
-          ? "Your reput score is perfect with the data you gave us"
+          ? null
           : score >= 86 && hasNegative
             ? "Your reput score is good but we found issues affecting your reputation. Our team can help."
             : score >= 86

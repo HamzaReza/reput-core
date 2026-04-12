@@ -133,7 +133,7 @@ export default function Header() {
             )}
             {isAuthed && (
               <Link
-                href="/dashboard?tab=meetings"
+                href="/meeting"
                 className="header-nav-link"
                 style={navLinkStyle}
               >
@@ -293,7 +293,7 @@ export default function Header() {
           )}
           {isAuthed && (
             <Link
-              href="/dashboard?tab=meetings"
+              href="/meeting"
               onClick={close}
               className="drawer-nav-link"
               style={drawerLinkStyle}

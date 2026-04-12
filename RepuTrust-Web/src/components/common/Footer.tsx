@@ -16,7 +16,7 @@ export default function Footer() {
           fontSize: "0.875rem",
         }}
       >
-        <p>&copy; 2026 Ealixir. All rights reserved.</p>
+        <p>&copy; 2026 Ealixir Inc. All rights reserved.</p>
       </div>
     </footer>
   );
