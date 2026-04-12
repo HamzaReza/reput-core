@@ -86,16 +86,35 @@ export default function FeedbackAdminPage() {
             >
               {item.message}
             </p>
-            <p
+            <div
               style={{
-                fontSize: "0.7rem",
-                color: "rgba(255,255,255,0.3)",
-                margin: 0,
-                fontFamily: "ui-monospace, 'SF Mono', monospace",
+                display: "flex",
+                alignItems: "center",
+                gap: "0.75rem",
+                flexWrap: "wrap",
               }}
             >
-              {new Date(item.created_at).toLocaleString()}
-            </p>
+              {item.email && (
+                <span
+                  style={{
+                    fontSize: "0.7rem",
+                    color: "rgba(72,212,184,0.7)",
+                    fontFamily: "ui-monospace, 'SF Mono', monospace",
+                  }}
+                >
+                  {item.email}
+                </span>
+              )}
+              <span
+                style={{
+                  fontSize: "0.7rem",
+                  color: "rgba(255,255,255,0.3)",
+                  fontFamily: "ui-monospace, 'SF Mono', monospace",
+                }}
+              >
+                {new Date(item.created_at).toLocaleString()}
+              </span>
+            </div>
           </div>
         ))}
       </div>

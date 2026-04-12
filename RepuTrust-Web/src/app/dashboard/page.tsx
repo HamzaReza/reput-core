@@ -273,6 +273,7 @@ export default function DashboardPage() {
   const [scanData, setScanData] = useState<ReputationScan | null>(null);
   const [scoreLoading, setScoreLoading] = useState(true);
   const [meetingModalOpen, setMeetingModalOpen] = useState(false);
+  const [userEmail, setUserEmail] = useState("");
   const [feedbackText, setFeedbackText] = useState("");
   const [feedbackSubmitting, setFeedbackSubmitting] = useState(false);
   const [feedbackSubmitted, setFeedbackSubmitted] = useState(false);
@@ -308,6 +309,7 @@ export default function DashboardPage() {
           router.replace("/auth?step=3");
           return;
         }
+        setUserEmail(user.email);
         if (user.name) setScanName(user.name.toUpperCase());
         if (user.profile?.avatar_url) setAvatar(user.profile.avatar_url);
         setIsPro(
@@ -1782,9 +1784,10 @@ export default function DashboardPage() {
                     setFeedbackSubmitting(true);
                     setFeedbackError("");
                     try {
-                      await feedback.submit(feedbackText.trim());
+                      await feedback.submit(feedbackText.trim(), userEmail || undefined);
                       setFeedbackSubmitted(true);
                       setFeedbackText("");
+                      setTimeout(() => setFeedbackSubmitted(false), 5000);
                     } catch {
                       setFeedbackError("Something went wrong. Please try again.");
                     } finally {

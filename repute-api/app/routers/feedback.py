@@ -14,7 +14,7 @@ async def submit_feedback(
     payload: FeedbackCreate,
     db: AsyncSession = Depends(get_db),
 ):
-    fb = Feedback(message=payload.message)
+    fb = Feedback(message=payload.message, email=payload.email)
     db.add(fb)
     await db.commit()
     await db.refresh(fb)

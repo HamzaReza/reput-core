@@ -6,10 +6,12 @@ from pydantic import BaseModel
 
 class FeedbackCreate(BaseModel):
     message: str
+    email: str | None = None
 
 
 class FeedbackOut(BaseModel):
     id: uuid.UUID
+    email: str | None
     message: str
     created_at: datetime
 

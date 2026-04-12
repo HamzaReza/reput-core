@@ -316,15 +316,16 @@ export const meetings = {
 
 export interface FeedbackItem {
   id: string;
+  email: string | null;
   message: string;
   created_at: string;
 }
 
 export const feedback = {
-  submit: (message: string) =>
+  submit: (message: string, email?: string) =>
     request<FeedbackItem>("/feedback", {
       method: "POST",
-      body: JSON.stringify({ message }),
+      body: JSON.stringify({ message, email }),
     }),
 
   list: () => request<FeedbackItem[]>("/feedback"),
