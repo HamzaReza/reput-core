@@ -2,7 +2,7 @@
 
 import Footer from "@/components/common/Footer";
 import Header from "@/components/common/Header";
-import { isAuthed, auth, users, clearAuth, ScanDepth, reputation } from "@/lib/api";
+import { isAuthed, auth, users, clearAuth, ScanDepth } from "@/lib/api";
 import { COUNTRY_NAMES } from "@/lib/countries";
 import { useRouter } from "next/navigation";
 import React, { useEffect, useState } from "react";
@@ -36,7 +36,6 @@ export default function SettingsPage() {
   const [keywordInput, setKeywordInput] = useState("");
   const [saveLoading, setSaveLoading] = useState(false);
   const [saveError, setSaveError] = useState("");
-  const [saveSuccess, setSaveSuccess] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [deleteError, setDeleteError] = useState("");
@@ -87,7 +86,6 @@ export default function SettingsPage() {
 
   const saveChanges = async () => {
     setSaveError("");
-    setSaveSuccess(false);
     setSaveLoading(true);
     try {
       const fullName = `${firstName.trim()} ${lastName.trim()}`.trim();
@@ -97,13 +95,7 @@ export default function SettingsPage() {
         : keywords;
       await users.upsertProfile({ keywords: finalKeywords });
 
-      const keywordsChanged =
-        finalKeywords.length !== originalKeywords.length ||
-        finalKeywords.some((k, i) => k !== originalKeywords[i]);
-      if (keywordsChanged) {
-        setOriginalKeywords(finalKeywords);
-        reputation.triggerScan().catch(() => {});
-      }
+      setOriginalKeywords(finalKeywords);
 
       try {
         localStorage.setItem("reput_name", fullName);
@@ -112,8 +104,12 @@ export default function SettingsPage() {
         localStorage.setItem("reput_lastname", lastName.trim());
         localStorage.setItem("reput_phone", phone.trim());
       } catch {}
-      setSaveSuccess(true);
-      setTimeout(() => setSaveSuccess(false), 3000);
+
+      sessionStorage.removeItem("reput_scan");
+      localStorage.removeItem("reput_last_scan_name");
+      localStorage.removeItem("reput_last_scan_keywords");
+
+      router.push("/dashboard");
     } catch (err: unknown) {
       setSaveError(err instanceof Error ? err.message : "Failed to save.");
     } finally {
@@ -839,9 +835,6 @@ export default function SettingsPage() {
               {saveError && (
                 <p style={{ color: "#FF6B4A", fontSize: "0.875rem" }}>{saveError}</p>
               )}
-              {saveSuccess && (
-                <p style={{ color: "#4CAF50", fontSize: "0.875rem" }}>Changes saved successfully.</p>
-              )}
               <button
                 onClick={saveChanges}
                 disabled={saveLoading}
@@ -854,7 +847,7 @@ export default function SettingsPage() {
                   opacity: saveLoading ? 0.8 : 1,
                 }}
               >
-                {saveLoading ? "Saving…" : "Save Changes"}
+                {saveLoading ? "Saving…" : "Recalculate score"}
               </button>
             </div>
           </div>

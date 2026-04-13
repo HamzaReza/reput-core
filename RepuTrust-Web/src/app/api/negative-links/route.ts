@@ -343,6 +343,13 @@ Return ONLY the JSON array. If none found, return [].`;
       return Array.from(map.values());
     }
 
+    if (negLinks.length === 0 && posLinks.length === 0 && neutralLinks.length === 0) {
+      return NextResponse.json(
+        { error: "All searches returned empty results" },
+        { status: 200 },
+      );
+    }
+
     const allLinksRaw = [...negLinks, ...posLinks, ...neutralLinks];
     const deduped = dedupeLinks(allLinksRaw);
 
