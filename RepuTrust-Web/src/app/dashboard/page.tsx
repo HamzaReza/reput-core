@@ -2,7 +2,8 @@
 
 import Footer from "@/components/common/Footer";
 import Header from "@/components/common/Header";
-import ScheduleMeetingCTA from "@/components/dashboard/ScheduleMeetingCTA";
+import { Toast, useToast } from "@/components/common/Toast";
+import ScheduleMeetingCTA, { CalModalButton } from "@/components/dashboard/ScheduleMeetingCTA";
 import {
   auth,
   feedback,
@@ -48,6 +49,21 @@ const RISK_COLORS: Record<
     border: "rgba(76,175,80,0.3)",
   },
 };
+
+const STATUS_MESSAGES = [
+  "Scanning the web for mentions of you…",
+  "Analyzing tone and context across sources…",
+  "Weighing the impact of each result…",
+  "Almost done — building your ReputScore…",
+];
+
+const DID_YOU_KNOW = [
+  "Your online reputation influences hiring decisions, business partnerships, and financial opportunities.",
+  "83% of people search someone's name online before a first meeting.",
+  "A single negative article on page one of Google can cost you clients, deals, and trust.",
+  "Most people have no idea what the internet says about them. You're already ahead.",
+  "Your ReputScore is calculated across hundreds of sources — news, blogs, public records, and more.",
+];
 
 // Score bands (from image):
 // Green  → 10+ positive, 0 negative  → score 86–100
@@ -263,6 +279,7 @@ function RepuGauge({
 
 export default function DashboardPage() {
   const router = useRouter();
+  const toast = useToast();
   const [authed, setAuthed] = useState<boolean | null>(null);
   const [isPro, setIsPro] = useState(false);
   const [upgradingPro, setUpgradingPro] = useState(false);
@@ -272,12 +289,15 @@ export default function DashboardPage() {
   const [score, setScore] = useState(0);
   const [scanData, setScanData] = useState<ReputationScan | null>(null);
   const [scoreLoading, setScoreLoading] = useState(true);
-  const [meetingModalOpen, setMeetingModalOpen] = useState(false);
+  const [statusIdx, setStatusIdx] = useState(0);
+  const [tipIdx, setTipIdx] = useState(0);
+  const [statusVisible, setStatusVisible] = useState(true);
+  const [tipVisible, setTipVisible] = useState(true);
+  const [recalculating, setRecalculating] = useState(false);
   const [userEmail, setUserEmail] = useState("");
   const [feedbackText, setFeedbackText] = useState("");
   const [feedbackSubmitting, setFeedbackSubmitting] = useState(false);
   const [feedbackSubmitted, setFeedbackSubmitted] = useState(false);
-  const [feedbackError, setFeedbackError] = useState("");
   const [showAllKeywords, setShowAllKeywords] = useState(false);
   const [expandedLinkIndex, setExpandedLinkIndex] = useState<number | null>(
     null,
@@ -431,7 +451,121 @@ export default function DashboardPage() {
     };
   }, []);
 
+  useEffect(() => {
+    if (!scoreLoading) return;
+    const id = setInterval(() => {
+      setStatusVisible(false);
+      setTimeout(() => {
+        setStatusIdx((i) => (i + 1) % STATUS_MESSAGES.length);
+        setStatusVisible(true);
+      }, 500);
+    }, 3000);
+    return () => clearInterval(id);
+  }, [scoreLoading]);
+
+  useEffect(() => {
+    if (!scoreLoading) return;
+    const id = setInterval(() => {
+      setTipVisible(false);
+      setTimeout(() => {
+        setTipIdx((i) => (i + 1) % DID_YOU_KNOW.length);
+        setTipVisible(true);
+      }, 500);
+    }, 5000);
+    return () => clearInterval(id);
+  }, [scoreLoading]);
+
   if (!authed) return null;
+
+  async function handleRecalculate() {
+    setRecalculating(true);
+    sessionStorage.removeItem("reput_scan");
+    localStorage.removeItem("reput_last_scan_name");
+    localStorage.removeItem("reput_last_scan_keywords");
+    try {
+      const user = await auth.me();
+      const currentKeywords: string[] = user.profile?.keywords ?? [];
+      type LinkItem = {
+        url: string;
+        title: string;
+        snippet: string;
+        sentiment?: string;
+        risk: string;
+        source: string;
+        type: string;
+      };
+      type LinksResponse = {
+        links: LinkItem[];
+        negative: LinkItem[];
+        positive: LinkItem[];
+        neutral: LinkItem[];
+      };
+      const [scan, linksRes] = await Promise.allSettled([
+        reputation.triggerScan(),
+        fetch("/api/negative-links", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: user.name ?? "",
+            keywords: currentKeywords,
+            nationality: user.nationality ?? "",
+          }),
+        }).then((r) => r.json() as Promise<LinksResponse>),
+      ]);
+      const scanResult = scan.status === "fulfilled" ? scan.value : null;
+      const linksData = linksRes.status === "fulfilled" ? linksRes.value : null;
+      const allLinks: LinkItem[] = linksData?.links ?? [];
+      if (scanResult) {
+        const negCount = allLinks.filter((l) => {
+          const text = `${l.title} ${l.snippet}`.toLowerCase();
+          return (
+            l.sentiment === "negative" ||
+            l.risk === "high" ||
+            l.risk === "medium" ||
+            [
+              "indagato",
+              "investigation",
+              "incidente",
+              "accident",
+              "fraud",
+              "lawsuit",
+              "charged",
+              "arrested",
+            ].some((w) => text.includes(w))
+          );
+        }).length;
+        const posCount = allLinks.filter(
+          (l) => l.sentiment === "positive",
+        ).length;
+        const derivedScore = deriveScore(negCount, posCount);
+        const merged = {
+          ...scanResult,
+          score: derivedScore,
+          risk_level:
+            derivedScore >= 86 ? "low" : derivedScore >= 61 ? "medium" : "high",
+          results: allLinks.map((l) => ({ ...l, risk: l.risk as string })),
+          summary: {
+            total_results: allLinks.length,
+            high_risk: allLinks.filter((l) => l.risk === "high").length,
+            medium_risk: allLinks.filter((l) => l.risk === "medium").length,
+            low_risk: allLinks.filter((l) => l.risk === "low").length,
+          },
+        };
+        setScanData(merged);
+        setScore(merged.score);
+        sessionStorage.setItem("reput_scan", JSON.stringify(merged));
+        localStorage.setItem(
+          "reput_last_scan_keywords",
+          [...currentKeywords].sort().join(","),
+        );
+        localStorage.setItem("reput_last_scan_name", user.name ?? "");
+      }
+    } catch {
+      /* keep existing */
+    } finally {
+      setRecalculating(false);
+    }
+  }
 
   async function handleUpgradePro() {
     setUpgradingPro(true);
@@ -463,7 +597,8 @@ export default function DashboardPage() {
       }}
     >
       <Header />
-      <main style={{ flex: 1, paddingTop: "4.5rem", paddingBottom: "6rem" }}>
+
+      <main style={{ flex: 1, paddingTop: "4.5rem", paddingBottom: "2rem" }}>
         <div
           style={{
             maxWidth: "52rem",
@@ -585,6 +720,61 @@ export default function DashboardPage() {
                   >
                     We're calculating your ReputScore
                   </p>
+
+                  {/* Rotating status message */}
+                  <p
+                    style={{
+                      fontSize: "0.65rem",
+                      fontWeight: 400,
+                      color: "#9ca3af",
+                      letterSpacing: "0.12em",
+                      textTransform: "uppercase",
+                      opacity: statusVisible ? 1 : 0,
+                      transition: "opacity 0.5s ease",
+                      minHeight: "1.2em",
+                      textAlign: "center",
+                      margin: 0,
+                    }}
+                  >
+                    {STATUS_MESSAGES[statusIdx]}
+                  </p>
+
+                  {/* Did you know tip box */}
+                  <div
+                    style={{
+                      background: "#fff",
+                      border: "1px solid #e5e7eb",
+                      borderRadius: "0.75rem",
+                      padding: "1rem 1.25rem",
+                      width: "100%",
+                      textAlign: "left",
+                    }}
+                  >
+                    <div
+                      style={{
+                        fontSize: "0.6rem",
+                        fontWeight: 700,
+                        letterSpacing: "0.12em",
+                        color: "#6b7280",
+                        marginBottom: "0.5rem",
+                      }}
+                    >
+                      💡 DID YOU KNOW?
+                    </div>
+                    <p
+                      style={{
+                        fontSize: "0.78rem",
+                        color: "#374151",
+                        lineHeight: 1.6,
+                        margin: 0,
+                        opacity: tipVisible ? 1 : 0,
+                        transition: "opacity 0.5s ease",
+                        minHeight: "3em",
+                      }}
+                    >
+                      {DID_YOU_KNOW[tipIdx]}
+                    </p>
+                  </div>
                 </div>
               ) : (
                 /* ── Loaded state ── */
@@ -593,6 +783,45 @@ export default function DashboardPage() {
                   style={{ width: "100%", textAlign: "center" }}
                 >
                   {/* Name */}
+                  {/* Recalculate button */}
+                  {scanKeywords.length > 0 && (
+                    <button
+                      onClick={handleRecalculate}
+                      disabled={recalculating}
+                      style={{
+                        marginBottom: "1rem",
+                        padding: "0.45rem 1rem",
+                        borderRadius: "0.625rem",
+                        border: "1px solid var(--color-border)",
+                        background: "var(--color-surface)",
+                        color: "var(--color-muted)",
+                        fontSize: "0.8125rem",
+                        fontWeight: 600,
+                        cursor: recalculating ? "default" : "pointer",
+                        opacity: recalculating ? 0.6 : 1,
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: "0.4rem",
+                        transition: "opacity 0.2s",
+                      }}
+                    >
+                      <svg
+                        width="12"
+                        height="12"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2.5"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <polyline points="23 4 23 10 17 10" />
+                        <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
+                      </svg>
+                      {recalculating ? "Recalculating…" : "Recalculate"}
+                    </button>
+                  )}
+
                   <h1
                     style={{
                       fontSize: "1.5rem",
@@ -1422,8 +1651,6 @@ export default function DashboardPage() {
                         score={score}
                         totalLinks={scanData.summary.total_results}
                         hasNegative={false}
-                        imperativeOpen={meetingModalOpen}
-                        onImperativeClose={() => setMeetingModalOpen(false)}
                       />
                     )}
 
@@ -1542,9 +1769,8 @@ export default function DashboardPage() {
                               justifyContent: "center",
                             }}
                           >
-                            <button
-                              type="button"
-                              onClick={() => setMeetingModalOpen(true)}
+                            <CalModalButton
+                              calLink={process.env.NEXT_PUBLIC_CAL_STORY_LINK ?? ""}
                               style={{
                                 display: "inline-flex",
                                 alignItems: "center",
@@ -1561,7 +1787,7 @@ export default function DashboardPage() {
                               }}
                             >
                               Schedule a meeting
-                            </button>
+                            </CalModalButton>
                           </div>
                         </div>
 
@@ -1644,9 +1870,8 @@ export default function DashboardPage() {
                               justifyContent: "center",
                             }}
                           >
-                            <button
-                              type="button"
-                              onClick={() => setMeetingModalOpen(true)}
+                            <CalModalButton
+                              calLink={process.env.NEXT_PUBLIC_CAL_EDITION_LINK ?? ""}
                               style={{
                                 display: "inline-flex",
                                 alignItems: "center",
@@ -1663,8 +1888,216 @@ export default function DashboardPage() {
                               }}
                             >
                               Schedule a meeting
-                            </button>
+                            </CalModalButton>
                           </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  {/* ── Feedback form ─────────────────────────────────────────────────── */}
+                  {!scoreLoading && scanKeywords.length > 0 && (
+                    <div
+                      style={{
+                        margin: "0 auto",
+                        marginTop: "2rem",
+                      }}
+                    >
+                      <div
+                        style={{
+                          borderRadius: "1rem",
+                          overflow: "hidden",
+                          border: "1px solid var(--color-border)",
+                          boxShadow: "0 2px 16px rgba(0,0,0,0.06)",
+                        }}
+                      >
+                        {/* Card header */}
+                        <div
+                          style={{
+                            background:
+                              "linear-gradient(135deg, #4479DA 0%, #48D4B8 100%)",
+                            padding: "1.25rem 1.5rem",
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "0.75rem",
+                          }}
+                        >
+                          <div
+                            style={{
+                              width: "2rem",
+                              height: "2rem",
+                              borderRadius: "50%",
+                              backgroundColor: "rgba(255,255,255,0.2)",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              flexShrink: 0,
+                            }}
+                          >
+                            <svg
+                              width="14"
+                              height="14"
+                              fill="none"
+                              stroke="#fff"
+                              viewBox="0 0 24 24"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"
+                              />
+                            </svg>
+                          </div>
+                          <div>
+                            <p
+                              style={{
+                                fontSize: "0.75rem",
+                                fontWeight: 600,
+                                color: "rgba(255,255,255,0.75)",
+                                letterSpacing: "0.08em",
+                                textTransform: "uppercase",
+                                marginBottom: "0.1rem",
+                              }}
+                            >
+                              Feedback
+                            </p>
+                            <p
+                              style={{
+                                fontSize: "0.9375rem",
+                                fontWeight: 700,
+                                color: "#fff",
+                              }}
+                            >
+                              We&apos;d love to hear your thoughts
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Card body */}
+                        <div className="glass" style={{ padding: "1.5rem" }}>
+                          {feedbackSubmitted ? (
+                            <div
+                              style={{ textAlign: "center", padding: "1rem 0" }}
+                            >
+                              <div
+                                style={{
+                                  width: "2.75rem",
+                                  height: "2.75rem",
+                                  borderRadius: "50%",
+                                  backgroundColor: "rgba(72,212,184,0.12)",
+                                  border: "1px solid rgba(72,212,184,0.3)",
+                                  display: "flex",
+                                  alignItems: "center",
+                                  justifyContent: "center",
+                                  margin: "0 auto 0.875rem",
+                                }}
+                              >
+                                <svg
+                                  width="18"
+                                  height="18"
+                                  fill="none"
+                                  stroke="#48D4B8"
+                                  viewBox="0 0 24 24"
+                                >
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth={2.5}
+                                    d="M5 13l4 4L19 7"
+                                  />
+                                </svg>
+                              </div>
+                              <p
+                                style={{
+                                  fontSize: "0.9375rem",
+                                  fontWeight: 600,
+                                  color: "var(--color-foreground)",
+                                }}
+                              >
+                                Thank you for your feedback!
+                              </p>
+                              <p
+                                style={{
+                                  fontSize: "0.8125rem",
+                                  color: "var(--color-muted)",
+                                  marginTop: "0.25rem",
+                                }}
+                              >
+                                We appreciate you taking the time.
+                              </p>
+                            </div>
+                          ) : (
+                            <form
+                              onSubmit={async (e) => {
+                                e.preventDefault();
+                                setFeedbackSubmitting(true);
+                                try {
+                                  await feedback.submit(
+                                    feedbackText.trim(),
+                                    userEmail || undefined,
+                                  );
+                                  setFeedbackSubmitted(true);
+                                  setFeedbackText("");
+                                  setTimeout(
+                                    () => setFeedbackSubmitted(false),
+                                    5000,
+                                  );
+                                } catch {
+                                  toast.show(
+                                    "Something went wrong. Please try again.",
+                                  );
+                                } finally {
+                                  setFeedbackSubmitting(false);
+                                }
+                              }}
+                            >
+                              <textarea
+                                required
+                                value={feedbackText}
+                                onChange={(e) =>
+                                  setFeedbackText(e.target.value)
+                                }
+                                placeholder="Share your experience, suggestions, or anything on your mind..."
+                                rows={4}
+                                style={{
+                                  width: "100%",
+                                  background: "rgba(255,255,255,0.04)",
+                                  border: "1px solid var(--color-border)",
+                                  borderRadius: "0.625rem",
+                                  padding: "0.75rem 1rem",
+                                  color: "var(--color-foreground)",
+                                  fontSize: "0.875rem",
+                                  lineHeight: 1.6,
+                                  resize: "vertical",
+                                  outline: "none",
+                                  boxSizing: "border-box",
+                                }}
+                              />
+                              <button
+                                type="submit"
+                                disabled={feedbackSubmitting}
+                                className="glow-button"
+                                style={{
+                                  marginTop: "0.875rem",
+                                  width: "100%",
+                                  padding: "0.75rem",
+                                  borderRadius: "0.625rem",
+                                  border: "none",
+                                  fontSize: "0.875rem",
+                                  fontWeight: 700,
+                                  cursor: feedbackSubmitting
+                                    ? "default"
+                                    : "pointer",
+                                  opacity: feedbackSubmitting ? 0.7 : 1,
+                                  transition: "opacity 0.2s",
+                                }}
+                              >
+                                {feedbackSubmitting
+                                  ? "Sending…"
+                                  : "Send Feedback"}
+                              </button>
+                            </form>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -1676,167 +2109,10 @@ export default function DashboardPage() {
         </div>
       </main>
 
-      {/* ── Feedback form ─────────────────────────────────────────────────── */}
-      {!scoreLoading && scanKeywords.length > 0 && (
-        <div
-          style={{
-            maxWidth: "480px",
-            margin: "2rem auto 0",
-            padding: "0 1.25rem 3rem",
-          }}
-        >
-          <div
-            className="glass"
-            style={{
-              borderRadius: "0.75rem",
-              padding: "1.5rem",
-              border: "1px solid var(--color-border)",
-            }}
-          >
-            {feedbackSubmitted ? (
-              <div style={{ textAlign: "center", padding: "0.5rem 0" }}>
-                <div
-                  style={{
-                    width: "2.5rem",
-                    height: "2.5rem",
-                    borderRadius: "50%",
-                    backgroundColor: "rgba(72,212,184,0.12)",
-                    border: "1px solid rgba(72,212,184,0.3)",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    margin: "0 auto 0.75rem",
-                  }}
-                >
-                  <svg
-                    width="16"
-                    height="16"
-                    fill="none"
-                    stroke="#48D4B8"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2.5}
-                      d="M5 13l4 4L19 7"
-                    />
-                  </svg>
-                </div>
-                <p
-                  style={{
-                    fontSize: "0.875rem",
-                    fontWeight: 600,
-                    color: "var(--color-foreground)",
-                  }}
-                >
-                  Thank you for your feedback!
-                </p>
-              </div>
-            ) : (
-              <>
-                <h2
-                  style={{
-                    fontSize: "0.75rem",
-                    fontWeight: 700,
-                    letterSpacing: "0.1em",
-                    textTransform: "uppercase",
-                    color: "var(--color-muted)",
-                    marginBottom: "0.75rem",
-                  }}
-                >
-                  Feedback
-                </h2>
-                <p
-                  style={{
-                    fontSize: "0.9375rem",
-                    fontWeight: 600,
-                    color: "var(--color-foreground)",
-                    marginBottom: "1rem",
-                  }}
-                >
-                  We&apos;d love to hear your thoughts
-                </p>
-                <textarea
-                  value={feedbackText}
-                  onChange={(e) => setFeedbackText(e.target.value)}
-                  placeholder="Share your experience, suggestions, or anything on your mind..."
-                  rows={4}
-                  style={{
-                    width: "100%",
-                    background: "rgba(255,255,255,0.04)",
-                    border: "1px solid var(--color-border)",
-                    borderRadius: "0.625rem",
-                    padding: "0.75rem 1rem",
-                    color: "var(--color-foreground)",
-                    fontSize: "0.875rem",
-                    lineHeight: 1.6,
-                    resize: "vertical",
-                    outline: "none",
-                    boxSizing: "border-box",
-                  }}
-                />
-                {feedbackError && (
-                  <p
-                    style={{
-                      fontSize: "0.75rem",
-                      color: "#FF6B4A",
-                      marginTop: "0.5rem",
-                    }}
-                  >
-                    {feedbackError}
-                  </p>
-                )}
-                <button
-                  type="button"
-                  disabled={feedbackSubmitting || !feedbackText.trim()}
-                  onClick={async () => {
-                    if (!feedbackText.trim()) return;
-                    setFeedbackSubmitting(true);
-                    setFeedbackError("");
-                    try {
-                      await feedback.submit(
-                        feedbackText.trim(),
-                        userEmail || undefined,
-                      );
-                      setFeedbackSubmitted(true);
-                      setFeedbackText("");
-                      setTimeout(() => setFeedbackSubmitted(false), 5000);
-                    } catch {
-                      setFeedbackError(
-                        "Something went wrong. Please try again.",
-                      );
-                    } finally {
-                      setFeedbackSubmitting(false);
-                    }
-                  }}
-                  style={{
-                    marginTop: "0.875rem",
-                    width: "100%",
-                    padding: "0.75rem",
-                    borderRadius: "0.625rem",
-                    border: "none",
-                    background: feedbackText.trim()
-                      ? "linear-gradient(135deg, #4479DA 0%, #48D4B8 100%)"
-                      : "rgba(255,255,255,0.06)",
-                    color: feedbackText.trim() ? "#fff" : "var(--color-muted)",
-                    fontSize: "0.875rem",
-                    fontWeight: 700,
-                    cursor: feedbackText.trim() ? "pointer" : "not-allowed",
-                    transition: "background 0.2s",
-                  }}
-                >
-                  {feedbackSubmitting ? "Sending…" : "Send Feedback"}
-                </button>
-              </>
-            )}
-          </div>
-        </div>
-      )}
-
       {/* ── Floating bottom navigation — hidden (only one tab remains) ──── */}
 
       <Footer />
+      <Toast visible={toast.visible} message={toast.message} />
     </div>
   );
 }

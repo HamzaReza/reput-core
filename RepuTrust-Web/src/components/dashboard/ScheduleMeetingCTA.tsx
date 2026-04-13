@@ -1,34 +1,23 @@
 "use client";
 
 import Cal, { getCalApi } from "@calcom/embed-react";
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 
 interface Props {
   score: number;
   totalLinks: number;
   hasNegative: boolean;
-  imperativeOpen?: boolean;
-  onImperativeClose?: () => void;
 }
 
 export default function ScheduleMeetingCTA({
   score,
   totalLinks,
   hasNegative,
-  imperativeOpen,
-  onImperativeClose,
 }: Props) {
   const [open, setOpen] = useState(false);
 
-  useEffect(() => {
-    if (imperativeOpen) setOpen(true);
-  }, [imperativeOpen]);
-
-  const handleClose = () => {
-    setOpen(false);
-    onImperativeClose?.();
-  };
+  const handleClose = () => setOpen(false);
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
@@ -257,5 +246,116 @@ export default function ScheduleMeetingCTA({
 
       {mounted && open && createPortal(modal, document.body)}
     </div>
+  );
+}
+
+interface CalModalButtonProps {
+  calLink: string;
+  children: React.ReactNode;
+  style?: React.CSSProperties;
+}
+
+export function CalModalButton({ calLink, children, style }: CalModalButtonProps) {
+  const [open, setOpen] = useState(false);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => { setMounted(true); }, []);
+
+  useEffect(() => {
+    if (!open) return;
+    (async () => {
+      const cal = await getCalApi({ namespace: `cal-modal-${calLink}` });
+      cal("ui", { hideEventTypeDetails: false, layout: "month_view" });
+    })();
+  }, [open, calLink]);
+
+  useEffect(() => {
+    document.body.style.overflow = open ? "hidden" : "";
+    return () => { document.body.style.overflow = ""; };
+  }, [open]);
+
+  const handleClose = () => setOpen(false);
+
+  const modal = (
+    <div
+      style={{
+        position: "fixed",
+        inset: 0,
+        zIndex: 9999,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+      }}
+    >
+      <div
+        onClick={handleClose}
+        style={{
+          position: "absolute",
+          inset: 0,
+          backgroundColor: "rgba(0,0,0,0.85)",
+          backdropFilter: "blur(6px)",
+        }}
+      />
+      <div
+        style={{
+          position: "relative",
+          zIndex: 1,
+          width: "min(92vw, 54rem)",
+          maxHeight: "88vh",
+          borderRadius: "1rem",
+          overflow: "hidden",
+          backgroundColor: "var(--color-surface)",
+          border: "1px solid var(--color-border)",
+          boxShadow: "0 32px 80px rgba(0,0,0,0.6)",
+          display: "flex",
+          flexDirection: "column",
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            padding: "1rem 1.5rem",
+            borderBottom: "1px solid var(--color-border)",
+            flexShrink: 0,
+          }}
+        >
+          <span style={{ fontWeight: 700, fontSize: "1rem" }}>Schedule a Meeting</span>
+          <button
+            type="button"
+            onClick={handleClose}
+            style={{
+              background: "none",
+              border: "none",
+              cursor: "pointer",
+              color: "var(--color-muted)",
+              fontSize: "1.25rem",
+              lineHeight: 1,
+              padding: "0.25rem 0.5rem",
+            }}
+          >
+            ✕
+          </button>
+        </div>
+        <div style={{ flex: 1, overflowY: "auto" }}>
+          <Cal
+            namespace={`cal-modal-${calLink}`}
+            calLink={calLink}
+            style={{ width: "100%", height: "650px" }}
+            config={{ layout: "month_view" }}
+          />
+        </div>
+      </div>
+    </div>
+  );
+
+  return (
+    <>
+      <button type="button" onClick={() => setOpen(true)} style={style}>
+        {children}
+      </button>
+      {mounted && open && createPortal(modal, document.body)}
+    </>
   );
 }
