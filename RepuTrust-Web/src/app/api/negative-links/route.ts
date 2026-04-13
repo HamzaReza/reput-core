@@ -133,7 +133,7 @@ async function runSearch(
   const searchTool = buildSearchTool(countryCode);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const response = await client.messages.create({
-    model: "claude-sonnet-4-6",
+    model: "claude-haiku-4-5",
     max_tokens: 4096,
     tools: [searchTool] as any,
     messages: [{ role: "user", content: prompt }],
@@ -343,7 +343,11 @@ Return ONLY the JSON array. If none found, return [].`;
       return Array.from(map.values());
     }
 
-    if (negLinks.length === 0 && posLinks.length === 0 && neutralLinks.length === 0) {
+    if (
+      negLinks.length === 0 &&
+      posLinks.length === 0 &&
+      neutralLinks.length === 0
+    ) {
       return NextResponse.json(
         { error: "All searches returned empty results" },
         { status: 200 },
