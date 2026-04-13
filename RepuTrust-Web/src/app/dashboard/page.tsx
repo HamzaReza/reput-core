@@ -3,7 +3,9 @@
 import Footer from "@/components/common/Footer";
 import Header from "@/components/common/Header";
 import { Toast, useToast } from "@/components/common/Toast";
-import ScheduleMeetingCTA, { CalModalButton } from "@/components/dashboard/ScheduleMeetingCTA";
+import ScheduleMeetingCTA, {
+  CalModalButton,
+} from "@/components/dashboard/ScheduleMeetingCTA";
 import {
   auth,
   feedback,
@@ -293,7 +295,7 @@ export default function DashboardPage() {
   const [tipIdx, setTipIdx] = useState(0);
   const [statusVisible, setStatusVisible] = useState(true);
   const [tipVisible, setTipVisible] = useState(true);
-  const [recalculating, setRecalculating] = useState(false);
+  const [scanError, setScanError] = useState(false);
   const [userEmail, setUserEmail] = useState("");
   const [feedbackText, setFeedbackText] = useState("");
   const [feedbackSubmitting, setFeedbackSubmitting] = useState(false);
@@ -304,6 +306,10 @@ export default function DashboardPage() {
   );
 
   const infoMoreTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const statusSwapTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
+  const tipSwapTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hasLoadedRef = useRef(false);
   useEffect(() => {
     if (!isAuthed()) {
@@ -383,7 +389,19 @@ export default function DashboardPage() {
           const scanResult = scan.status === "fulfilled" ? scan.value : null;
           const linksData =
             linksRes.status === "fulfilled" ? linksRes.value : null;
-          const allLinks: LinkItem[] = linksData?.links ?? [];
+
+          const searchFailed =
+            linksRes.status === "rejected" ||
+            !linksData ||
+            "error" in (linksData as object) ||
+            linksData.links == null;
+
+          if (searchFailed) {
+            setScanError(true);
+            return;
+          }
+
+          const allLinks: LinkItem[] = linksData.links;
 
           if (scanResult) {
             const negCount = allLinks.filter((l) => {
@@ -436,7 +454,7 @@ export default function DashboardPage() {
           localStorage.setItem("reput_last_scan_name", currentName);
         }
       } catch {
-        // Fallback — keep defaults
+        setScanError(true);
       } finally {
         setScoreLoading(false);
       }
@@ -455,30 +473,37 @@ export default function DashboardPage() {
     if (!scoreLoading) return;
     const id = setInterval(() => {
       setStatusVisible(false);
-      setTimeout(() => {
+      if (statusSwapTimeoutRef.current) clearTimeout(statusSwapTimeoutRef.current);
+      statusSwapTimeoutRef.current = setTimeout(() => {
         setStatusIdx((i) => (i + 1) % STATUS_MESSAGES.length);
-        setStatusVisible(true);
+        requestAnimationFrame(() => setStatusVisible(true));
       }, 500);
     }, 3000);
-    return () => clearInterval(id);
+    return () => {
+      clearInterval(id);
+      if (statusSwapTimeoutRef.current) clearTimeout(statusSwapTimeoutRef.current);
+    };
   }, [scoreLoading]);
 
   useEffect(() => {
     if (!scoreLoading) return;
     const id = setInterval(() => {
       setTipVisible(false);
-      setTimeout(() => {
+      if (tipSwapTimeoutRef.current) clearTimeout(tipSwapTimeoutRef.current);
+      tipSwapTimeoutRef.current = setTimeout(() => {
         setTipIdx((i) => (i + 1) % DID_YOU_KNOW.length);
-        setTipVisible(true);
+        requestAnimationFrame(() => setTipVisible(true));
       }, 500);
     }, 5000);
-    return () => clearInterval(id);
+    return () => {
+      clearInterval(id);
+      if (tipSwapTimeoutRef.current) clearTimeout(tipSwapTimeoutRef.current);
+    };
   }, [scoreLoading]);
 
   if (!authed) return null;
 
   async function handleRecalculate() {
-    setRecalculating(true);
     sessionStorage.removeItem("reput_scan");
     localStorage.removeItem("reput_last_scan_name");
     localStorage.removeItem("reput_last_scan_keywords");
@@ -514,7 +539,20 @@ export default function DashboardPage() {
       ]);
       const scanResult = scan.status === "fulfilled" ? scan.value : null;
       const linksData = linksRes.status === "fulfilled" ? linksRes.value : null;
-      const allLinks: LinkItem[] = linksData?.links ?? [];
+
+      const searchFailed =
+        linksRes.status === "rejected" ||
+        !linksData ||
+        "error" in (linksData as object) ||
+        linksData.links == null;
+
+      if (searchFailed) {
+        setScanError(true);
+        toast.show("Scan failed. Please try again.");
+        return;
+      }
+
+      const allLinks: LinkItem[] = linksData.links;
       if (scanResult) {
         const negCount = allLinks.filter((l) => {
           const text = `${l.title} ${l.snippet}`.toLowerCase();
@@ -553,6 +591,7 @@ export default function DashboardPage() {
         };
         setScanData(merged);
         setScore(merged.score);
+        setScanError(false);
         sessionStorage.setItem("reput_scan", JSON.stringify(merged));
         localStorage.setItem(
           "reput_last_scan_keywords",
@@ -561,9 +600,8 @@ export default function DashboardPage() {
         localStorage.setItem("reput_last_scan_name", user.name ?? "");
       }
     } catch {
-      /* keep existing */
-    } finally {
-      setRecalculating(false);
+      setScanError(true);
+      toast.show("Scan failed. Please try again.");
     }
   }
 
@@ -620,7 +658,43 @@ export default function DashboardPage() {
                 justifyContent: !scoreLoading ? "center" : "flex-start",
               }}
             >
-              {scoreLoading ? (
+              {scanError && !scoreLoading ? (
+                /* ── Error state ── */
+                <div
+                  className="animate-fade-in"
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center",
+                    gap: "1.25rem",
+                    padding: "2rem 1rem",
+                  }}
+                >
+                  <svg width="48" height="48" viewBox="0 0 24 24" fill="none">
+                    <circle cx="12" cy="12" r="10" stroke="#FF6B4A" strokeWidth="1.5" />
+                    <path d="M12 7v5" stroke="#FF6B4A" strokeWidth="2" strokeLinecap="round" />
+                    <circle cx="12" cy="16" r="1" fill="#FF6B4A" />
+                  </svg>
+                  <p style={{ fontSize: "0.95rem", color: "var(--color-muted)", margin: 0, textAlign: "center" }}>
+                    Scan failed — we couldn&apos;t reach the search service.
+                  </p>
+                  <button
+                    onClick={() => { setScanError(false); void handleRecalculate(); }}
+                    style={{
+                      padding: "0.45rem 1.25rem",
+                      borderRadius: "0.625rem",
+                      border: "1px solid var(--color-border)",
+                      background: "var(--color-surface)",
+                      color: "var(--color-muted)",
+                      fontSize: "0.8125rem",
+                      fontWeight: 600,
+                      cursor: "pointer",
+                    }}
+                  >
+                    Try again
+                  </button>
+                </div>
+              ) : scoreLoading ? (
                 /* ── Loading state ── */
                 <div
                   className="animate-fade-in"
@@ -734,6 +808,10 @@ export default function DashboardPage() {
                       minHeight: "1.2em",
                       textAlign: "center",
                       margin: 0,
+                      willChange: "opacity",
+                      transform: "translateZ(0)",
+                      backfaceVisibility: "hidden",
+                      WebkitBackfaceVisibility: "hidden",
                     }}
                   >
                     {STATUS_MESSAGES[statusIdx]}
@@ -770,6 +848,10 @@ export default function DashboardPage() {
                         opacity: tipVisible ? 1 : 0,
                         transition: "opacity 0.5s ease",
                         minHeight: "3em",
+                        willChange: "opacity",
+                        transform: "translateZ(0)",
+                        backfaceVisibility: "hidden",
+                        WebkitBackfaceVisibility: "hidden",
                       }}
                     >
                       {DID_YOU_KNOW[tipIdx]}
@@ -783,45 +865,6 @@ export default function DashboardPage() {
                   style={{ width: "100%", textAlign: "center" }}
                 >
                   {/* Name */}
-                  {/* Recalculate button */}
-                  {scanKeywords.length > 0 && (
-                    <button
-                      onClick={handleRecalculate}
-                      disabled={recalculating}
-                      style={{
-                        marginBottom: "1rem",
-                        padding: "0.45rem 1rem",
-                        borderRadius: "0.625rem",
-                        border: "1px solid var(--color-border)",
-                        background: "var(--color-surface)",
-                        color: "var(--color-muted)",
-                        fontSize: "0.8125rem",
-                        fontWeight: 600,
-                        cursor: recalculating ? "default" : "pointer",
-                        opacity: recalculating ? 0.6 : 1,
-                        display: "inline-flex",
-                        alignItems: "center",
-                        gap: "0.4rem",
-                        transition: "opacity 0.2s",
-                      }}
-                    >
-                      <svg
-                        width="12"
-                        height="12"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2.5"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      >
-                        <polyline points="23 4 23 10 17 10" />
-                        <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
-                      </svg>
-                      {recalculating ? "Recalculating…" : "Recalculate"}
-                    </button>
-                  )}
-
                   <h1
                     style={{
                       fontSize: "1.5rem",
@@ -1770,7 +1813,9 @@ export default function DashboardPage() {
                             }}
                           >
                             <CalModalButton
-                              calLink={process.env.NEXT_PUBLIC_CAL_STORY_LINK ?? ""}
+                              calLink={
+                                process.env.NEXT_PUBLIC_CAL_STORY_LINK ?? ""
+                              }
                               style={{
                                 display: "inline-flex",
                                 alignItems: "center",
@@ -1871,7 +1916,9 @@ export default function DashboardPage() {
                             }}
                           >
                             <CalModalButton
-                              calLink={process.env.NEXT_PUBLIC_CAL_EDITION_LINK ?? ""}
+                              calLink={
+                                process.env.NEXT_PUBLIC_CAL_EDITION_LINK ?? ""
+                              }
                               style={{
                                 display: "inline-flex",
                                 alignItems: "center",
