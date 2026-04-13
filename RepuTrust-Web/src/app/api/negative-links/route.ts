@@ -131,7 +131,7 @@ async function runSearch(
   countryCode: string | null,
 ): Promise<WebLink[]> {
   const searchTool = buildSearchTool(countryCode);
-  const model = "claude-haiku-4-5";
+  const model = "claude-sonnet-4-6";
   const messages = [{ role: "user" as const, content: prompt }];
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const response = await client.messages.create({
