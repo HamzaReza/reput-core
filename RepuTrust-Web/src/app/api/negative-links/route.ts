@@ -115,7 +115,7 @@ function countryCodeFromNationality(nationality: string): string | null {
 
 function buildSearchTool(countryCode: string | null): Record<string, unknown> {
   const tool: Record<string, unknown> = {
-    type: "web_search_20260209",
+    type: "web_search_20250305",
     name: "web_search",
     max_uses: 8,
   };
@@ -133,7 +133,7 @@ async function runSearch(
   const searchTool = buildSearchTool(countryCode);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const response = await client.messages.create({
-    model: "claude-haiku-4-5",
+    model: "claude-sonnet-4-6",
     max_tokens: 4096,
     tools: [searchTool] as any,
     messages: [{ role: "user", content: prompt }],
@@ -341,17 +341,6 @@ Return ONLY the JSON array. If none found, return [].`;
       }
 
       return Array.from(map.values());
-    }
-
-    if (
-      negLinks.length === 0 &&
-      posLinks.length === 0 &&
-      neutralLinks.length === 0
-    ) {
-      return NextResponse.json(
-        { error: "All searches returned empty results" },
-        { status: 200 },
-      );
     }
 
     const allLinksRaw = [...negLinks, ...posLinks, ...neutralLinks];
