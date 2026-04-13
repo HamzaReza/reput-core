@@ -356,12 +356,23 @@ export default function SettingsPage() {
                   >
                     Date of Birth
                   </label>
-                  <input
-                    type="date"
-                    value={dob}
-                    onChange={(e) => setDob(e.target.value)}
-                    style={{ ...fieldStyle, colorScheme: "light" }}
-                  />
+                  <label
+                    htmlFor="settings-dob-input"
+                    style={{ ...fieldStyle, position: "relative", cursor: "pointer", display: "flex", alignItems: "center" }}
+                  >
+                    <span style={{ color: dob ? "#1e293b" : "#94a3b8", pointerEvents: "none", fontSize: "0.95rem" }}>
+                      {dob
+                        ? new Date(dob + "T00:00:00").toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" })
+                        : "Select date"}
+                    </span>
+                    <input
+                      id="settings-dob-input"
+                      type="date"
+                      value={dob}
+                      onChange={(e) => setDob(e.target.value)}
+                      style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", opacity: 0, cursor: "pointer", border: "none", padding: 0 }}
+                    />
+                  </label>
                 </div>
               </div>
             </div>

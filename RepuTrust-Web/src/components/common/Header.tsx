@@ -3,11 +3,14 @@
 import { clearAuth, isAuthed as checkAuthed } from "@/lib/api";
 import Image from "next/image";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 export default function Header() {
   const router = useRouter();
+  const pathname = usePathname();
+  const isAuthPage = pathname === "/auth" || pathname === "/login";
+  const isAdminPage = pathname === "/feedback-admin";
   const [isAuthed, setIsAuthed] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -99,8 +102,9 @@ export default function Header() {
         >
           {/* Logo */}
           <Link
-            href={isAuthed ? "/dashboard" : "/"}
-            style={{ display: "flex", alignItems: "center", flexShrink: 0 }}
+            href={isAuthPage || isAdminPage ? "#" : isAuthed ? "/dashboard" : "/"}
+            onClick={isAuthPage ? (e) => { e.preventDefault(); signOut(); } : isAdminPage ? (e) => e.preventDefault() : undefined}
+            style={{ display: "flex", alignItems: "center", flexShrink: 0, cursor: isAdminPage ? "default" : "pointer" }}
           >
             <Image
               src="/images/logo-grey.png"
@@ -117,7 +121,7 @@ export default function Header() {
           <div
             className="desktop-nav"
             style={{
-              display: "flex",
+              display: isAuthPage || isAdminPage ? "none" : "flex",
               alignItems: "center",
               gap: "clamp(0.75rem, 2.5vw, 2rem)",
             }}
@@ -184,7 +188,7 @@ export default function Header() {
 
           {/* Hamburger (mobile) */}
           <button
-            className="hamburger"
+            className={isAuthPage || isAdminPage ? "hamburger hamburger-hidden" : "hamburger"}
             onClick={() => setDrawerOpen(true)}
             aria-label="Open menu"
             style={{
@@ -373,6 +377,9 @@ export default function Header() {
           }
           .hamburger {
             display: flex !important;
+          }
+          .hamburger-hidden {
+            display: none !important;
           }
         }
       `}</style>
