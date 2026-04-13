@@ -831,9 +831,17 @@ export default function SettingsPage() {
             </div>
 
             {/* Save */}
-            <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "0.5rem" }}>
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                gap: "0.5rem",
+                width: "100%",
+              }}
+            >
               {saveError && (
-                <p style={{ color: "#FF6B4A", fontSize: "0.875rem" }}>{saveError}</p>
+                <p style={{ color: "#FF6B4A", fontSize: "0.875rem", textAlign: "center" }}>{saveError}</p>
               )}
               <button
                 onClick={saveChanges}
@@ -841,7 +849,9 @@ export default function SettingsPage() {
                 className="glow-button"
                 style={{
                   fontWeight: 700,
-                  padding: "0.75rem 2rem",
+                  minWidth: "min(18rem, 100%)",
+                  boxSizing: "border-box",
+                  padding: "0.75rem 2.75rem",
                   borderRadius: "0.625rem",
                   transition: "all 0.3s",
                   opacity: saveLoading ? 0.8 : 1,
