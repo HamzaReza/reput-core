@@ -115,7 +115,7 @@ function countryCodeFromNationality(nationality: string): string | null {
 
 function buildSearchTool(countryCode: string | null): Record<string, unknown> {
   const tool: Record<string, unknown> = {
-    type: "web_search_20250305",
+    type: "web_search_20260209",
     name: "web_search",
     max_uses: 8,
   };
