@@ -119,9 +119,6 @@ function buildSearchTool(countryCode: string | null): Record<string, unknown> {
     name: "web_search",
     max_uses: 8,
   };
-  if (countryCode) {
-    tool.user_location = { type: "approximate", country: countryCode };
-  }
   return tool;
 }
 
