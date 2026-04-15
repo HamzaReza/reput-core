@@ -131,14 +131,12 @@ async function runSearch(
   countryCode: string | null,
 ): Promise<WebLink[]> {
   const searchTool = buildSearchTool(countryCode);
-  const model = "claude-sonnet-4-6";
-  const messages = [{ role: "user" as const, content: prompt }];
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const response = await client.messages.create({
-    model,
+    model: "claude-sonnet-4-6",
     max_tokens: 4096,
     tools: [searchTool] as any,
-    messages,
+    messages: [{ role: "user", content: prompt }],
   });
 
   const textBlock = response.content.find((b) => b.type === "text");
