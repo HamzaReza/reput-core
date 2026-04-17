@@ -413,7 +413,11 @@ export default function DashboardPage() {
               );
             }).length;
             const posCount = allLinks.filter(
-              (l) => l.sentiment === "positive" || l.risk === "low",
+              (l) =>
+                l.sentiment === "positive" ||
+                l.sentiment === "neutral" ||
+                l.risk === "low" ||
+                l.risk === "none",
             ).length;
             const derivedScore = deriveScore(negCount, posCount);
 
@@ -552,7 +556,11 @@ export default function DashboardPage() {
           );
         }).length;
         const posCount = allLinks.filter(
-          (l) => l.sentiment === "positive" || l.risk === "low",
+          (l) =>
+            l.sentiment === "positive" ||
+            l.sentiment === "neutral" ||
+            l.risk === "low" ||
+            l.risk === "none",
         ).length;
         const derivedScore = deriveScore(negCount, posCount);
         const merged = {
