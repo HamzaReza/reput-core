@@ -90,8 +90,9 @@ function scoreLabel(score: number): { label: string; color: string } {
  */
 function deriveScore(negCount: number, posCount: number): number {
   if (negCount === 0) {
-    // No negatives — perfect score.
-    return 100;
+    if (posCount >= 10) return 100; // Green / Good
+    // Mediocre band — scale 61–85 by positive count (0 pos → 61, 9 pos → 85)
+    return 61 + Math.round((posCount / 9) * 24);
   }
   if (negCount <= 5) {
     // Yellow band (61–85). Fewer negatives & more positives → higher end.
@@ -405,23 +406,11 @@ export default function DashboardPage() {
 
           if (scanResult) {
             const negCount = allLinks.filter((l) => {
-              const text = `${l.title} ${l.snippet}`.toLowerCase();
-
-              const keywordMatch =
-                text.includes("indagato") ||
-                text.includes("investigation") ||
-                text.includes("incidente") ||
-                text.includes("accident") ||
-                text.includes("fraud") ||
-                text.includes("lawsuit") ||
-                text.includes("charged") ||
-                text.includes("arrested");
-
               return (
                 l.sentiment === "negative" ||
                 l.risk === "high" ||
                 l.risk === "medium" ||
-                keywordMatch
+                l.risk === "low"
               );
             }).length;
             const posCount = allLinks.filter(
@@ -473,7 +462,8 @@ export default function DashboardPage() {
     if (!scoreLoading) return;
     const id = setInterval(() => {
       setStatusVisible(false);
-      if (statusSwapTimeoutRef.current) clearTimeout(statusSwapTimeoutRef.current);
+      if (statusSwapTimeoutRef.current)
+        clearTimeout(statusSwapTimeoutRef.current);
       statusSwapTimeoutRef.current = setTimeout(() => {
         setStatusIdx((i) => (i + 1) % STATUS_MESSAGES.length);
         requestAnimationFrame(() => setStatusVisible(true));
@@ -481,7 +471,8 @@ export default function DashboardPage() {
     }, 3000);
     return () => {
       clearInterval(id);
-      if (statusSwapTimeoutRef.current) clearTimeout(statusSwapTimeoutRef.current);
+      if (statusSwapTimeoutRef.current)
+        clearTimeout(statusSwapTimeoutRef.current);
     };
   }, [scoreLoading]);
 
@@ -555,21 +546,11 @@ export default function DashboardPage() {
       const allLinks: LinkItem[] = linksData.links;
       if (scanResult) {
         const negCount = allLinks.filter((l) => {
-          const text = `${l.title} ${l.snippet}`.toLowerCase();
           return (
             l.sentiment === "negative" ||
             l.risk === "high" ||
             l.risk === "medium" ||
-            [
-              "indagato",
-              "investigation",
-              "incidente",
-              "accident",
-              "fraud",
-              "lawsuit",
-              "charged",
-              "arrested",
-            ].some((w) => text.includes(w))
+            l.risk === "low"
           );
         }).length;
         const posCount = allLinks.filter(
@@ -671,15 +652,36 @@ export default function DashboardPage() {
                   }}
                 >
                   <svg width="48" height="48" viewBox="0 0 24 24" fill="none">
-                    <circle cx="12" cy="12" r="10" stroke="#FF6B4A" strokeWidth="1.5" />
-                    <path d="M12 7v5" stroke="#FF6B4A" strokeWidth="2" strokeLinecap="round" />
+                    <circle
+                      cx="12"
+                      cy="12"
+                      r="10"
+                      stroke="#FF6B4A"
+                      strokeWidth="1.5"
+                    />
+                    <path
+                      d="M12 7v5"
+                      stroke="#FF6B4A"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                    />
                     <circle cx="12" cy="16" r="1" fill="#FF6B4A" />
                   </svg>
-                  <p style={{ fontSize: "0.95rem", color: "var(--color-muted)", margin: 0, textAlign: "center" }}>
+                  <p
+                    style={{
+                      fontSize: "0.95rem",
+                      color: "var(--color-muted)",
+                      margin: 0,
+                      textAlign: "center",
+                    }}
+                  >
                     Scan failed — we couldn&apos;t reach the search service.
                   </p>
                   <button
-                    onClick={() => { setScanError(false); void handleRecalculate(); }}
+                    onClick={() => {
+                      setScanError(false);
+                      void handleRecalculate();
+                    }}
                     style={{
                       padding: "0.45rem 1.25rem",
                       borderRadius: "0.625rem",
