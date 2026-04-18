@@ -90,9 +90,9 @@ function scoreLabel(score: number): { label: string; color: string } {
  */
 function deriveScore(negCount: number, posCount: number): number {
   if (negCount === 0) {
-    if (posCount >= 10) return 100; // Green / Good
-    // Mediocre band — scale 61–85 by positive count (0 pos → 61, 9 pos → 85)
-    return 61 + Math.round((posCount / 9) * 24);
+    if (posCount >= 10) return 100;
+    // Scale from 86 to 99 based on positives (so it's always above 1-neg max of 85)
+    return 86 + Math.round((posCount / 9) * 13);
   }
   if (negCount <= 5) {
     // Yellow band (61–85). Fewer negatives & more positives → higher end.
@@ -106,7 +106,6 @@ function deriveScore(negCount: number, posCount: number): number {
     const posBonus = Math.min(posCount, 10);
     return Math.min(60, Math.max(26, base + Math.round((posBonus / 10) * 5)));
   }
-  // Red band (0–25): 11+ negatives.
   const base = Math.max(0, 25 - (negCount - 11) * 2);
   return base;
 }
