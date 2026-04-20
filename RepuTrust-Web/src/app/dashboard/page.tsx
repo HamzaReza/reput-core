@@ -111,7 +111,7 @@ function deriveScore(negCount: number, posCount: number): number {
   return base;
 }
 
-// ── SVG Gauge ─────────────────────────────────────────────────────────────────
+// ── Gauge ──────────────────────────────────────────────────────────────────────
 function RepuGauge({
   score,
   avatar,
@@ -121,47 +121,37 @@ function RepuGauge({
   initials: string;
 }) {
   const cx = 140,
-    cy = 140;
-  const r = 112;
-  const arcStroke = 22;
-  const avatarR = 62;
-
+    cy = 140,
+    r = 112,
+    arcStroke = 22,
+    avatarR = 50;
   const toRad = (d: number) => (d * Math.PI) / 180;
-  const pt = (deg: number, radius: number) => ({
-    x: cx + radius * Math.cos(toRad(deg)),
-    y: cy - radius * Math.sin(toRad(deg)),
+  const pt = (deg: number) => ({
+    x: cx + r * Math.cos(toRad(deg)),
+    y: cy - r * Math.sin(toRad(deg)),
   });
 
-  const s = pt(210, r);
-  const e = pt(330, r);
+  // Arc spans 240° clockwise: from 210° down to -30° (=330°)
+  // Band boundaries by score: 0→25→60→85→100 mapped to 0°→60°→144°→204°→240° of arc
+  // Math angles (CCW): start=210, each band end = 210 - arcSpan
+  const bandAngles = [210, 148, 65, 6, -30]; // start, after red, after orange, after yellow, end
+  const bandColors = ["#FF3D00", "#FF8C00", "#FFD600", "#4CAF50"];
 
-  // Final needle angle (math convention, CCW from east)
+  const arcPath = (startDeg: number, endDeg: number) => {
+    const s = pt(startDeg),
+      e = pt(endDeg);
+    const span = startDeg - endDeg;
+    return `M ${s.x.toFixed(2)} ${s.y.toFixed(2)} A ${r} ${r} 0 ${span > 180 ? 1 : 0} 1 ${e.x.toFixed(2)} ${e.y.toFixed(2)}`;
+  };
+
   const finalAngle = 210 - (score / 100) * 240;
-  // Start angle is always 210° (0% position)
-  const startAngle = 210;
-  // SVG rotation: from startAngle to finalAngle, both converted to SVG rotation degrees
-  // SVG rotates CW, math angles go CCW → SVG angle = -mathAngle
-  const svgStartRot = -startAngle; // = -210
+  const svgStartRot = -210;
   const svgFinalRot = -finalAngle;
-
-  const tipLen = r - arcStroke / 2 - 4;
-  const baseLen = avatarR + 1;
-  const hw = 14;
-
-  // Dart at 0° position (pointing right from cx,cy) — rotation handles direction
-  const tx0 = cx + tipLen;
-  const ty0 = cy;
-  const bx0 = cx + baseLen;
-  const by0 = cy;
-  const p1_0 = { x: bx0, y: by0 + hw };
-  const p2_0 = { x: bx0, y: by0 - hw };
-
+  const needleLen = r - arcStroke / 2 - 4;
+  const hw = 16;
   const pad = arcStroke / 2 + 10;
   const vb = `${cx - r - pad} ${cy - r - pad} ${(r + pad) * 2} ${(r + pad) * 2}`;
-
-  // Unique id per instance to avoid gradient conflicts
-  const gradId = "gaugeGrad";
-  const clipId = "avatarClip";
+  const clipId = "avatarClip2";
 
   return (
     <svg
@@ -170,58 +160,50 @@ function RepuGauge({
       style={{ maxWidth: "21rem", display: "block", margin: "0 auto" }}
     >
       <defs>
-        {/* Inverted gradient: left=red (negative), right=green (positive) */}
-        <linearGradient
-          id={gradId}
-          gradientUnits="userSpaceOnUse"
-          x1={s.x}
-          y1={cy}
-          x2={e.x}
-          y2={cy}
-        >
-          <stop offset="0%" stopColor="#FF3D00" />
-          <stop offset="25%" stopColor="#FF8C00" />
-          <stop offset="45%" stopColor="#FFD600" />
-          <stop offset="70%" stopColor="#C8D600" />
-          <stop offset="100%" stopColor="#4CAF50" />
-        </linearGradient>
         <clipPath id={clipId}>
           <circle cx={cx} cy={cy} r={avatarR} />
         </clipPath>
         <style>{`
-          @keyframes gauge-needle {
+          @keyframes repu-needle {
             from { transform: rotate(${svgStartRot}deg); }
             to   { transform: rotate(${svgFinalRot}deg); }
           }
-          .gauge-needle-g {
+          .repu-needle-g {
             transform-origin: ${cx}px ${cy}px;
             transform: rotate(${svgStartRot}deg);
-            animation: gauge-needle ${(0.6 + (score / 100) * 2.4).toFixed(2)}s cubic-bezier(0.25, 0.1, 0.25, 1) forwards;
+            animation: repu-needle ${(0.6 + (score / 100) * 2.4).toFixed(2)}s cubic-bezier(0.25,0.1,0.25,1) forwards;
             animation-delay: 0.3s;
           }
         `}</style>
       </defs>
 
-      {/* Grey background ring */}
+      {/* Background ring */}
       <circle
         cx={cx}
         cy={cy}
         r={r}
         fill="none"
-        stroke="rgba(148,163,184,0.3)"
+        stroke="rgba(148,163,184,0.25)"
         strokeWidth={arcStroke}
       />
 
-      {/* Colored arc */}
-      <path
-        d={`M ${s.x.toFixed(2)} ${s.y.toFixed(2)} A ${r} ${r} 0 1 1 ${e.x.toFixed(2)} ${e.y.toFixed(2)}`}
-        fill="none"
-        stroke={`url(#${gradId})`}
-        strokeWidth={arcStroke}
-        strokeLinecap="round"
-      />
+      {/* 4 colored arc segments — butt caps, rounded only at the two bottom tips via circles */}
+      {bandColors.map((color, i) => (
+        <path
+          key={i}
+          d={arcPath(bandAngles[i], bandAngles[i + 1])}
+          fill="none"
+          stroke={color}
+          strokeWidth={arcStroke}
+          strokeLinecap="butt"
+        />
+      ))}
+      {/* Rounded cap at bottom-left (start of red) */}
+      <circle cx={pt(210).x} cy={pt(210).y} r={arcStroke / 2} fill="#FF3D00" />
+      {/* Rounded cap at bottom-right (end of green) */}
+      <circle cx={pt(-30).x} cy={pt(-30).y} r={arcStroke / 2} fill="#4CAF50" />
 
-      {/* Avatar background disc */}
+      {/* Avatar background */}
       <circle cx={cx} cy={cy} r={avatarR + 4} fill="#ffffff" />
 
       {/* Avatar */}
@@ -264,16 +246,11 @@ function RepuGauge({
         strokeWidth={2}
       />
 
-      {/* Dart — rotates from start to final angle */}
-      <g className="gauge-needle-g">
+      {/* Needle from center */}
+      <g className="repu-needle-g">
         <path
-          d={[
-            `M ${tx0} ${ty0}`,
-            `L ${p1_0.x} ${p1_0.y}`,
-            `A ${hw} ${hw} 0 0 1 ${p2_0.x} ${p2_0.y}`,
-            `Z`,
-          ].join(" ")}
-          fill="#4A6FA5"
+          d={`M ${cx + needleLen} ${cy} L ${cx + avatarR + 2} ${cy + hw} A ${hw} ${hw} 0 0 1 ${cx + avatarR + 2} ${cy - hw} Z`}
+          fill="#48D4B8"
         />
       </g>
     </svg>
@@ -547,9 +524,7 @@ export default function DashboardPage() {
       const allLinks: LinkItem[] = linksData.links;
       const negCount = allLinks.filter((l) => {
         return (
-          l.sentiment === "negative" ||
-          l.risk === "high" ||
-          l.risk === "medium"
+          l.sentiment === "negative" || l.risk === "high" || l.risk === "medium"
         );
       }).length;
       const posCount = allLinks.filter(
@@ -943,7 +918,7 @@ export default function DashboardPage() {
                   ) : (
                     <>
                       <RepuGauge
-                        score={score}
+                        score={25}
                         avatar={avatar}
                         initials={scanName
                           .split(" ")
