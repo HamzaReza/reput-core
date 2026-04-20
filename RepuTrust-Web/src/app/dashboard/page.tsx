@@ -404,44 +404,42 @@ export default function DashboardPage() {
 
           const allLinks: LinkItem[] = linksData.links;
 
-          if (scanResult) {
-            const negCount = allLinks.filter((l) => {
-              return (
-                l.sentiment === "negative" ||
-                l.risk === "high" ||
-                l.risk === "medium"
-              );
-            }).length;
-            const posCount = allLinks.filter(
-              (l) =>
-                l.sentiment === "positive" ||
-                l.sentiment === "neutral" ||
-                l.risk === "low" ||
-                l.risk === "none",
-            ).length;
-            const derivedScore = deriveScore(negCount, posCount);
+          const negCount = allLinks.filter((l) => {
+            return (
+              l.sentiment === "negative" ||
+              l.risk === "high" ||
+              l.risk === "medium"
+            );
+          }).length;
+          const posCount = allLinks.filter(
+            (l) =>
+              l.sentiment === "positive" ||
+              l.sentiment === "neutral" ||
+              l.risk === "low" ||
+              l.risk === "none",
+          ).length;
+          const derivedScore = deriveScore(negCount, posCount);
 
-            const merged = {
-              ...scanResult,
-              score: derivedScore,
-              risk_level:
-                derivedScore >= 86
-                  ? "low"
-                  : derivedScore >= 61
-                    ? "medium"
-                    : "high",
-              results: allLinks.map((l) => ({ ...l, risk: l.risk as string })),
-              summary: {
-                total_results: allLinks.length,
-                high_risk: allLinks.filter((l) => l.risk === "high").length,
-                medium_risk: allLinks.filter((l) => l.risk === "medium").length,
-                low_risk: allLinks.filter((l) => l.risk === "low").length,
-              },
-            };
-            setScanData(merged);
-            setScore(merged.score);
-            sessionStorage.setItem("reput_scan", JSON.stringify(merged));
-          }
+          const merged = {
+            ...(scanResult ?? {}),
+            score: derivedScore,
+            risk_level:
+              derivedScore >= 86
+                ? "low"
+                : derivedScore >= 61
+                  ? "medium"
+                  : "high",
+            results: allLinks.map((l) => ({ ...l, risk: l.risk as string })),
+            summary: {
+              total_results: allLinks.length,
+              high_risk: allLinks.filter((l) => l.risk === "high").length,
+              medium_risk: allLinks.filter((l) => l.risk === "medium").length,
+              low_risk: allLinks.filter((l) => l.risk === "low").length,
+            },
+          };
+          setScanData(merged as typeof scanResult & typeof merged);
+          setScore(derivedScore);
+          sessionStorage.setItem("reput_scan", JSON.stringify(merged));
           localStorage.setItem("reput_last_scan_keywords", keywordsKey);
           localStorage.setItem("reput_last_scan_name", currentName);
         }
@@ -547,45 +545,43 @@ export default function DashboardPage() {
       }
 
       const allLinks: LinkItem[] = linksData.links;
-      if (scanResult) {
-        const negCount = allLinks.filter((l) => {
-          return (
-            l.sentiment === "negative" ||
-            l.risk === "high" ||
-            l.risk === "medium"
-          );
-        }).length;
-        const posCount = allLinks.filter(
-          (l) =>
-            l.sentiment === "positive" ||
-            l.sentiment === "neutral" ||
-            l.risk === "low" ||
-            l.risk === "none",
-        ).length;
-        const derivedScore = deriveScore(negCount, posCount);
-        const merged = {
-          ...scanResult,
-          score: derivedScore,
-          risk_level:
-            derivedScore >= 86 ? "low" : derivedScore >= 61 ? "medium" : "high",
-          results: allLinks.map((l) => ({ ...l, risk: l.risk as string })),
-          summary: {
-            total_results: allLinks.length,
-            high_risk: allLinks.filter((l) => l.risk === "high").length,
-            medium_risk: allLinks.filter((l) => l.risk === "medium").length,
-            low_risk: allLinks.filter((l) => l.risk === "low").length,
-          },
-        };
-        setScanData(merged);
-        setScore(merged.score);
-        setScanError(false);
-        sessionStorage.setItem("reput_scan", JSON.stringify(merged));
-        localStorage.setItem(
-          "reput_last_scan_keywords",
-          [...currentKeywords].sort().join(","),
+      const negCount = allLinks.filter((l) => {
+        return (
+          l.sentiment === "negative" ||
+          l.risk === "high" ||
+          l.risk === "medium"
         );
-        localStorage.setItem("reput_last_scan_name", user.name ?? "");
-      }
+      }).length;
+      const posCount = allLinks.filter(
+        (l) =>
+          l.sentiment === "positive" ||
+          l.sentiment === "neutral" ||
+          l.risk === "low" ||
+          l.risk === "none",
+      ).length;
+      const derivedScore = deriveScore(negCount, posCount);
+      const merged = {
+        ...(scanResult ?? {}),
+        score: derivedScore,
+        risk_level:
+          derivedScore >= 86 ? "low" : derivedScore >= 61 ? "medium" : "high",
+        results: allLinks.map((l) => ({ ...l, risk: l.risk as string })),
+        summary: {
+          total_results: allLinks.length,
+          high_risk: allLinks.filter((l) => l.risk === "high").length,
+          medium_risk: allLinks.filter((l) => l.risk === "medium").length,
+          low_risk: allLinks.filter((l) => l.risk === "low").length,
+        },
+      };
+      setScanData(merged as typeof scanResult & typeof merged);
+      setScore(derivedScore);
+      setScanError(false);
+      sessionStorage.setItem("reput_scan", JSON.stringify(merged));
+      localStorage.setItem(
+        "reput_last_scan_keywords",
+        [...currentKeywords].sort().join(","),
+      );
+      localStorage.setItem("reput_last_scan_name", user.name ?? "");
     } catch {
       setScanError(true);
       toast.show("Scan failed. Please try again.");
@@ -1627,7 +1623,8 @@ export default function DashboardPage() {
                   )}
 
                   {/* ── Conditional: positive score → congratulations ── */}
-                  {negativeResults.length === 0 &&
+                  {scanData !== null &&
+                    negativeResults.length === 0 &&
                     !scoreLoading &&
                     scanKeywords.length > 0 && (
                       <div
