@@ -20,6 +20,7 @@ import { useEffect, useRef, useState } from "react";
 type RiskLevel = "Negative" | "Poor" | "Mediocre" | "Good";
 
 function apiRiskToUi(risk: string): RiskLevel {
+  console.log("🚀 ~ page.tsx:23 ~ apiRiskToUi ~ risk:", risk);
   if (risk === "high") return "Negative";
   if (risk === "medium") return "Poor";
   if (risk === "low") return "Mediocre";
