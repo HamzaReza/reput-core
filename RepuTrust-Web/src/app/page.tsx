@@ -6,7 +6,8 @@ import Image from "next/image";
 
 export default function SplashPage() {
   const router = useRouter();
-  const [fading, setFading] = useState(false);
+  const [fadeEalixir, setFadeEalixir] = useState(false);
+  const [fadeReput, setFadeReput] = useState(false);
 
   useEffect(() => {
     let destination = "/login";
@@ -14,11 +15,13 @@ export default function SplashPage() {
       if (localStorage.getItem("reput_authed") === "true") destination = "/dashboard";
     } catch {}
 
-    const fadeTimer = setTimeout(() => setFading(true), 2400);
-    const navTimer = setTimeout(() => router.replace(destination), 3200);
+    const t1 = setTimeout(() => setFadeEalixir(true), 2000);  // Ealixir starts fading
+    const t2 = setTimeout(() => setFadeReput(true), 2800);    // ReputTrust starts fading
+    const t3 = setTimeout(() => router.replace(destination), 3800);
     return () => {
-      clearTimeout(fadeTimer);
-      clearTimeout(navTimer);
+      clearTimeout(t1);
+      clearTimeout(t2);
+      clearTimeout(t3);
     };
   }, [router]);
 
@@ -28,21 +31,47 @@ export default function SplashPage() {
         position: "fixed",
         inset: 0,
         display: "flex",
+        flexDirection: "column",
         alignItems: "center",
         justifyContent: "center",
         backgroundColor: "#ffffff",
-        opacity: fading ? 0 : 1,
-        transition: "opacity 0.8s ease",
       }}
     >
-      <Image
-        src="/images/Ealixir.png"
-        alt="Ealixir"
-        width={300}
-        height={150}
-        priority
-        style={{ objectFit: "contain" }}
-      />
+      {/* ReputTrust logo — centered */}
+      <div
+        style={{
+          opacity: fadeReput ? 0 : 1,
+          transition: "opacity 0.8s ease",
+        }}
+      >
+        <Image
+          src="/images/logo-grey.png"
+          alt="ReputTrust"
+          width={280}
+          height={80}
+          priority
+          style={{ objectFit: "contain" }}
+        />
+      </div>
+
+      {/* Ealixir logo — pinned to bottom */}
+      <div
+        style={{
+          position: "absolute",
+          bottom: "2.5rem",
+          opacity: fadeEalixir ? 0 : 1,
+          transition: "opacity 0.8s ease",
+        }}
+      >
+        <Image
+          src="/images/Ealixir.png"
+          alt="Ealixir"
+          width={120}
+          height={40}
+          priority
+          style={{ objectFit: "contain" }}
+        />
+      </div>
     </div>
   );
 }

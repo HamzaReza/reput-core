@@ -2,74 +2,10 @@
 
 import Footer from "@/components/common/Footer";
 import Header from "@/components/common/Header";
+import { isAuthed, auth, users, clearAuth, ScanDepth } from "@/lib/api";
+import { COUNTRY_NAMES } from "@/lib/countries";
 import { useRouter } from "next/navigation";
 import React, { useEffect, useState } from "react";
-
-const NATIONALITIES = [
-  "Afghan",
-  "Albanian",
-  "Algerian",
-  "American",
-  "Argentine",
-  "Australian",
-  "Austrian",
-  "Belgian",
-  "Brazilian",
-  "British",
-  "Bulgarian",
-  "Canadian",
-  "Chilean",
-  "Chinese",
-  "Colombian",
-  "Croatian",
-  "Czech",
-  "Danish",
-  "Dutch",
-  "Egyptian",
-  "Finnish",
-  "French",
-  "German",
-  "Greek",
-  "Hungarian",
-  "Indian",
-  "Indonesian",
-  "Iranian",
-  "Iraqi",
-  "Irish",
-  "Israeli",
-  "Italian",
-  "Japanese",
-  "Jordanian",
-  "Kenyan",
-  "Korean",
-  "Lebanese",
-  "Malaysian",
-  "Mexican",
-  "Moroccan",
-  "New Zealander",
-  "Nigerian",
-  "Norwegian",
-  "Pakistani",
-  "Peruvian",
-  "Philippine",
-  "Polish",
-  "Portuguese",
-  "Romanian",
-  "Russian",
-  "Saudi",
-  "Serbian",
-  "Singaporean",
-  "South African",
-  "Spanish",
-  "Swedish",
-  "Swiss",
-  "Thai",
-  "Turkish",
-  "Ukranian",
-  "Emirati",
-  "Venezuelan",
-  "Vietnamese",
-];
 
 const fieldStyle: React.CSSProperties = {
   width: "100%",
@@ -94,41 +30,104 @@ export default function SettingsPage() {
   const [profileEmail, setProfileEmail] = useState("");
   const [nationality, setNationality] = useState("");
   const [dob, setDob] = useState("");
+  const [scanDepth, setScanDepth] = useState<ScanDepth>("Standard");
   const [keywords, setKeywords] = useState<string[]>([]);
+  const [originalKeywords, setOriginalKeywords] = useState<string[]>([]);
   const [keywordInput, setKeywordInput] = useState("");
+  const [saveLoading, setSaveLoading] = useState(false);
+  const [saveError, setSaveError] = useState("");
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
 
   useEffect(() => {
-    try {
-      if (localStorage.getItem("reput_authed") !== "true") {
-        router.replace("/auth");
-        return;
+    if (!isAuthed()) {
+      router.replace("/auth");
+      return;
+    }
+    setAuthed(true);
+
+    const loadProfile = async () => {
+      try {
+        const [user, profile] = await Promise.all([
+          auth.me(),
+          users.getProfile().catch(() => null),
+        ]);
+        if (user.name) {
+          const parts = user.name.split(" ");
+          setFirstName(parts[0] || "");
+          setLastName(parts.slice(1).join(" ") || "");
+        }
+        setProfileEmail(user.email || "");
+        if (user.phone) setPhone(user.phone);
+        if (user.nationality) setNationality(user.nationality);
+        if (user.date_of_birth) setDob(user.date_of_birth);
+        if (user.scan_depth) setScanDepth(user.scan_depth);
+        if (profile) {
+          if (profile.keywords?.length) {
+            setKeywords(profile.keywords);
+            setOriginalKeywords(profile.keywords);
+          }
+        }
+      } catch {
+        // Fallback to localStorage cache
+        try {
+          setFirstName(localStorage.getItem("reput_firstname") || "");
+          setLastName(localStorage.getItem("reput_lastname") || "");
+          setPhone(localStorage.getItem("reput_phone") || "");
+          setProfileEmail(localStorage.getItem("reput_profile_email") || "");
+          const kw = localStorage.getItem("reput_keywords") || "";
+          setKeywords(kw ? kw.split(",").map((s) => s.trim()).filter(Boolean) : []);
+        } catch {}
       }
-      setAuthed(true);
-      setFirstName(localStorage.getItem("reput_firstname") || "");
-      setLastName(localStorage.getItem("reput_lastname") || "");
-      setPhone(localStorage.getItem("reput_phone") || "");
-      setProfileEmail(localStorage.getItem("reput_profile_email") || "");
-      setNationality(localStorage.getItem("reput_nationality") || "");
-      setDob(localStorage.getItem("reput_dob") || "");
-      const kw = localStorage.getItem("reput_keywords") || "";
-      setKeywords(kw ? kw.split(",").map((s) => s.trim()).filter(Boolean) : []);
-    } catch {}
+    };
+    loadProfile();
   }, [router]);
 
-  const saveChanges = () => {
+  const saveChanges = async () => {
+    setSaveError("");
+    setSaveLoading(true);
     try {
-      localStorage.setItem("reput_firstname", firstName.trim());
-      localStorage.setItem("reput_lastname", lastName.trim());
-      localStorage.setItem("reput_phone", phone.trim());
-      localStorage.setItem("reput_profile_email", profileEmail.trim());
-      localStorage.setItem("reput_nationality", nationality);
-      localStorage.setItem("reput_dob", dob);
-      localStorage.setItem("reput_keywords", keywords.join(","));
-      localStorage.setItem(
-        "reput_name",
-        `${firstName.trim()} ${lastName.trim()}`.trim(),
-      );
-    } catch {}
+      const fullName = `${firstName.trim()} ${lastName.trim()}`.trim();
+      await users.updateMe({ name: fullName, phone: phone.trim(), nationality: nationality || undefined, date_of_birth: dob || undefined, scan_depth: scanDepth });
+      const finalKeywords = keywordInput.trim()
+        ? [...keywords, keywordInput.replace(/,/g, "").trim()].filter(Boolean)
+        : keywords;
+      await users.upsertProfile({ keywords: finalKeywords });
+
+      setOriginalKeywords(finalKeywords);
+
+      try {
+        localStorage.setItem("reput_name", fullName);
+        localStorage.setItem("reput_keywords", finalKeywords.join(","));
+        localStorage.setItem("reput_firstname", firstName.trim());
+        localStorage.setItem("reput_lastname", lastName.trim());
+        localStorage.setItem("reput_phone", phone.trim());
+      } catch {}
+
+      sessionStorage.removeItem("reput_scan");
+      localStorage.removeItem("reput_last_scan_name");
+      localStorage.removeItem("reput_last_scan_keywords");
+
+      router.push("/dashboard");
+    } catch (err: unknown) {
+      setSaveError(err instanceof Error ? err.message : "Failed to save.");
+    } finally {
+      setSaveLoading(false);
+    }
+  };
+
+  const deleteAccount = async () => {
+    setDeleteError("");
+    setDeleteLoading(true);
+    try {
+      await users.deleteMe();
+      clearAuth();
+      router.replace("/auth");
+    } catch (err: unknown) {
+      setDeleteError(err instanceof Error ? err.message : "Failed to delete account.");
+      setDeleteLoading(false);
+    }
   };
 
   if (!authed) return null;
@@ -312,7 +311,7 @@ export default function SettingsPage() {
                     }}
                   >
                     <option value="">Select nationality</option>
-                    {NATIONALITIES.map((n) => (
+                    {COUNTRY_NAMES.map((n) => (
                       <option
                         key={n}
                         value={n}
@@ -353,12 +352,23 @@ export default function SettingsPage() {
                   >
                     Date of Birth
                   </label>
-                  <input
-                    type="date"
-                    value={dob}
-                    onChange={(e) => setDob(e.target.value)}
-                    style={{ ...fieldStyle, colorScheme: "light" }}
-                  />
+                  <label
+                    htmlFor="settings-dob-input"
+                    style={{ ...fieldStyle, position: "relative", cursor: "pointer", display: "flex", alignItems: "center" }}
+                  >
+                    <span style={{ color: dob ? "#1e293b" : "#94a3b8", pointerEvents: "none", fontSize: "0.95rem" }}>
+                      {dob
+                        ? new Date(dob + "T00:00:00").toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" })
+                        : "Select date"}
+                    </span>
+                    <input
+                      id="settings-dob-input"
+                      type="date"
+                      value={dob}
+                      onChange={(e) => setDob(e.target.value)}
+                      style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", opacity: 0, cursor: "pointer", border: "none", padding: 0 }}
+                    />
+                  </label>
                 </div>
               </div>
             </div>
@@ -406,6 +416,8 @@ export default function SettingsPage() {
                     Scan Depth
                   </label>
                   <select
+                    value={scanDepth}
+                    onChange={(e) => setScanDepth(e.target.value as ScanDepth)}
                     style={{
                       width: "100%",
                       padding: "0.5rem 1rem",
@@ -416,9 +428,9 @@ export default function SettingsPage() {
                       outline: "none",
                     }}
                   >
-                    <option>Standard — top 50 results per source</option>
-                    <option>Deep — top 200 results per source</option>
-                    <option>Thorough — full crawl (slower)</option>
+                    <option value="Standard">Standard — top 50 results per source</option>
+                    <option value="Deep">Deep — top 200 results per source</option>
+                    <option value="Thorough">Thorough — full crawl (slower)</option>
                   </select>
                 </div>
 
@@ -721,19 +733,131 @@ export default function SettingsPage() {
               </div>
             </div> */}
 
+            {/* Danger Zone */}
+            <div
+              style={{
+                borderRadius: "0.75rem",
+                padding: "2rem",
+                background: "linear-gradient(160deg, #b91c1c 0%, #ef4444 100%)",
+                border: "1px solid rgba(255,255,255,0.2)",
+                boxShadow: "0 8px 32px rgba(185,28,28,0.28)",
+                "--color-foreground": "#ffffff",
+                "--color-muted": "rgba(255,255,255,0.72)",
+              } as React.CSSProperties}
+            >
+              <h2
+                style={{
+                  fontSize: "1.125rem",
+                  fontWeight: 700,
+                  color: "var(--color-foreground)",
+                  marginBottom: "0.375rem",
+                }}
+              >
+                Danger Zone
+              </h2>
+              <p
+                style={{
+                  color: "var(--color-muted)",
+                  fontSize: "0.8125rem",
+                  marginBottom: "1.25rem",
+                }}
+              >
+                Permanently delete your account and all associated data. This action cannot be undone.
+              </p>
+              {deleteError && (
+                <p style={{ color: "#fca5a5", fontSize: "0.875rem", marginBottom: "0.75rem" }}>{deleteError}</p>
+              )}
+              {!showDeleteConfirm ? (
+                <button
+                  type="button"
+                  onClick={() => setShowDeleteConfirm(true)}
+                  style={{
+                    padding: "0.625rem 1.5rem",
+                    borderRadius: "0.625rem",
+                    border: "2px solid rgba(255,255,255,0.6)",
+                    background: "transparent",
+                    color: "#ffffff",
+                    fontWeight: 700,
+                    fontSize: "0.9375rem",
+                    cursor: "pointer",
+                  }}
+                >
+                  Delete Account
+                </button>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+                  <p style={{ color: "#fef2f2", fontWeight: 600, fontSize: "0.9375rem" }}>
+                    Are you sure? This will permanently delete your account.
+                  </p>
+                  <div style={{ display: "flex", gap: "0.75rem" }}>
+                    <button
+                      type="button"
+                      onClick={deleteAccount}
+                      disabled={deleteLoading}
+                      style={{
+                        padding: "0.625rem 1.5rem",
+                        borderRadius: "0.625rem",
+                        border: "none",
+                        background: "#ffffff",
+                        color: "#b91c1c",
+                        fontWeight: 700,
+                        fontSize: "0.9375rem",
+                        cursor: deleteLoading ? "not-allowed" : "pointer",
+                        opacity: deleteLoading ? 0.7 : 1,
+                      }}
+                    >
+                      {deleteLoading ? "Deleting…" : "Yes, delete my account"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setShowDeleteConfirm(false); setDeleteError(""); }}
+                      disabled={deleteLoading}
+                      style={{
+                        padding: "0.625rem 1.5rem",
+                        borderRadius: "0.625rem",
+                        border: "2px solid rgba(255,255,255,0.6)",
+                        background: "transparent",
+                        color: "#ffffff",
+                        fontWeight: 600,
+                        fontSize: "0.9375rem",
+                        cursor: "pointer",
+                      }}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
             {/* Save */}
-            <div style={{ display: "flex", justifyContent: "flex-end" }}>
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                gap: "0.5rem",
+                width: "100%",
+              }}
+            >
+              {saveError && (
+                <p style={{ color: "#FF6B4A", fontSize: "0.875rem", textAlign: "center" }}>{saveError}</p>
+              )}
               <button
                 onClick={saveChanges}
+                disabled={saveLoading}
                 className="glow-button"
                 style={{
                   fontWeight: 700,
-                  padding: "0.75rem 2rem",
+                  minWidth: "min(18rem, 100%)",
+                  boxSizing: "border-box",
+                  padding: "0.75rem 2.75rem",
                   borderRadius: "0.625rem",
                   transition: "all 0.3s",
+                  opacity: saveLoading ? 0.8 : 1,
                 }}
               >
-                Save Changes
+                {saveLoading ? "Saving…" : "Recalculate score"}
               </button>
             </div>
           </div>

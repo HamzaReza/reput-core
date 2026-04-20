@@ -2,98 +2,14 @@
 
 import Footer from "@/components/common/Footer";
 import Header from "@/components/common/Header";
+import { Toast, useToast } from "@/components/common/Toast";
+import { auth, setToken, users } from "@/lib/api";
+import { COUNTRY_NAMES } from "@/lib/countries";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useRef, useState, Suspense } from "react";
+import { Suspense, useRef, useState } from "react";
 
 // 5 steps: 1=account, 2=otp, 3=information, 4=linkedin, 5=notifications
 type Step = 1 | 2 | 3 | 4 | 5;
-
-const MOCK_PROFILES = [
-  {
-    initials: "JD",
-    bg: "linear-gradient(135deg, #4479DA, #48D4B8)",
-    name: "John Doe",
-    title: "CEO · London, UK",
-  },
-  {
-    initials: "JD",
-    bg: "linear-gradient(135deg, #7B6CF6, #5A4BD1)",
-    name: "Jonathan Davies",
-    title: "Financial Analyst · New York, US",
-  },
-  {
-    initials: "JD",
-    bg: "linear-gradient(135deg, #FF8C42, #E06A1A)",
-    name: "James Douglas",
-    title: "Marketing Director · Berlin, DE",
-  },
-];
-
-const NATIONALITIES = [
-  "Afghan",
-  "Albanian",
-  "Algerian",
-  "American",
-  "Argentine",
-  "Australian",
-  "Austrian",
-  "Belgian",
-  "Brazilian",
-  "British",
-  "Bulgarian",
-  "Canadian",
-  "Chilean",
-  "Chinese",
-  "Colombian",
-  "Croatian",
-  "Czech",
-  "Danish",
-  "Dutch",
-  "Egyptian",
-  "Finnish",
-  "French",
-  "German",
-  "Greek",
-  "Hungarian",
-  "Indian",
-  "Indonesian",
-  "Iranian",
-  "Iraqi",
-  "Irish",
-  "Israeli",
-  "Italian",
-  "Japanese",
-  "Jordanian",
-  "Kenyan",
-  "Korean",
-  "Lebanese",
-  "Malaysian",
-  "Mexican",
-  "Moroccan",
-  "New Zealander",
-  "Nigerian",
-  "Norwegian",
-  "Pakistani",
-  "Peruvian",
-  "Philippine",
-  "Polish",
-  "Portuguese",
-  "Romanian",
-  "Russian",
-  "Saudi",
-  "Serbian",
-  "Singaporean",
-  "South African",
-  "Spanish",
-  "Swedish",
-  "Swiss",
-  "Thai",
-  "Turkish",
-  "Ukranian",
-  "Emirati",
-  "Venezuelan",
-  "Vietnamese",
-];
 
 const PROGRESS_TOTAL = 5;
 
@@ -209,9 +125,11 @@ function Shell({
 
 function AuthPageInner() {
   const router = useRouter();
+  const toast = useToast();
   const searchParams = useSearchParams();
-  const initialStep = (Number(searchParams.get("step")) as Step) || 1;
-  const [step, setStep] = useState<Step>(initialStep);
+  const [step, setStep] = useState<Step>(
+    () => (Number(searchParams.get("step")) as Step) || 1,
+  );
 
   // Step 1
   const [email, setEmail] = useState("");
@@ -235,9 +153,6 @@ function AuthPageInner() {
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [avatar, setAvatar] = useState<string>("");
 
-  // Step 4 — LinkedIn
-  const [profileIndex, setProfileIndex] = useState(0);
-
   // Step 5 — notifications
   const [notifStatus, setNotifStatus] = useState<"idle" | "granted" | "denied">(
     "idle",
@@ -245,39 +160,27 @@ function AuthPageInner() {
 
   // Button loading states
   const [step1Loading, setStep1Loading] = useState(false);
-  const [linkedinLoading, setLinkedinLoading] = useState(false);
   const [step3Loading, setStep3Loading] = useState(false);
-  const [step4NoLoading, setStep4NoLoading] = useState(false);
   const [step4YesLoading, setStep4YesLoading] = useState(false);
+  const [step4NoLoading, setStep4NoLoading] = useState(false);
+  const [profileIndex, setProfileIndex] = useState(0);
   const [step5Loading, setStep5Loading] = useState(false);
+  const [step1Error, setStep1Error] = useState("");
+  const [step3Error, setStep3Error] = useState("");
+  const [keywordsError, setKeywordsError] = useState("");
 
   const advance = () => {
     const next = Math.min(step + 1, 5) as Step;
-    // Persist and authenticate as soon as the user reaches the notifications step
-    if (next === 5) {
-      try {
-        localStorage.setItem("reput_authed", "true");
-        localStorage.setItem("reput_firstname", firstName.trim());
-        localStorage.setItem("reput_lastname", lastName.trim());
-        localStorage.setItem("reput_phone", phone.trim());
-        localStorage.setItem(
-          "reput_profile_email",
-          profileEmail.trim() || email.trim(),
-        );
-        localStorage.setItem("reput_nationality", nationality);
-        localStorage.setItem("reput_dob", dob);
-        localStorage.setItem("reput_keywords", keywords.join(","));
-        localStorage.setItem(
-          "reput_name",
-          `${firstName.trim()} ${lastName.trim()}`.trim() || "John Doe",
-        );
-        if (avatar) localStorage.setItem("reput_avatar", avatar);
-      } catch {}
-    }
     setStep(next);
   };
 
-  const goToDashboard = () => router.push("/dashboard");
+  const goToDashboard = async () => {
+    try {
+      await users.updateMe({ profile_complete: true });
+    } catch {}
+    window.dispatchEvent(new Event("reput-auth-change"));
+    router.push("/dashboard");
+  };
 
   // ── OTP helpers ────────────────────────────────────────────────────────────
   const handleOtpChange = (index: number, value: string) => {
@@ -317,17 +220,25 @@ function AuthPageInner() {
     e.preventDefault();
   };
 
-  const verifyOtp = (digits?: string[]) => {
+  const verifyOtp = async (digits?: string[]) => {
     const code = (digits ?? otp).join("");
     if (code.length < 6) {
       setOtpError("Please enter the 6-digit code.");
       return;
     }
     setOtpVerifying(true);
-    setTimeout(() => {
-      setOtpVerifying(false);
+    try {
+      await auth.verify();
       advance();
-    }, 2000);
+    } catch (err: unknown) {
+      setOtpError(
+        err instanceof Error
+          ? err.message
+          : "Verification failed. Please try again.",
+      );
+    } finally {
+      setOtpVerifying(false);
+    }
   };
 
   // ── Notification permission ────────────────────────────────────────────────
@@ -347,148 +258,257 @@ function AuthPageInner() {
   // ── Step 1: Create Account ─────────────────────────────────────────────────
   if (step === 1) {
     return (
-      <Shell step={step}>
-        <h1
-          style={{
-            fontSize: "1.75rem",
-            fontWeight: 700,
-            marginBottom: "0.5rem",
-            textAlign: "center",
-            color: "#ffffff",
-          }}
-        >
-          Create Account
-        </h1>
-        <p
-          style={{
-            textAlign: "center",
-            color: "var(--color-muted)",
-            marginBottom: "1.75rem",
-            fontSize: "0.875rem",
-          }}
-        >
-          Find out what the internet says about you
-        </p>
-
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            setProfileEmail(email);
-            setStep1Loading(true);
-            setTimeout(() => {
-              setStep1Loading(false);
-              advance();
-            }, 1200);
-          }}
-          style={{ display: "flex", flexDirection: "column", gap: "1rem" }}
-        >
-          <div>
-            <label style={labelStyle}>Email Address</label>
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              style={inputStyle}
-              placeholder="your@email.com"
-              required
-            />
-          </div>
-          <div>
-            <label style={labelStyle}>Password</label>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              style={inputStyle}
-              placeholder="Create a password"
-              required
-            />
-          </div>
-          <button
-            type="submit"
-            disabled={step1Loading}
-            className="glow-button"
+      <>
+        <Toast visible={toast.visible} message={toast.message} />
+        <Shell step={step}>
+          <h1
             style={{
-              width: "100%",
+              fontSize: "1.75rem",
               fontWeight: 700,
-              padding: "0.75rem",
-              borderRadius: "0.625rem",
-              marginTop: "0.25rem",
-              opacity: step1Loading ? 0.8 : 1,
-            }}
-          >
-            {step1Loading ? (
-              <>
-                <Spinner />
-                Sending code…
-              </>
-            ) : (
-              "Continue →"
-            )}
-          </button>
-        </form>
-
-        <div
-          style={{
-            marginTop: "1.5rem",
-            paddingTop: "1.5rem",
-            borderTop: "1px solid rgba(255,255,255,0.25)",
-          }}
-        >
-          <button
-            onClick={() => {
-              setLinkedinLoading(true);
-              setTimeout(() => {
-                setLinkedinLoading(false);
-                setStep(3);
-              }, 1200);
-            }}
-            disabled={linkedinLoading}
-            style={{
-              width: "100%",
-              padding: "0.625rem 1rem",
-              border: "1px solid rgba(255,255,255,0.35)",
-              borderRadius: "0.625rem",
-              backgroundColor: "rgba(255,255,255,0.15)",
+              marginBottom: "0.5rem",
+              textAlign: "center",
               color: "#ffffff",
-              cursor: linkedinLoading ? "default" : "pointer",
-              fontWeight: 500,
-              fontSize: "0.9375rem",
-              opacity: linkedinLoading ? 0.7 : 1,
             }}
           >
-            {linkedinLoading ? (
-              <>
-                <Spinner />
-                Connecting…
-              </>
-            ) : (
-              "Continue with LinkedIn"
-            )}
-          </button>
-        </div>
-
-        <p
-          style={{
-            textAlign: "center",
-            marginTop: "1.25rem",
-            color: "var(--color-muted)",
-            fontSize: "0.875rem",
-          }}
-        >
-          Already have an account?{" "}
-          <a
-            href="/login"
+            Create Account
+          </h1>
+          <p
             style={{
-              color: "var(--color-primary)",
-              fontWeight: 500,
-              textDecoration: "none",
+              textAlign: "center",
+              color: "var(--color-muted)",
+              marginBottom: "1.75rem",
+              fontSize: "0.875rem",
             }}
           >
-            Sign in
-          </a>
-        </p>
-      </Shell>
+            Find out what the internet says about you
+          </p>
+
+          <form
+            onSubmit={async (e) => {
+              e.preventDefault();
+              setStep1Error("");
+              setProfileEmail(email);
+              setStep1Loading(true);
+              try {
+                const res = await auth.register(email, password);
+                setToken(res.access_token);
+                try {
+                  localStorage.setItem("reput_user", JSON.stringify(res.user));
+                } catch {}
+                window.dispatchEvent(new Event("reput-auth-change"));
+                advance();
+              } catch (err: unknown) {
+                setStep1Error(
+                  err instanceof Error ? err.message : "Registration failed.",
+                );
+              } finally {
+                setStep1Loading(false);
+              }
+            }}
+            style={{ display: "flex", flexDirection: "column", gap: "1rem" }}
+          >
+            <div>
+              <label style={labelStyle}>Email Address</label>
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                style={inputStyle}
+                placeholder="your@email.com"
+                required
+              />
+            </div>
+            <div>
+              <label style={labelStyle}>Password</label>
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                style={inputStyle}
+                placeholder="Create a password"
+                required
+              />
+            </div>
+            {step1Error && (
+              <p
+                style={{
+                  color: "#FF6B4A",
+                  fontSize: "0.875rem",
+                  textAlign: "center",
+                  margin: 0,
+                }}
+              >
+                {step1Error}
+              </p>
+            )}
+            <button
+              type="submit"
+              disabled={step1Loading}
+              className="glow-button"
+              style={{
+                width: "100%",
+                fontWeight: 700,
+                padding: "0.75rem",
+                borderRadius: "0.625rem",
+                marginTop: "0.25rem",
+                opacity: step1Loading ? 0.8 : 1,
+              }}
+            >
+              {step1Loading ? (
+                <>
+                  <Spinner />
+                  Sending code…
+                </>
+              ) : (
+                "Continue →"
+              )}
+            </button>
+          </form>
+
+          <div
+            style={{
+              marginTop: "1.5rem",
+              paddingTop: "1.5rem",
+              borderTop: "1px solid rgba(255,255,255,0.25)",
+              display: "flex",
+              flexDirection: "column",
+              gap: "0.75rem",
+            }}
+          >
+            <p
+              style={{
+                textAlign: "center",
+                fontSize: "0.8125rem",
+                color: "rgba(255,255,255,0.6)",
+                margin: 0,
+              }}
+            >
+              or continue with
+            </p>
+
+            {/* Google */}
+            <button
+              onClick={() => toast.show("Coming soon")}
+              style={{
+                width: "100%",
+                padding: "0.625rem 1rem",
+                border: "1px solid rgba(255,255,255,0.35)",
+                borderRadius: "0.625rem",
+                backgroundColor: "rgba(255,255,255,0.15)",
+                color: "#ffffff",
+                cursor: "pointer",
+                fontWeight: 500,
+                fontSize: "0.9375rem",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: "0.5rem",
+              }}
+            >
+              <svg width="18" height="18" viewBox="0 0 48 48" fill="none">
+                <path
+                  d="M43.611 20.083H42V20H24v8h11.303C33.9 32.67 29.332 36 24 36c-6.627 0-12-5.373-12-12s5.373-12 12-12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4 12.955 4 4 12.955 4 24s8.955 20 20 20 20-8.955 20-20c0-1.341-.138-2.65-.389-3.917z"
+                  fill="#FFC107"
+                />
+                <path
+                  d="M6.306 14.691l6.571 4.819C14.655 16.108 19.001 13 24 13c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4 16.318 4 9.656 8.337 6.306 14.691z"
+                  fill="#FF3D00"
+                />
+                <path
+                  d="M24 44c5.166 0 9.86-1.977 13.409-5.192l-6.19-5.238A11.91 11.91 0 0 1 24 36c-5.311 0-9.863-3.309-11.29-7.913l-6.522 5.025C9.505 39.556 16.227 44 24 44z"
+                  fill="#4CAF50"
+                />
+                <path
+                  d="M43.611 20.083H42V20H24v8h11.303a12.04 12.04 0 0 1-4.087 5.571l6.19 5.238C42.012 35.853 44 30.338 44 24c0-1.341-.138-2.65-.389-3.917z"
+                  fill="#1976D2"
+                />
+              </svg>
+              Continue with Google
+            </button>
+
+            {/* Apple */}
+            <button
+              onClick={() => toast.show("Coming soon")}
+              style={{
+                width: "100%",
+                padding: "0.625rem 1rem",
+                border: "1px solid rgba(255,255,255,0.35)",
+                borderRadius: "0.625rem",
+                backgroundColor: "rgba(255,255,255,0.15)",
+                color: "#ffffff",
+                cursor: "pointer",
+                fontWeight: 500,
+                fontSize: "0.9375rem",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: "0.5rem",
+              }}
+            >
+              <svg
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="currentColor"
+              >
+                <path d="M12.152 6.896c-.948 0-2.415-1.078-3.96-1.04-2.04.027-3.91 1.183-4.961 3.014-2.117 3.675-.546 9.103 1.519 12.09 1.013 1.454 2.208 3.09 3.792 3.039 1.52-.065 2.09-.987 3.935-.987 1.831 0 2.35.987 3.96.948 1.637-.026 2.676-1.48 3.676-2.948 1.156-1.688 1.636-3.325 1.662-3.415-.039-.013-3.182-1.221-3.22-4.857-.026-3.04 2.48-4.494 2.597-4.559-1.429-2.09-3.623-2.324-4.39-2.376-2-.156-3.675 1.09-4.61 1.09zM15.53 3.83c.843-1.012 1.4-2.427 1.245-3.83-1.207.052-2.662.805-3.532 1.818-.78.896-1.454 2.338-1.273 3.714 1.338.104 2.715-.688 3.559-1.701z" />
+              </svg>
+              Continue with Apple
+            </button>
+
+            {/* LinkedIn */}
+            <button
+              onClick={() => toast.show("Coming soon")}
+              style={{
+                width: "100%",
+                padding: "0.625rem 1rem",
+                border: "1px solid rgba(255,255,255,0.35)",
+                borderRadius: "0.625rem",
+                backgroundColor: "rgba(255,255,255,0.15)",
+                color: "#ffffff",
+                cursor: "pointer",
+                fontWeight: 500,
+                fontSize: "0.9375rem",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: "0.5rem",
+              }}
+            >
+              <svg
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="currentColor"
+              >
+                <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 0 1-2.063-2.065 2.064 2.064 0 1 1 2.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z" />
+              </svg>
+              Continue with LinkedIn
+            </button>
+          </div>
+
+          <p
+            style={{
+              textAlign: "center",
+              marginTop: "1.25rem",
+              color: "var(--color-muted)",
+              fontSize: "0.875rem",
+            }}
+          >
+            Already have an account?{" "}
+            <a
+              href="/login"
+              style={{
+                color: "var(--color-primary)",
+                fontWeight: 500,
+                textDecoration: "none",
+              }}
+            >
+              Sign in
+            </a>
+          </p>
+        </Shell>
+      </>
     );
   }
 
@@ -686,8 +706,10 @@ function AuthPageInner() {
         </p>
 
         <form
-          onSubmit={(e) => {
+          onSubmit={async (e) => {
             e.preventDefault();
+            setStep3Error("");
+            setKeywordsError("");
             const finalKeywords = [...keywords];
             if (keywordInput.trim()) {
               const val = keywordInput.replace(/,/g, "").trim();
@@ -697,12 +719,37 @@ function AuthPageInner() {
               }
               setKeywordInput("");
             }
-            if (finalKeywords.length === 0) return;
+            if (finalKeywords.length === 0) {
+              setKeywordsError("Please add at least one keyword.");
+              return;
+            }
             setStep3Loading(true);
-            setTimeout(() => {
-              setStep3Loading(false);
+            try {
+              const fullName = `${firstName.trim()} ${lastName.trim()}`.trim();
+              await users.updateMe({
+                name: fullName,
+                phone: phone.trim() || undefined,
+                nationality: nationality || undefined,
+                date_of_birth: dob || undefined,
+              });
+              await users.upsertProfile({
+                keywords: finalKeywords,
+                avatar_url: avatar || null,
+                notification_email: true,
+              });
+              try {
+                localStorage.setItem("reput_name", fullName || "User");
+                localStorage.setItem("reput_keywords", finalKeywords.join(","));
+                if (avatar) localStorage.setItem("reput_avatar", avatar);
+              } catch {}
               advance();
-            }, 1200);
+            } catch (err: unknown) {
+              setStep3Error(
+                err instanceof Error ? err.message : "Failed to save profile.",
+              );
+            } finally {
+              setStep3Loading(false);
+            }
           }}
           style={{ display: "flex", flexDirection: "column", gap: "0.875rem" }}
         >
@@ -822,66 +869,51 @@ function AuthPageInner() {
             required
           />
 
-          <div style={{ position: "relative" }}>
-            <select
-              value={nationality}
-              onChange={(e) => setNationality(e.target.value)}
+          <CountryPicker value={nationality} onChange={setNationality} />
+
+          <div
+            style={{ ...inputStyle, position: "relative", cursor: "pointer" }}
+            onClick={() => {
+              const el = document.getElementById(
+                "dob-input",
+              ) as HTMLInputElement | null;
+              el?.showPicker?.();
+              el?.click();
+            }}
+          >
+            <span
               style={{
-                ...inputStyle,
-                appearance: "none",
-                WebkitAppearance: "none",
-                paddingRight: "2.5rem",
-                color: nationality ? "#1e293b" : "#94a3b8",
+                color: dob ? "#1e293b" : "#94a3b8",
+                pointerEvents: "none",
+                fontSize: "0.95rem",
               }}
-              required
             >
-              <option value="" disabled hidden>
-                Nationality
-              </option>
-              {NATIONALITIES.map((n) => (
-                <option
-                  key={n}
-                  value={n}
-                  style={{
-                    backgroundColor: "#ffffff",
-                    color: "#1e293b",
-                  }}
-                >
-                  {n}
-                </option>
-              ))}
-            </select>
-            <svg
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="rgba(100,116,139,0.6)"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
+              {dob
+                ? new Date(dob + "T00:00:00").toLocaleDateString(undefined, {
+                    year: "numeric",
+                    month: "long",
+                    day: "numeric",
+                  })
+                : "Date of Birth"}
+            </span>
+            <input
+              id="dob-input"
+              type="date"
+              value={dob}
+              onChange={(e) => setDob(e.target.value)}
               style={{
                 position: "absolute",
-                right: "1rem",
-                top: "50%",
-                transform: "translateY(-50%)",
-                pointerEvents: "none",
+                top: 0,
+                left: 0,
+                width: "100%",
+                height: "100%",
+                opacity: 0,
+                cursor: "pointer",
+                border: "none",
+                padding: 0,
               }}
-            >
-              <polyline points="6 9 12 15 18 9" />
-            </svg>
+            />
           </div>
-
-          <input
-            type="date"
-            value={dob}
-            onChange={(e) => setDob(e.target.value)}
-            style={{
-              ...inputStyle,
-              colorScheme: "light",
-              color: dob ? "#1e293b" : "#94a3b8",
-            }}
-          />
 
           <div>
             <div
@@ -1001,6 +1033,7 @@ function AuthPageInner() {
                     const val = keywordInput.replace(/,/g, "").trim();
                     if (val && !keywords.includes(val)) {
                       setKeywords((prev) => [...prev, val]);
+                      setKeywordsError("");
                     }
                     setKeywordInput("");
                   } else if (
@@ -1015,6 +1048,7 @@ function AuthPageInner() {
                   const val = keywordInput.replace(/,/g, "").trim();
                   if (val && !keywords.includes(val)) {
                     setKeywords((prev) => [...prev, val]);
+                    setKeywordsError("");
                   }
                   setKeywordInput("");
                 }}
@@ -1034,6 +1068,17 @@ function AuthPageInner() {
               />
             </div>
           </div>
+          {keywordsError && (
+            <p
+              style={{
+                color: "#ef4444",
+                fontSize: "0.8rem",
+                marginTop: "-0.25rem",
+              }}
+            >
+              {keywordsError}
+            </p>
+          )}
 
           <label
             style={{
@@ -1098,6 +1143,18 @@ function AuthPageInner() {
             </span>
           </label>
 
+          {step3Error && (
+            <p
+              style={{
+                color: "#FF6B4A",
+                fontSize: "0.875rem",
+                textAlign: "center",
+                margin: 0,
+              }}
+            >
+              {step3Error}
+            </p>
+          )}
           <button
             type="submit"
             disabled={step3Loading}
@@ -1129,12 +1186,94 @@ function AuthPageInner() {
 
   // ── Step 4: LinkedIn ───────────────────────────────────────────────────────
   if (step === 4) {
+    const fullName = [firstName, lastName].filter(Boolean).join(" ") || "You";
+    const profileSubtitle = nationality || undefined;
+
+    const fn = firstName || "J";
+    const ln = lastName || "Doe";
+    const initial = fn[0].toUpperCase();
+
+    // Generate plausible name variants that resemble the user's name
+    const SIMILAR_FIRST: Record<string, string[]> = {
+      A: ["Aaron", "Adrian", "Alex", "Adam"],
+      B: ["Benjamin", "Blake", "Brandon", "Brett"],
+      C: ["Carlos", "Cameron", "Chris", "Cole"],
+      D: ["Daniel", "David", "Dylan", "Dean"],
+      E: ["Ethan", "Edward", "Eric", "Evan"],
+      F: ["Frank", "Felix", "Finn", "Federico"],
+      G: ["George", "Gabriel", "Gavin", "Grant"],
+      H: ["Henry", "Harrison", "Hugo", "Hassan"],
+      I: ["Ian", "Isaac", "Ivan", "Ibrahim"],
+      J: ["James", "Jonathan", "Jason", "Jordan"],
+      K: ["Kevin", "Kyle", "Keith", "Kai"],
+      L: ["Lucas", "Liam", "Leon", "Luis"],
+      M: ["Michael", "Marcus", "Max", "Martin"],
+      N: ["Nathan", "Nicholas", "Neil", "Noah"],
+      O: ["Oliver", "Oscar", "Owen", "Omar"],
+      P: ["Patrick", "Peter", "Paul", "Philip"],
+      Q: ["Quentin", "Quinn"],
+      R: ["Ryan", "Robert", "Richard", "Rafael"],
+      S: ["Samuel", "Sebastian", "Scott", "Simon"],
+      T: ["Thomas", "Tyler", "Timothy", "Troy"],
+      U: ["Ulrich", "Uri"],
+      V: ["Victor", "Vincent", "Vince"],
+      W: ["William", "Walter", "Wayne", "Wesley"],
+      X: ["Xavier"],
+      Y: ["Yusuf", "Yannick"],
+      Z: ["Zachary", "Zane"],
+    };
+    const SIMILAR_LAST: Record<string, string[]> = {
+      A: ["Anderson", "Allen", "Ahmed", "Armstrong"],
+      B: ["Brown", "Baker", "Bell", "Brooks"],
+      C: ["Clark", "Collins", "Carter", "Chen"],
+      D: ["Davis", "Dixon", "Daniels", "Drake"],
+      E: ["Evans", "Edwards", "Ellis"],
+      F: ["Fisher", "Foster", "Flynn", "Ford"],
+      G: ["Garcia", "Gray", "Graham", "Green"],
+      H: ["Harris", "Hall", "Hughes", "Hunt"],
+      I: ["Ibrahim", "Ingram"],
+      J: ["Johnson", "Jones", "Jackson", "Jensen"],
+      K: ["Khan", "King", "Kelly", "Kim"],
+      L: ["Lee", "Lewis", "Lopez", "Lynch"],
+      M: ["Miller", "Moore", "Morgan", "Mitchell"],
+      N: ["Nelson", "Newman", "Nguyen"],
+      O: ["Owen", "O'Brien", "Oliver"],
+      P: ["Parker", "Patel", "Phillips", "Price"],
+      Q: ["Quinn"],
+      R: ["Roberts", "Robinson", "Rodriguez", "Ross"],
+      S: ["Smith", "Scott", "Stewart", "Stone"],
+      T: ["Taylor", "Thomas", "Thompson", "Turner"],
+      U: ["Upton"],
+      V: ["Vargas", "Vance"],
+      W: ["Walker", "Ward", "Watson", "White"],
+      X: ["Xavier"],
+      Y: ["Young", "Yang"],
+      Z: ["Zhang", "Zimmermann"],
+    };
+
+    const altFirsts = (SIMILAR_FIRST[initial] ?? ["Alex", "Andrew", "Aaron"])
+      .filter((n) => n.toLowerCase() !== fn.toLowerCase())
+      .slice(0, 3);
+    const lnInitial = ln[0].toUpperCase();
+    const altLasts = (SIMILAR_LAST[lnInitial] ?? ["Smith", "Jones", "Brown"])
+      .filter((n) => n.toLowerCase() !== ln.toLowerCase())
+      .slice(0, 3);
+
+    const PROFILES = [
+      { name: fullName, subtitle: profileSubtitle, img: 1 },
+      { name: `${altFirsts[0] ?? fn} ${ln}`, subtitle: undefined, img: 12 },
+      { name: `${fn} ${altLasts[0] ?? ln}`, subtitle: undefined, img: 33 },
+      {
+        name: `${initial}. ${altLasts[1] ?? altLasts[0] ?? ln}`,
+        subtitle: undefined,
+        img: 57,
+      },
+    ];
+
     const prev =
-      MOCK_PROFILES[
-        (profileIndex - 1 + MOCK_PROFILES.length) % MOCK_PROFILES.length
-      ];
-    const curr = MOCK_PROFILES[profileIndex];
-    const next = MOCK_PROFILES[(profileIndex + 1) % MOCK_PROFILES.length];
+      PROFILES[(profileIndex - 1 + PROFILES.length) % PROFILES.length];
+    const curr = PROFILES[profileIndex];
+    const next = PROFILES[(profileIndex + 1) % PROFILES.length];
 
     return (
       <Shell step={step}>
@@ -1178,10 +1317,21 @@ function AuthPageInner() {
               transition: "all 0.3s",
             }}
           >
-            <ProfileCard profile={prev} size={110} />
+            <ProfileCard
+              name={prev.name}
+              subtitle={prev.subtitle}
+              imgIndex={prev.img}
+              size={110}
+            />
           </div>
           <div style={{ flexShrink: 0, transition: "all 0.3s" }}>
-            <ProfileCard profile={curr} size={148} showName />
+            <ProfileCard
+              name={curr.name}
+              subtitle={curr.subtitle}
+              imgIndex={curr.img}
+              size={148}
+              showName
+            />
           </div>
           <div
             style={{
@@ -1191,7 +1341,12 @@ function AuthPageInner() {
               transition: "all 0.3s",
             }}
           >
-            <ProfileCard profile={next} size={110} />
+            <ProfileCard
+              name={next.name}
+              subtitle={next.subtitle}
+              imgIndex={next.img}
+              size={110}
+            />
           </div>
         </div>
 
@@ -1201,8 +1356,8 @@ function AuthPageInner() {
               setStep4NoLoading(true);
               setTimeout(() => {
                 setStep4NoLoading(false);
-                setProfileIndex((i) => (i + 1) % MOCK_PROFILES.length);
-              }, 500);
+                setProfileIndex((i) => (i + 1) % PROFILES.length);
+              }, 400);
             }}
             disabled={step4NoLoading || step4YesLoading}
             style={{
@@ -1518,12 +1673,165 @@ function AuthPageInner() {
   );
 }
 
+function CountryPicker({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  const [query, setQuery] = useState("");
+  const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const filtered = query.trim()
+    ? COUNTRY_NAMES.filter((c) =>
+        c.toLowerCase().includes(query.toLowerCase()),
+      ).slice(0, 80)
+    : COUNTRY_NAMES;
+
+  const handleSelect = (name: string) => {
+    onChange(name);
+    setQuery("");
+    setOpen(false);
+  };
+
+  const onBlur = (e: React.FocusEvent) => {
+    if (!containerRef.current?.contains(e.relatedTarget as Node)) {
+      setOpen(false);
+      setQuery("");
+    }
+  };
+
+  return (
+    <div ref={containerRef} style={{ position: "relative" }} onBlur={onBlur}>
+      <div style={{ position: "relative" }}>
+        <input
+          type="text"
+          value={open ? query : value}
+          placeholder="Nationality"
+          autoComplete="off"
+          onFocus={() => {
+            setQuery("");
+            setOpen(true);
+          }}
+          onChange={(e) => {
+            setQuery(e.target.value);
+            if (!open) setOpen(true);
+          }}
+          style={{
+            ...inputStyle,
+            paddingRight: "2.5rem",
+            color: value && !open ? "#1e293b" : open ? "#1e293b" : "#94a3b8",
+          }}
+        />
+        <svg
+          width="16"
+          height="16"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="rgba(100,116,139,0.6)"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          style={{
+            position: "absolute",
+            right: "1rem",
+            top: "50%",
+            transform: open ? "translateY(-50%) rotate(180deg)" : "translateY(-50%)",
+            pointerEvents: "none",
+            transition: "transform 0.2s",
+          }}
+        >
+          <polyline points="6 9 12 15 18 9" />
+        </svg>
+      </div>
+
+      {open && (
+        <div
+          style={{
+            position: "absolute",
+            top: "calc(100% + 4px)",
+            left: 0,
+            right: 0,
+            backgroundColor: "#ffffff",
+            border: "1px solid var(--color-border, #e2e8f0)",
+            borderRadius: "0.625rem",
+            boxShadow: "0 8px 24px rgba(0,0,0,0.15)",
+            maxHeight: "min(14rem, 40vh)",
+            overflowY: "auto",
+            zIndex: 200,
+            WebkitOverflowScrolling: "touch",
+          }}
+        >
+          {filtered.length === 0 ? (
+            <div
+              style={{
+                padding: "0.75rem 1rem",
+                color: "#94a3b8",
+                fontSize: "0.875rem",
+              }}
+            >
+              No results
+            </div>
+          ) : (
+            filtered.map((name) => (
+              <button
+                key={name}
+                type="button"
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  handleSelect(name);
+                }}
+                style={{
+                  display: "block",
+                  width: "100%",
+                  textAlign: "left",
+                  padding: "0.625rem 1rem",
+                  border: "none",
+                  borderBottom: "1px solid #f1f5f9",
+                  backgroundColor: name === value ? "#eef3ff" : "transparent",
+                  color: "#1e293b",
+                  fontSize: "0.9375rem",
+                  cursor: "pointer",
+                  fontWeight: name === value ? 500 : 400,
+                }}
+              >
+                {name}
+              </button>
+            ))
+          )}
+        </div>
+      )}
+      {/* hidden required field so native form validation works */}
+      <input
+        type="text"
+        tabIndex={-1}
+        required
+        value={value}
+        onChange={() => {}}
+        style={{
+          position: "absolute",
+          opacity: 0,
+          height: 0,
+          width: 0,
+          pointerEvents: "none",
+        }}
+      />
+    </div>
+  );
+}
+
 function ProfileCard({
-  profile,
+  name,
+  subtitle,
+  imgIndex,
   size,
   showName,
 }: {
-  profile: (typeof MOCK_PROFILES)[0];
+  name: string;
+  subtitle?: string;
+  imgIndex: number;
   size: number;
   showName?: boolean;
 }) {
@@ -1541,17 +1849,24 @@ function ProfileCard({
           width: size,
           height: size,
           borderRadius: "0.875rem",
-          background: profile.bg,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          fontSize: size * 0.28,
-          fontWeight: 800,
-          color: "#fff",
-          letterSpacing: "-0.02em",
+          overflow: "hidden",
+          boxShadow: "0 8px 32px rgba(0,0,0,0.25)",
+          border: "3px solid rgba(255,255,255,0.4)",
         }}
       >
-        {profile.initials}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={`https://i.pravatar.cc/${size * 2}?img=${imgIndex}`}
+          alt={name}
+          width={size}
+          height={size}
+          style={{
+            width: "100%",
+            height: "100%",
+            objectFit: "cover",
+            display: "block",
+          }}
+        />
       </div>
       {showName && (
         <div style={{ textAlign: "center" }}>
@@ -1562,11 +1877,13 @@ function ProfileCard({
               fontSize: "0.9375rem",
             }}
           >
-            {profile.name}
+            {name}
           </p>
-          <p style={{ color: "var(--color-muted)", fontSize: "0.75rem" }}>
-            {profile.title}
-          </p>
+          {subtitle && (
+            <p style={{ color: "var(--color-muted)", fontSize: "0.75rem" }}>
+              {subtitle}
+            </p>
+          )}
         </div>
       )}
     </div>
