@@ -215,6 +215,9 @@ OUTPUT RULES:
 - Do NOT downgrade to neutral.
 - Do NOT skip borderline cases — include them as NEGATIVE.
 
+MANDATORY NAME FILTER: Every result MUST explicitly mention "${name}" by name in the title or snippet.
+Discard any result where "${name}" does not appear — do NOT include results about keywords alone.
+
 Return a JSON array with:
 - url
 - title
@@ -250,6 +253,9 @@ STRICT RULE:
 
 ${nationality ? `Only include results relevant to ${nationality}.` : ""}
 
+MANDATORY NAME FILTER: Every result MUST explicitly mention "${name}" by name in the title or snippet.
+Discard any result where "${name}" does not appear — do NOT include results about keywords alone.
+
 Return a JSON array with:
 - url
 - title
@@ -281,6 +287,9 @@ CLASSIFY AS NEGATIVE if:
 - ANY risk, controversy, or legal issue exists (even minor)
 
 ${nationality ? `Only include results relevant to ${nationality}.` : ""}
+
+MANDATORY NAME FILTER: Every result MUST explicitly mention "${name}" by name in the title or snippet.
+Discard any result where "${name}" does not appear — do NOT include results about keywords alone.
 
 Return a JSON array with:
 - url
