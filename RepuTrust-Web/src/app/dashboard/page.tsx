@@ -136,6 +136,13 @@ function RepuGauge({
   // Math angles (CCW): start=210, each band end = 210 - arcSpan
   const bandAngles = [210, 148, 65, 6, -30]; // start, after red, after orange, after yellow, end
   const bandColors = ["#FF3D00", "#FF8C00", "#FFD600", "#4CAF50"];
+  // Adjacent color pairs for blending at each boundary
+  const blendPairs: [string, string, number][] = [
+    ["#FF3D00", "#FF8C00", 148],
+    ["#FF8C00", "#FFD600", 65],
+    ["#FFD600", "#4CAF50", 6],
+  ];
+  const blendSpan = 9; // degrees either side of boundary
 
   const arcPath = (startDeg: number, endDeg: number) => {
     const s = pt(startDeg),
@@ -163,6 +170,16 @@ function RepuGauge({
         <clipPath id={clipId}>
           <circle cx={cx} cy={cy} r={avatarR} />
         </clipPath>
+        {/* Blend gradients at each band boundary — direction follows arc tangent */}
+        {blendPairs.map(([c1, c2, angle], i) => {
+          const s = pt(angle + blendSpan), e = pt(angle - blendSpan);
+          return (
+            <linearGradient key={i} id={`blend${i}`} gradientUnits="userSpaceOnUse" x1={s.x} y1={s.y} x2={e.x} y2={e.y}>
+              <stop offset="0%" stopColor={c1} />
+              <stop offset="100%" stopColor={c2} />
+            </linearGradient>
+          );
+        })}
         <style>{`
           @keyframes repu-needle {
             from { transform: rotate(${svgStartRot}deg); }
@@ -194,6 +211,17 @@ function RepuGauge({
           d={arcPath(bandAngles[i], bandAngles[i + 1])}
           fill="none"
           stroke={color}
+          strokeWidth={arcStroke}
+          strokeLinecap="butt"
+        />
+      ))}
+      {/* Blend arcs overlaid at each boundary */}
+      {blendPairs.map(([,, angle], i) => (
+        <path
+          key={i}
+          d={arcPath(angle + blendSpan, angle - blendSpan)}
+          fill="none"
+          stroke={`url(#blend${i})`}
           strokeWidth={arcStroke}
           strokeLinecap="butt"
         />
