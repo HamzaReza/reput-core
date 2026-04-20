@@ -918,7 +918,7 @@ export default function DashboardPage() {
                   ) : (
                     <>
                       <RepuGauge
-                        score={25}
+                        score={score}
                         avatar={avatar}
                         initials={scanName
                           .split(" ")
