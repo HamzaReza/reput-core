@@ -12,6 +12,32 @@ export interface WebLink {
   type: string;
 }
 
+interface SerperResult {
+  title: string;
+  link: string;
+  snippet: string;
+  position: number;
+}
+
+interface SerperResponse {
+  organic: SerperResult[];
+}
+
+interface FirecrawlResponse {
+  success: boolean;
+  data?: {
+    markdown?: string;
+    metadata?: { title?: string; description?: string };
+  };
+}
+
+interface ArticleForClassification {
+  url: string;
+  title: string;
+  snippet: string;
+  content: string;
+}
+
 /** Legacy demonyms and shorthand from the old nationality dropdown (still stored in profiles). */
 const NATIONALITY_ALIASES: Record<string, string> = {
   afghan: "AF",
@@ -91,7 +117,6 @@ const NATIONALITY_ALIASES: Record<string, string> = {
   taiwan: "TW",
   vietnam: "VN",
   philippines: "PH",
-  // Short names that differ from ISO 3166-1 official names in `COUNTRY_NAME_TO_ISO`
   iran: "IR",
   russia: "RU",
   syria: "SY",
@@ -113,26 +138,180 @@ function countryCodeFromNationality(nationality: string): string | null {
   return COUNTRY_NAME_TO_ISO[k] ?? NATIONALITY_ALIASES[k] ?? null;
 }
 
-function buildSearchTool(countryCode: string | null): Record<string, unknown> {
-  const tool: Record<string, unknown> = {
-    type: "web_search_20260209",
-    name: "web_search",
-    max_uses: 8,
-  };
-  return tool;
+function dedupeLinks(all: WebLink[]): WebLink[] {
+  const map = new Map<string, WebLink>();
+
+  const sentimentPriority = { negative: 3, neutral: 2, positive: 1 };
+  const riskPriority = { high: 4, medium: 3, low: 2, none: 1 };
+
+  for (const link of all) {
+    const existing = map.get(link.url);
+    if (!existing) {
+      map.set(link.url, link);
+      continue;
+    }
+    const existingScore =
+      sentimentPriority[existing.sentiment] * 10 + riskPriority[existing.risk];
+    const newScore =
+      sentimentPriority[link.sentiment] * 10 + riskPriority[link.risk];
+    if (newScore > existingScore) {
+      map.set(link.url, link);
+    }
+  }
+
+  return Array.from(map.values());
 }
 
-async function runSearch(
-  client: Anthropic,
-  prompt: string,
+// Maps ISO 3166-1 alpha-2 country codes to their primary language codes for Serper hl param.
+const COUNTRY_TO_LANGUAGE: Record<string, string> = {
+  IT: "it", FR: "fr", DE: "de", ES: "es", PT: "pt", NL: "nl",
+  PL: "pl", RO: "ro", HU: "hu", CZ: "cz", SK: "sk", HR: "hr",
+  RU: "ru", UA: "ua", TR: "tr", AR: "ar", JP: "ja", KR: "ko",
+  CN: "zh-CN", TW: "zh-TW", SA: "ar", AE: "ar", EG: "ar",
+  IN: "hi", TH: "th", VN: "vi", ID: "id", MY: "ms",
+  GR: "el", SV: "sv", NO: "no", FI: "fi", DK: "da",
+};
+
+
+async function searchSerper(
+  query: string,
   countryCode: string | null,
+  numResults = 20,
+): Promise<SerperResult[]> {
+  const serperKey = process.env.SERPER_API_KEY;
+  if (!serperKey) throw new Error("SERPER_API_KEY not configured");
+
+  const payload: Record<string, unknown> = { q: query, num: numResults };
+  if (countryCode) {
+    payload.gl = countryCode.toLowerCase();
+    const lang = COUNTRY_TO_LANGUAGE[countryCode.toUpperCase()];
+    if (lang) payload.hl = lang;
+  }
+
+  const res = await fetch("https://google.serper.dev/search", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-API-KEY": serperKey,
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!res.ok) {
+    console.error(`Serper error: ${res.status} ${await res.text()}`);
+    return [];
+  }
+
+  const data = (await res.json()) as SerperResponse;
+  return data.organic ?? [];
+}
+
+async function scrapeWithFirecrawl(url: string): Promise<string | null> {
+  const key = process.env.FIRECRAWL_API_KEY;
+  if (!key) return null;
+
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 8000);
+
+    const res = await fetch("https://api.firecrawl.dev/v1/scrape", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${key}`,
+      },
+      body: JSON.stringify({ url, formats: ["markdown"] }),
+      signal: controller.signal,
+    });
+
+    clearTimeout(timer);
+    if (!res.ok) return null;
+
+    const data = (await res.json()) as FirecrawlResponse;
+    if (!data.success || !data.data?.markdown) return null;
+
+    return data.data.markdown.slice(0, 600);
+  } catch {
+    return null;
+  }
+}
+
+async function classifyWithClaude(
+  client: Anthropic,
+  articles: ArticleForClassification[],
+  name: string,
+  nationality: string | null,
 ): Promise<WebLink[]> {
-  const searchTool = buildSearchTool(countryCode);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  if (articles.length === 0) return [];
+
+  const articleList = articles
+    .map(
+      (a, i) =>
+        `[${i + 1}] URL: ${a.url}
+Title: ${a.title}
+Snippet: ${a.snippet}
+Content: ${a.content}`,
+    )
+    .join("\n\n---\n\n");
+
+  const nationalityLine = nationality
+    ? `The subject is from ${nationality}. Only include results clearly relevant to this person and their region.`
+    : "";
+
+  const prompt = `You are a reputation intelligence analyst. Classify the following ${articles.length} articles about "${name}".
+
+${nationalityLine}
+
+CLASSIFICATION RULES:
+
+NEGATIVE sentiment — classify if the article contains ANY of:
+- Criminal investigations, police involvement, charges, arrests
+- Lawsuits, legal disputes, court cases, regulatory sanctions
+- Fraud, scams, financial misconduct
+- Accusations, allegations, or suspicion of wrongdoing
+- Controversies, scandals, or reputation-damaging incidents
+- Accidents or incidents involving the subject
+- WHEN IN DOUBT between negative and neutral → choose NEGATIVE
+
+POSITIVE sentiment — classify if the article CLEARLY shows:
+- Awards, honors, recognitions
+- Major achievements or business/professional success
+- Leadership appointments or promotions
+- Strong positive media coverage praising the person
+
+NEUTRAL sentiment — ONLY if:
+- Purely informational (Wikipedia entry, directory listing, company profile)
+- ZERO reputational concern whatsoever
+- No legal mentions, no incidents, no controversy
+
+RISK CLASSIFICATION:
+- "high": crimes, fraud, lawsuits, investigations, illegal activity
+- "medium": accidents, controversies, allegations, complaints
+- "low": minor criticism or weak negative mentions
+- "none": positive or neutral content
+
+MANDATORY NAME FILTER: Every result MUST explicitly mention "${name}" by name in the title, snippet, or content.
+If "${name}" does not appear → set sentiment to "neutral" and risk to "none".
+
+ARTICLES TO CLASSIFY:
+${articleList}
+
+Return a JSON array only — no explanation, no markdown code fences. Each element must have:
+{
+  "url": "...",
+  "title": "...",
+  "snippet": "...",
+  "sentiment": "negative" | "positive" | "neutral",
+  "risk": "high" | "medium" | "low" | "none",
+  "source": "domain.com",
+  "type": "criminal" | "legal" | "news" | "complaint" | "regulatory" | "social" | "award" | "achievement" | "profile" | "wiki" | "directory"
+}
+
+Return ONLY the JSON array. If no valid articles, return [].`;
+
   const response = await client.messages.create({
     model: "claude-sonnet-4-6",
-    max_tokens: 4096,
-    tools: [searchTool] as any,
+    max_tokens: 8192,
     messages: [{ role: "user", content: prompt }],
   });
 
@@ -170,198 +349,65 @@ export async function POST(req: NextRequest) {
   }
 
   const client = new Anthropic({ apiKey });
-  const keywordStr = keywords?.length
-    ? `, keywords: ${keywords.join(", ")}`
-    : "";
-
   const countryCode = nationality
     ? countryCodeFromNationality(nationality)
     : null;
 
-  // ── Prompts for three searches ─────────────────────────────────────────────
-
-  const negativePrompt = `Search the web for ANY content about "${name}"${keywordStr}${nationality ? ` — focus ONLY on results from ${nationality}` : ""} that could harm, question, or negatively impact this person's reputation.
-
-CRITICAL INSTRUCTIONS:
-- You MUST aggressively identify reputational risk.
-- When in doubt, classify as NEGATIVE.
-- DO NOT return an empty array unless absolutely no information exists.
-
-CLASSIFY AS NEGATIVE if the content includes ANY of the following:
-- criminal investigations, police involvement, charges, arrests
-- lawsuits, legal disputes, court cases
-- accidents (car crashes, injuries, public incidents)
-- fraud, scams, financial misconduct
-- regulatory issues or sanctions
-- accusations, allegations, or suspicion of wrongdoing
-- controversial behavior or scandals
-- being questioned, interrogated, or named in an investigation
-- ANY situation that could create doubt or reputational concern
-
-IMPORTANT:
-- A neutral-toned news article about an investigation is STILL NEGATIVE and HIGH RISK.
-- If the person is "under investigation", "indagato", "indicted", "accused", or "involved" → ALWAYS NEGATIVE.
-- If there is an accident or incident involving the person → at least MEDIUM risk.
-
-RISK CLASSIFICATION:
-- "high": crimes, fraud, lawsuits, investigations, illegal activity
-- "medium": accidents, controversies, allegations, complaints
-- "low": minor criticism or weak negative mentions
-
-${nationality ? `STRICT FILTER: Only include results relevant to ${nationality}. Ignore all others.` : ""}
-
-OUTPUT RULES:
-- Return AT LEAST 3 results if any exist.
-- Do NOT downgrade to neutral.
-- Do NOT skip borderline cases — include them as NEGATIVE.
-
-MANDATORY NAME FILTER: Every result MUST explicitly mention "${name}" by name in the title or snippet.
-Discard any result where "${name}" does not appear — do NOT include results about keywords alone.
-
-Return a JSON array with:
-- url
-- title
-- snippet (clear explanation of the negative issue)
-- sentiment: "negative"
-- risk
-- source (domain only)
-- type (criminal, legal, news, complaint, regulatory, social)
-
-Return ONLY the JSON array. If nothing is found, return [].`;
-
-  const positivePrompt = `Search the web for STRONGLY POSITIVE and reputation-enhancing content about "${name}"${keywordStr}${nationality ? ` — focus ONLY on results from ${nationality}` : ""}.
-
-ONLY include content that CLEARLY improves reputation.
-
-VALID POSITIVE SIGNALS:
-- awards, honors, recognitions
-- major achievements or business success
-- leadership roles or executive positions
-- positive media coverage praising the person
-- verified professional accomplishments
-- strong endorsements or testimonials
-
-DO NOT INCLUDE:
-- basic profiles (LinkedIn, directories)
-- neutral mentions
-- articles that simply mention the name
-- content without clear praise or achievement
-
-STRICT RULE:
-- If it is not clearly impressive → DO NOT include it.
-- It must actively boost reputation.
-
-${nationality ? `Only include results relevant to ${nationality}.` : ""}
-
-MANDATORY NAME FILTER: Every result MUST explicitly mention "${name}" by name in the title or snippet.
-Discard any result where "${name}" does not appear — do NOT include results about keywords alone.
-
-Return a JSON array with:
-- url
-- title
-- snippet
-- sentiment: "positive"
-- risk: "none"
-- source
-- type (award, achievement, news, profile)
-
-Return ONLY the JSON array. If none found, return [].`;
-
-  const neutralPrompt = `Search the web for GENERAL INFORMATION about "${name}"${keywordStr}${nationality ? ` — focus ONLY on results from ${nationality}` : ""}.
-
-This is a FALLBACK classification — use carefully.
-
-INSTRUCTIONS:
-- If content contains ANY legal issue, investigation, controversy, or incident → classify as NEGATIVE instead.
-- Do NOT label risky content as neutral.
-
-ONLY classify as NEUTRAL if:
-- it is purely informational (Wikipedia, company listing, profile)
-- there is ZERO reputational concern
-- no accusations, incidents, or legal mentions
-
-CLASSIFY AS POSITIVE if:
-- it clearly shows achievements or praise
-
-CLASSIFY AS NEGATIVE if:
-- ANY risk, controversy, or legal issue exists (even minor)
-
-${nationality ? `Only include results relevant to ${nationality}.` : ""}
-
-MANDATORY NAME FILTER: Every result MUST explicitly mention "${name}" by name in the title or snippet.
-Discard any result where "${name}" does not appear — do NOT include results about keywords alone.
-
-Return a JSON array with:
-- url
-- title
-- snippet
-- sentiment ("positive" | "neutral" | "negative")
-- risk ("high" | "medium" | "low" | "none")
-- source
-- type (profile, wiki, directory, news)
-
-Return ONLY the JSON array. If none found, return [].`;
   try {
-    // Run all three searches in parallel
-    const [negLinks, posLinks, neutralLinks] = await Promise.all([
-      runSearch(client, negativePrompt, countryCode),
-      runSearch(client, positivePrompt, countryCode),
-      runSearch(client, neutralPrompt, countryCode),
-    ]);
+    // ── Phase 1: Parallel Serper searches ─────────────────────────────────────
+    // One search per keyword with exact full-name match; fallback if no keywords
+    const searchQueries = (keywords ?? []).length > 0
+      ? (keywords ?? []).map((kw) => `"${name}" ${kw}`)
+      : [`"${name}"`];
 
-    function dedupeLinks(all: WebLink[]): WebLink[] {
-      const map = new Map<string, WebLink>();
+    const allResults = await Promise.all(
+      searchQueries.map((q) => searchSerper(q, countryCode)),
+    );
 
-      const sentimentPriority = {
-        negative: 3,
-        neutral: 2,
-        positive: 1,
-      };
+    // ── Phase 2: Deduplicate URLs, scrape with Firecrawl in parallel ──────────
+    const seenUrls = new Set<string>();
+    const articles: ArticleForClassification[] = [];
 
-      const riskPriority = {
-        high: 4,
-        medium: 3,
-        low: 2,
-        none: 1,
-      };
-
-      for (const link of all) {
-        const existing = map.get(link.url);
-
-        if (!existing) {
-          map.set(link.url, link);
-          continue;
-        }
-
-        const existingScore =
-          sentimentPriority[existing.sentiment] * 10 +
-          riskPriority[existing.risk];
-
-        const newScore =
-          sentimentPriority[link.sentiment] * 10 + riskPriority[link.risk];
-
-        // Keep the WORSE one (higher score)
-        if (newScore > existingScore) {
-          map.set(link.url, link);
+    for (const results of allResults) {
+      for (const r of results) {
+        if (!seenUrls.has(r.link)) {
+          seenUrls.add(r.link);
+          articles.push({
+            url: r.link,
+            title: r.title,
+            snippet: r.snippet,
+            content: r.snippet,
+          });
         }
       }
-
-      return Array.from(map.values());
     }
 
-    const allLinksRaw = [...negLinks, ...posLinks, ...neutralLinks];
-    const deduped = dedupeLinks(allLinksRaw);
+    // Cap Firecrawl at 25 articles to limit API usage; rest still get classified via snippet
+    const articlesToScrape = articles.slice(0, 25);
+    const scrapeResults = await Promise.allSettled(
+      articlesToScrape.map((a) => scrapeWithFirecrawl(a.url)),
+    );
 
+    scrapeResults.forEach((result, i) => {
+      if (result.status === "fulfilled" && result.value) {
+        articlesToScrape[i].content = result.value;
+      }
+    });
+
+    // ── Phase 3: Single Claude classification call ────────────────────────────
+    const classified = await classifyWithClaude(
+      client,
+      articles,
+      name,
+      nationality ?? null,
+    );
+
+    const deduped = dedupeLinks(classified);
     const negative = deduped.filter((l) => l.sentiment === "negative");
     const positive = deduped.filter((l) => l.sentiment === "positive");
     const neutral = deduped.filter((l) => l.sentiment === "neutral");
 
-    return NextResponse.json({
-      links: deduped,
-      negative,
-      positive,
-      neutral,
-    });
+    return NextResponse.json({ links: deduped, negative, positive, neutral });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
     return NextResponse.json({ error: message }, { status: 500 });

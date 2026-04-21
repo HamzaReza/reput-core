@@ -75,6 +75,7 @@ _cors_kw: dict = {
 _cors_regex_parts: list[str] = []
 if settings.debug:
     _cors_regex_parts.append(r"https?://(localhost|127\.0\.0\.1|\[::1\])(:\d+)?")
+    _cors_regex_parts.append(r"https://[a-zA-Z0-9-]+\.ngrok-free\.app")
 if settings.cors_allow_vercel_previews:
     _cors_regex_parts.append(r"https://[a-zA-Z0-9-]+\.vercel\.app")
 if _cors_regex_parts:
