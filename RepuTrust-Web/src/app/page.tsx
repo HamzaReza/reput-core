@@ -10,14 +10,9 @@ export default function SplashPage() {
   const [fadeReput, setFadeReput] = useState(false);
 
   useEffect(() => {
-    let destination = "/login";
-    try {
-      if (localStorage.getItem("reput_authed") === "true") destination = "/dashboard";
-    } catch {}
-
-    const t1 = setTimeout(() => setFadeEalixir(true), 2000);  // Ealixir starts fading
-    const t2 = setTimeout(() => setFadeReput(true), 2800);    // ReputTrust starts fading
-    const t3 = setTimeout(() => router.replace(destination), 3800);
+    const t1 = setTimeout(() => setFadeEalixir(true), 2000);
+    const t2 = setTimeout(() => setFadeReput(true), 2800);
+    const t3 = setTimeout(() => router.replace("/lead"), 3800);
     return () => {
       clearTimeout(t1);
       clearTimeout(t2);

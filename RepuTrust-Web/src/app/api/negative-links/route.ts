@@ -338,10 +338,11 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const { name, keywords, nationality } = (await req.json()) as {
+  const { name, keywords, nationality, resultsCap } = (await req.json()) as {
     name: string;
     keywords: string[];
     nationality?: string;
+    resultsCap?: number;
   };
 
   if (!name) {
@@ -360,8 +361,10 @@ export async function POST(req: NextRequest) {
       ? (keywords ?? []).map((kw) => `"${name}" ${kw}`)
       : [`"${name}"`];
 
+    const cap = resultsCap ?? 20;
+
     const allResults = await Promise.all(
-      searchQueries.map((q) => searchSerper(q, countryCode)),
+      searchQueries.map((q) => searchSerper(q, countryCode, cap)),
     );
 
     // ── Phase 2: Deduplicate URLs, scrape with Firecrawl in parallel ──────────
@@ -382,27 +385,26 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Cap Firecrawl at 25 articles to limit API usage; rest still get classified via snippet
-    const articlesToScrape = articles.slice(0, 25);
+    const cappedArticles = articles.slice(0, cap);
     const scrapeResults = await Promise.allSettled(
-      articlesToScrape.map((a) => scrapeWithFirecrawl(a.url)),
+      cappedArticles.map((a) => scrapeWithFirecrawl(a.url)),
     );
 
     scrapeResults.forEach((result, i) => {
       if (result.status === "fulfilled" && result.value) {
-        articlesToScrape[i].content = result.value;
+        cappedArticles[i].content = result.value;
       }
     });
 
     // ── Phase 3: Single Claude classification call ────────────────────────────
     const classified = await classifyWithClaude(
       client,
-      articles,
+      cappedArticles,
       name,
       nationality ?? null,
     );
 
-    const deduped = dedupeLinks(classified);
+    const deduped = dedupeLinks(classified).slice(0, cap);
     const negative = deduped.filter((l) => l.sentiment === "negative");
     const positive = deduped.filter((l) => l.sentiment === "positive");
     const neutral = deduped.filter((l) => l.sentiment === "neutral");
