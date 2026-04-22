@@ -164,14 +164,40 @@ function dedupeLinks(all: WebLink[]): WebLink[] {
 
 // Maps ISO 3166-1 alpha-2 country codes to their primary language codes for Serper hl param.
 const COUNTRY_TO_LANGUAGE: Record<string, string> = {
-  IT: "it", FR: "fr", DE: "de", ES: "es", PT: "pt", NL: "nl",
-  PL: "pl", RO: "ro", HU: "hu", CZ: "cz", SK: "sk", HR: "hr",
-  RU: "ru", UA: "ua", TR: "tr", AR: "ar", JP: "ja", KR: "ko",
-  CN: "zh-CN", TW: "zh-TW", SA: "ar", AE: "ar", EG: "ar",
-  IN: "hi", TH: "th", VN: "vi", ID: "id", MY: "ms",
-  GR: "el", SV: "sv", NO: "no", FI: "fi", DK: "da",
+  IT: "it",
+  FR: "fr",
+  DE: "de",
+  ES: "es",
+  PT: "pt",
+  NL: "nl",
+  PL: "pl",
+  RO: "ro",
+  HU: "hu",
+  CZ: "cz",
+  SK: "sk",
+  HR: "hr",
+  RU: "ru",
+  UA: "ua",
+  TR: "tr",
+  AR: "ar",
+  JP: "ja",
+  KR: "ko",
+  CN: "zh-CN",
+  TW: "zh-TW",
+  SA: "ar",
+  AE: "ar",
+  EG: "ar",
+  IN: "hi",
+  TH: "th",
+  VN: "vi",
+  ID: "id",
+  MY: "ms",
+  GR: "el",
+  SV: "sv",
+  NO: "no",
+  FI: "fi",
+  DK: "da",
 };
-
 
 async function searchSerper(
   query: string,
@@ -198,8 +224,9 @@ async function searchSerper(
   });
 
   if (!res.ok) {
-    console.error(`Serper error: ${res.status} ${await res.text()}`);
-    return [];
+    const body = await res.text();
+    console.error(`Serper error: ${res.status} ${body}`);
+    throw new Error(`Search service error (${res.status}): ${body}`);
   }
 
   const data = (await res.json()) as SerperResponse;
@@ -310,7 +337,7 @@ Return a JSON array only — no explanation, no markdown code fences. Each eleme
 Return ONLY the JSON array. If no valid articles, return [].`;
 
   const response = await client.messages.create({
-    model: "claude-sonnet-4-6",
+    model: "claude-haiku-4-5",
     max_tokens: 8192,
     messages: [{ role: "user", content: prompt }],
   });
@@ -329,6 +356,75 @@ Return ONLY the JSON array. If no valid articles, return [].`;
   }
 }
 
+function deriveScoreServer(negCount: number, posCount: number): number {
+  if (negCount === 0) {
+    if (posCount >= 10) return 100;
+    return 86 + Math.round((posCount / 9) * 13);
+  }
+  if (negCount <= 5) {
+    const base = 85 - (negCount - 1) * 4;
+    return Math.min(85, Math.max(61, base + Math.round((Math.min(posCount, 10) / 10) * 5)));
+  }
+  if (negCount <= 10) {
+    const base = 60 - (negCount - 6) * 7;
+    return Math.min(60, Math.max(26, base + Math.round((Math.min(posCount, 10) / 10) * 5)));
+  }
+  return Math.max(0, 25 - (negCount - 11) * 2);
+}
+
+function fallbackSummary(score: number) {
+  return {
+    headline: score >= 86 ? "Clean profile — low urgency" : score >= 61 ? "Some concerns — moderate priority" : "Significant issues — high priority",
+    issues: ["Summary unavailable"],
+    talkingPoints: ["Discuss their current online presence", "Highlight risks of unmanaged reputation"],
+  };
+}
+
+async function generateMeetingSummary(
+  client: Anthropic,
+  name: string,
+  score: number,
+  links: WebLink[],
+): Promise<{ headline: string; issues: string[]; talkingPoints: string[] }> {
+  const negLinks = links.filter((l) => l.sentiment === "negative" || l.risk === "high" || l.risk === "medium");
+  const posLinks = links.filter((l) => l.sentiment === "positive");
+  const findingsSummary = [
+    negLinks.length > 0
+      ? `Negative:\n${negLinks.slice(0, 6).map((l) => `- ${l.title} (${l.source}, risk: ${l.risk})`).join("\n")}`
+      : "No negative results found.",
+    posLinks.length > 0
+      ? `Positive:\n${posLinks.slice(0, 4).map((l) => `- ${l.title} (${l.source})`).join("\n")}`
+      : "No positive results found.",
+  ].join("\n\n");
+
+  const prompt = `You are an analyst at a reputation management firm. A scan for "${name}" returned a ReputScore of ${score}/100.
+
+Findings:
+${findingsSummary}
+
+Return a JSON object (no markdown, no explanation) with:
+{
+  "headline": "one-line assessment for the sales team",
+  "issues": ["up to 4 key points about their reputation (positive or negative), or 1 entry if nothing found"],
+  "talkingPoints": ["2-3 suggested opening lines for a client meeting focused on why they need reputation management"]
+}`;
+
+  const response = await client.messages.create({
+    model: "claude-haiku-4-5-20251001",
+    max_tokens: 512,
+    messages: [{ role: "user", content: prompt }],
+  });
+
+  const textBlock = response.content.find((b) => b.type === "text");
+  if (!textBlock || textBlock.type !== "text") return fallbackSummary(score);
+  try {
+    const json = JSON.parse(textBlock.text.trim().match(/\{[\s\S]*\}/)?.[0] ?? "");
+    return json;
+  } catch {
+    return fallbackSummary(score);
+  }
+}
+
 export async function POST(req: NextRequest) {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
@@ -338,11 +434,12 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const { name, keywords, nationality, resultsCap } = (await req.json()) as {
+  const { name, keywords, nationality, resultsCap, includeSummary } = (await req.json()) as {
     name: string;
     keywords: string[];
     nationality?: string;
     resultsCap?: number;
+    includeSummary?: boolean;
   };
 
   if (!name) {
@@ -357,9 +454,10 @@ export async function POST(req: NextRequest) {
   try {
     // ── Phase 1: Parallel Serper searches ─────────────────────────────────────
     // One search per keyword with exact full-name match; fallback if no keywords
-    const searchQueries = (keywords ?? []).length > 0
-      ? (keywords ?? []).map((kw) => `"${name}" ${kw}`)
-      : [`"${name}"`];
+    const searchQueries =
+      (keywords ?? []).length > 0
+        ? (keywords ?? []).map((kw) => `"${name}" ${kw}`)
+        : [`"${name}"`];
 
     const cap = resultsCap ?? 20;
 
@@ -409,7 +507,13 @@ export async function POST(req: NextRequest) {
     const positive = deduped.filter((l) => l.sentiment === "positive");
     const neutral = deduped.filter((l) => l.sentiment === "neutral");
 
-    return NextResponse.json({ links: deduped, negative, positive, neutral });
+    const negCount = negative.length;
+    const posCount = positive.length + neutral.length;
+    const summary = includeSummary
+      ? await generateMeetingSummary(client, name, deriveScoreServer(negCount, posCount), deduped)
+      : undefined;
+
+    return NextResponse.json({ links: deduped, negative, positive, neutral, ...(summary ? { summary } : {}) });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
     return NextResponse.json({ error: message }, { status: 500 });
