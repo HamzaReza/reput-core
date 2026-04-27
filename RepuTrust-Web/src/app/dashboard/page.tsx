@@ -172,9 +172,18 @@ function RepuGauge({
         </clipPath>
         {/* Blend gradients at each band boundary — direction follows arc tangent */}
         {blendPairs.map(([c1, c2, angle], i) => {
-          const s = pt(angle + blendSpan), e = pt(angle - blendSpan);
+          const s = pt(angle + blendSpan),
+            e = pt(angle - blendSpan);
           return (
-            <linearGradient key={i} id={`blend${i}`} gradientUnits="userSpaceOnUse" x1={s.x} y1={s.y} x2={e.x} y2={e.y}>
+            <linearGradient
+              key={i}
+              id={`blend${i}`}
+              gradientUnits="userSpaceOnUse"
+              x1={s.x}
+              y1={s.y}
+              x2={e.x}
+              y2={e.y}
+            >
               <stop offset="0%" stopColor={c1} />
               <stop offset="100%" stopColor={c2} />
             </linearGradient>
@@ -216,7 +225,7 @@ function RepuGauge({
         />
       ))}
       {/* Blend arcs overlaid at each boundary */}
-      {blendPairs.map(([,, angle], i) => (
+      {blendPairs.map(([, , angle], i) => (
         <path
           key={i}
           d={arcPath(angle + blendSpan, angle - blendSpan)}
@@ -387,75 +396,75 @@ export default function DashboardPage() {
           });
           setScoreLoading(false);
           return;
-          // eslint-disable-next-line no-unreachable
-          const [scan, linksRes] = await Promise.allSettled([
-            reputation.triggerScan(),
-            fetch("/api/negative-links", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                name: user.name ?? "",
-                keywords: currentKeywords,
-                nationality: user.nationality ?? "",
-              }),
-            }).then((r) => r.json() as Promise<LinksResponse>),
-          ]);
+          // // eslint-disable-next-line no-unreachable
+          // const [scan, linksRes] = await Promise.allSettled([
+          //   reputation.triggerScan(),
+          //   fetch("/api/negative-links", {
+          //     method: "POST",
+          //     headers: { "Content-Type": "application/json" },
+          //     body: JSON.stringify({
+          //       name: user.name ?? "",
+          //       keywords: currentKeywords,
+          //       nationality: user.nationality ?? "",
+          //     }),
+          //   }).then((r) => r.json() as Promise<LinksResponse>),
+          // ]);
 
-          const scanResult = scan.status === "fulfilled" ? scan.value : null;
-          const linksData =
-            linksRes.status === "fulfilled" ? linksRes.value : null;
+          // const scanResult = scan.status === "fulfilled" ? scan.value : null;
+          // const linksData =
+          //   linksRes.status === "fulfilled" ? linksRes.value : null;
 
-          const searchFailed =
-            linksRes.status === "rejected" ||
-            !linksData ||
-            "error" in (linksData as object) ||
-            linksData.links == null;
+          // const searchFailed =
+          //   linksRes.status === "rejected" ||
+          //   !linksData ||
+          //   "error" in (linksData as object) ||
+          //   linksData.links == null;
 
-          if (searchFailed) {
-            setScanError(true);
-            return;
-          }
+          // if (searchFailed) {
+          //   setScanError(true);
+          //   return;
+          // }
 
-          const allLinks: LinkItem[] = linksData.links;
+          // const allLinks: LinkItem[] = linksData.links;
 
-          const negCount = allLinks.filter((l) => {
-            return (
-              l.sentiment === "negative" ||
-              l.risk === "high" ||
-              l.risk === "medium"
-            );
-          }).length;
-          const posCount = allLinks.filter(
-            (l) =>
-              l.sentiment === "positive" ||
-              l.sentiment === "neutral" ||
-              l.risk === "low" ||
-              l.risk === "none",
-          ).length;
-          const derivedScore = deriveScore(negCount, posCount);
+          // const negCount = allLinks.filter((l) => {
+          //   return (
+          //     l.sentiment === "negative" ||
+          //     l.risk === "high" ||
+          //     l.risk === "medium"
+          //   );
+          // }).length;
+          // const posCount = allLinks.filter(
+          //   (l) =>
+          //     l.sentiment === "positive" ||
+          //     l.sentiment === "neutral" ||
+          //     l.risk === "low" ||
+          //     l.risk === "none",
+          // ).length;
+          // const derivedScore = deriveScore(negCount, posCount);
 
-          const merged = {
-            ...(scanResult ?? {}),
-            score: derivedScore,
-            risk_level:
-              derivedScore >= 86
-                ? "low"
-                : derivedScore >= 61
-                  ? "medium"
-                  : "high",
-            results: allLinks.map((l) => ({ ...l, risk: l.risk as string })),
-            summary: {
-              total_results: allLinks.length,
-              high_risk: allLinks.filter((l) => l.risk === "high").length,
-              medium_risk: allLinks.filter((l) => l.risk === "medium").length,
-              low_risk: allLinks.filter((l) => l.risk === "low").length,
-            },
-          };
-          setScanData(merged as typeof scanResult & typeof merged);
-          setScore(derivedScore);
-          sessionStorage.setItem("reput_scan", JSON.stringify(merged));
-          localStorage.setItem("reput_last_scan_keywords", keywordsKey);
-          localStorage.setItem("reput_last_scan_name", currentName);
+          // const merged = {
+          //   ...(scanResult ?? {}),
+          //   score: derivedScore,
+          //   risk_level:
+          //     derivedScore >= 86
+          //       ? "low"
+          //       : derivedScore >= 61
+          //         ? "medium"
+          //         : "high",
+          //   results: allLinks.map((l) => ({ ...l, risk: l.risk as string })),
+          //   summary: {
+          //     total_results: allLinks.length,
+          //     high_risk: allLinks.filter((l) => l.risk === "high").length,
+          //     medium_risk: allLinks.filter((l) => l.risk === "medium").length,
+          //     low_risk: allLinks.filter((l) => l.risk === "low").length,
+          //   },
+          // };
+          // setScanData(merged as typeof scanResult & typeof merged);
+          // setScore(derivedScore);
+          // sessionStorage.setItem("reput_scan", JSON.stringify(merged));
+          // localStorage.setItem("reput_last_scan_keywords", keywordsKey);
+          // localStorage.setItem("reput_last_scan_name", currentName);
         }
       } catch {
         setScanError(true);
