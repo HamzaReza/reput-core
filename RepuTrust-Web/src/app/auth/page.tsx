@@ -8,10 +8,45 @@ import { COUNTRY_NAMES } from "@/lib/countries";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useRef, useState } from "react";
 
-// 5 steps: 1=account, 2=otp, 3=information, 4=linkedin, 5=notifications
-type Step = 1 | 2 | 3 | 4 | 5;
+// Beta flow: 1=account, 6=welcome-cards, 3=information → dashboard
+// Commented out (future use): 2=otp, 4=linkedin, 5=notifications
+type Step = 1 | 2 | 3 | 4 | 5 | 6;
 
 const PROGRESS_TOTAL = 5;
+
+const WELCOME_CARDS = [
+  {
+    title: "Welcome to RepuTrust Beta",
+    body: [
+      "You're among the first to try RepuTrust.",
+      "A new way to understand and measure your digital reputation.",
+    ],
+    cta: "Continue",
+  },
+  {
+    title: "Your reputation, measured",
+    body: [
+      "RepuTrust scans public digital signals connected to your online presence.",
+      "At the end, you will receive your preliminary ReputScore.",
+    ],
+    cta: "Next",
+  },
+  {
+    title: "Powered by proprietary intelligence",
+    body: [
+      "Behind RepuTrust is Ealixir's proprietary reputation engine, designed to analyze digital signals and turn them into clear, actionable insights.",
+    ],
+    cta: "Next",
+  },
+  {
+    title: "Start your scan",
+    body: [
+      "We'll ask you for a few basic details to launch your reputation scan.",
+      "This is a beta version, and your feedback will help us improve the final experience.",
+    ],
+    cta: "Continue",
+  },
+];
 
 function Spinner() {
   return (
@@ -152,6 +187,9 @@ function AuthPageInner() {
   const [keywordInput, setKeywordInput] = useState("");
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [avatar, setAvatar] = useState<string>("");
+
+  // Step 6 — welcome cards
+  const [cardIndex, setCardIndex] = useState(0);
 
   // Step 5 — notifications
   const [notifStatus, setNotifStatus] = useState<"idle" | "granted" | "denied">(
@@ -296,7 +334,7 @@ function AuthPageInner() {
                   localStorage.setItem("reput_user", JSON.stringify(res.user));
                 } catch {}
                 window.dispatchEvent(new Event("reput-auth-change"));
-                advance();
+                setStep(6);
               } catch (err: unknown) {
                 setStep1Error(
                   err instanceof Error ? err.message : "Registration failed.",
@@ -357,7 +395,7 @@ function AuthPageInner() {
               {step1Loading ? (
                 <>
                   <Spinner />
-                  Sending code…
+                  Processing…
                 </>
               ) : (
                 "Continue →"
@@ -512,8 +550,8 @@ function AuthPageInner() {
     );
   }
 
-  // ── Step 2: OTP Verification ───────────────────────────────────────────────
-  if (step === 2) {
+  // ── Step 2: OTP Verification — commented out for beta, kept for future use ──
+  if (false && step === 2) {
     const maskedEmail = email.replace(
       /(.{2})(.*)(@.*)/,
       (_, a, b, c) => a + b.replace(/./g, "•") + c,
@@ -742,7 +780,7 @@ function AuthPageInner() {
                 localStorage.setItem("reput_keywords", finalKeywords.join(","));
                 if (avatar) localStorage.setItem("reput_avatar", avatar);
               } catch {}
-              advance();
+              await goToDashboard();
             } catch (err: unknown) {
               setStep3Error(
                 err instanceof Error ? err.message : "Failed to save profile.",
@@ -1176,7 +1214,7 @@ function AuthPageInner() {
                 Processing…
               </>
             ) : (
-              "VERIFY"
+              "START SCAN"
             )}
           </button>
         </form>
@@ -1184,8 +1222,8 @@ function AuthPageInner() {
     );
   }
 
-  // ── Step 4: LinkedIn ───────────────────────────────────────────────────────
-  if (step === 4) {
+  // ── Step 4: LinkedIn — commented out for beta, kept for future use ──────────
+  if (false && step === 4) {
     const fullName = [firstName, lastName].filter(Boolean).join(" ") || "You";
     const profileSubtitle = nationality || undefined;
 
@@ -1410,8 +1448,117 @@ function AuthPageInner() {
     );
   }
 
-  // ── Step 5: Notifications ──────────────────────────────────────────────────
-  return (
+  // ── Step 6: Welcome Cards ─────────────────────────────────────────────────
+  if (step === 6) {
+    const card = WELCOME_CARDS[cardIndex];
+    return (
+      <div
+        style={{
+          minHeight: "100vh",
+          background: "linear-gradient(160deg, #4479DA 0%, #48D4B8 100%)",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          padding: "4rem 1.5rem 3rem",
+        }}
+      >
+        <div
+          style={{
+            flex: 1,
+            maxWidth: "22rem",
+            width: "100%",
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "center",
+            textAlign: "center",
+            gap: "1.25rem",
+          }}
+        >
+          <h1
+            style={{
+              fontSize: "2rem",
+              fontWeight: 700,
+              color: "#ffffff",
+              lineHeight: 1.2,
+              margin: 0,
+            }}
+          >
+            {card.title}
+          </h1>
+          <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+            {card.body.map((line, i) => (
+              <p
+                key={i}
+                style={{
+                  color: "rgba(255,255,255,0.88)",
+                  fontSize: "1rem",
+                  lineHeight: 1.65,
+                  margin: 0,
+                }}
+              >
+                {line}
+              </p>
+            ))}
+          </div>
+        </div>
+
+        <div
+          style={{
+            width: "100%",
+            maxWidth: "22rem",
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            gap: "1.5rem",
+          }}
+        >
+          <div style={{ display: "flex", gap: "0.5rem" }}>
+            {WELCOME_CARDS.map((_, i) => (
+              <div
+                key={i}
+                style={{
+                  width: "0.5rem",
+                  height: "0.5rem",
+                  borderRadius: "50%",
+                  backgroundColor:
+                    i === cardIndex ? "#ffffff" : "rgba(255,255,255,0.35)",
+                  transition: "background-color 0.2s",
+                }}
+              />
+            ))}
+          </div>
+          <button
+            onClick={() => {
+              if (cardIndex < WELCOME_CARDS.length - 1) {
+                setCardIndex(cardIndex + 1);
+              } else {
+                setStep(3);
+                setCardIndex(0);
+              }
+            }}
+            style={{
+              width: "100%",
+              padding: "0.875rem",
+              borderRadius: "3rem",
+              backgroundColor: "#ffffff",
+              color: "#4479DA",
+              fontWeight: 700,
+              fontSize: "1rem",
+              border: "none",
+              cursor: "pointer",
+              letterSpacing: "0.04em",
+            }}
+          >
+            {card.cta}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Step 5: Notifications — commented out for beta, kept for future use ──────
+  if (false) return (
     <Shell step={step}>
       <div style={{ textAlign: "center", marginBottom: "1.75rem" }}>
         <div
@@ -1671,6 +1818,8 @@ function AuthPageInner() {
       )}
     </Shell>
   );
+
+  return null;
 }
 
 function CountryPicker({
