@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import Image from "next/image";
+import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 
 export default function SplashPage() {
   const router = useRouter();
@@ -15,8 +15,8 @@ export default function SplashPage() {
       if (localStorage.getItem("reput_authed") === "true") destination = "/dashboard";
     } catch {}
 
-    const t1 = setTimeout(() => setFadeEalixir(true), 2000);  // Ealixir starts fading
-    const t2 = setTimeout(() => setFadeReput(true), 2800);    // ReputTrust starts fading
+    const t1 = setTimeout(() => setFadeEalixir(true), 2000);
+    const t2 = setTimeout(() => setFadeReput(true), 2800);
     const t3 = setTimeout(() => router.replace(destination), 3800);
     return () => {
       clearTimeout(t1);
