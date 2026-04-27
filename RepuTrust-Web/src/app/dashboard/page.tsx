@@ -379,6 +379,15 @@ export default function DashboardPage() {
             neutral: LinkItem[];
           };
 
+          // DEBUG: log API body without triggering (remove when ready)
+          console.log("[DEBUG] /api/negative-links body:", {
+            name: user.name ?? "",
+            keywords: currentKeywords,
+            nationality: user.nationality ?? "",
+          });
+          setScoreLoading(false);
+          return;
+          // eslint-disable-next-line no-unreachable
           const [scan, linksRes] = await Promise.allSettled([
             reputation.triggerScan(),
             fetch("/api/negative-links", {
