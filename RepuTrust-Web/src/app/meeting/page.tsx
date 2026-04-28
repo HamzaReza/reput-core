@@ -4,7 +4,7 @@ import Footer from "@/components/common/Footer";
 import Header from "@/components/common/Header";
 import { meetings, isAuthed, type Meeting } from "@/lib/api";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 type Tab = "upcoming" | "past";
 
@@ -106,12 +106,15 @@ function MeetingCard({ meeting }: { meeting: Meeting }) {
 
 export default function MeetingPage() {
   const router = useRouter();
+  const hasLoadedRef = useRef(false);
   const [tab, setTab] = useState<Tab>("upcoming");
   const [data, setData] = useState<Meeting[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!isAuthed()) { router.replace("/auth"); return; }
+    if (!isAuthed()) { router.replace("/login"); return; }
+    if (hasLoadedRef.current) return;
+    hasLoadedRef.current = true;
     meetings.getMy()
       .then(setData)
       .catch(() => setData([]))

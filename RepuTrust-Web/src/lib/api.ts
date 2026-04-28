@@ -226,6 +226,52 @@ export const auth = {
   verify: () => request<void>("/auth/verify", { method: "POST" }, true),
 };
 
+// ── Cached /me helper ─────────────────────────────────────────────────────────
+
+export const USER_CACHE_KEY = "reput_user";
+export const PROFILE_CACHE_KEY = "reput_profile";
+const SESSION_CACHE_TTL = 60_000;
+
+export async function getCachedMe(): Promise<User> {
+  try {
+    const raw = sessionStorage.getItem(USER_CACHE_KEY);
+    if (raw) {
+      const { user, ts } = JSON.parse(raw) as { user: User; ts: number };
+      if (Date.now() - ts < SESSION_CACHE_TTL) return user;
+    }
+  } catch {}
+  const user = await auth.me();
+  try {
+    sessionStorage.setItem(
+      USER_CACHE_KEY,
+      JSON.stringify({ user, ts: Date.now() }),
+    );
+  } catch {}
+  return user;
+}
+
+export async function getCachedProfile(): Promise<UserProfile | null> {
+  try {
+    const raw = sessionStorage.getItem(PROFILE_CACHE_KEY);
+    if (raw) {
+      const { profile, ts } = JSON.parse(raw) as {
+        profile: UserProfile;
+        ts: number;
+      };
+      if (Date.now() - ts < SESSION_CACHE_TTL) return profile;
+    }
+  } catch {}
+  const profile = await users.getProfile().catch(() => null);
+  try {
+    if (profile)
+      sessionStorage.setItem(
+        PROFILE_CACHE_KEY,
+        JSON.stringify({ profile, ts: Date.now() }),
+      );
+  } catch {}
+  return profile;
+}
+
 // ── User / Profile endpoints ──────────────────────────────────────────────────
 
 export const users = {
@@ -271,6 +317,16 @@ export const reputation = {
     request<ReputationScan[]>(
       `/reputation/history?limit=${limit}&offset=${offset}`,
       {},
+      true,
+    ),
+
+  updateScan: (
+    scanId: string,
+    data: Pick<ReputationScan, "score" | "risk_level" | "results" | "summary">,
+  ) =>
+    request<ReputationScan>(
+      `/reputation/scan/${scanId}`,
+      { method: "PATCH", body: JSON.stringify(data) },
       true,
     ),
 };
