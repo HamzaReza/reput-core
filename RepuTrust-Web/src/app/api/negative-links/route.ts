@@ -340,7 +340,7 @@ Return a JSON array only — no explanation, no markdown code fences. Each eleme
 Return ONLY the JSON array. If no valid articles, return [].`;
 
   const response = await client.messages.create({
-    model: "claude-haiku-4-5",
+    model: "claude-sonnet-4-6",
     max_tokens: 8192,
     messages: [{ role: "user", content: prompt }],
   });
@@ -436,7 +436,7 @@ Return a JSON object (no markdown, no explanation) with:
 }`;
 
   const response = await client.messages.create({
-    model: "claude-haiku-4-5-20251001",
+    model: "claude-sonnet-4-6",
     max_tokens: 512,
     messages: [{ role: "user", content: prompt }],
   });
