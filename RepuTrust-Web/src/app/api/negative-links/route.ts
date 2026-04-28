@@ -485,8 +485,8 @@ export async function POST(req: NextRequest) {
     // One search per keyword with exact full-name match; fallback if no keywords
     const searchQueries =
       (keywords ?? []).length > 0
-        ? (keywords ?? []).map((kw) => `${name} ${kw}`)
-        : [`${name}`];
+        ? (keywords ?? []).map((kw) => `"${name}" ${kw}`)
+        : [`"${name}"`];
 
     const cap = resultsCap ?? 20;
 
