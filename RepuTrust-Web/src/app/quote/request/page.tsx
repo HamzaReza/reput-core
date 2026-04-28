@@ -2,9 +2,9 @@
 
 import Footer from "@/components/common/Footer";
 import Header from "@/components/common/Header";
-import { isAuthed, quotes, auth } from "@/lib/api";
+import { isAuthed, quotes, getCachedMe } from "@/lib/api";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 const inputStyle: React.CSSProperties = {
   width: "100%",
@@ -28,6 +28,7 @@ const labelStyle: React.CSSProperties = {
 
 export default function RemovalRequestPage() {
   const router = useRouter();
+  const hasLoadedRef = useRef(false);
   const [authed, setAuthed] = useState<boolean | null>(null);
   const [showSuccess, setShowSuccess] = useState(false);
   const [name, setName] = useState("");
@@ -38,12 +39,14 @@ export default function RemovalRequestPage() {
 
   useEffect(() => {
     if (!isAuthed()) {
-      router.replace("/auth");
+      router.replace("/login");
       return;
     }
     setAuthed(true);
+    if (hasLoadedRef.current) return;
+    hasLoadedRef.current = true;
 
-    auth.me().then((user) => {
+    getCachedMe().then((user) => {
       if (user.name) setName(user.name);
       setEmail(user.email);
     }).catch(() => {

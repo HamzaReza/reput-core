@@ -2,9 +2,9 @@
 
 import Footer from "@/components/common/Footer";
 import Header from "@/components/common/Header";
-import { auth, isAuthed, users } from "@/lib/api";
+import { getCachedMe, isAuthed, users } from "@/lib/api";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 const plans = [
   {
@@ -42,24 +42,24 @@ const plans = [
 
 export default function QuotePage() {
   const router = useRouter();
+  const hasLoadedRef = useRef(false);
   const [trialLoading, setTrialLoading] = useState(false);
   const [trialError, setTrialError] = useState("");
   const [userPlan, setUserPlan] = useState<string | null>(null);
 
   useEffect(() => {
-    if (isAuthed()) {
-      auth
-        .me()
-        .then((user) => setUserPlan(user.plan))
-        .catch(() => {});
-    }
+    if (!isAuthed() || hasLoadedRef.current) return;
+    hasLoadedRef.current = true;
+    getCachedMe()
+      .then((user) => setUserPlan(user.plan))
+      .catch(() => {});
   }, []);
 
   const isPro = userPlan === "pro";
 
   const handleStartTrial = async () => {
     if (!isAuthed()) {
-      router.push("/auth");
+      router.push("/login");
       return;
     }
     setTrialLoading(true);
