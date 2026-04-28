@@ -281,6 +281,9 @@ Content: ${a.content}`,
     )
     .join("\n\n---\n\n");
 
+  const lastName = name.split(" ").pop() ?? name;
+  const firstName = name.split(" ").shift() ?? name;
+
   const nationalityLine = nationality
     ? `The subject is from ${nationality}. Only include results clearly relevant to this person and their region.`
     : "";
@@ -317,8 +320,8 @@ RISK CLASSIFICATION:
 - "low": minor criticism or weak negative mentions
 - "none": positive or neutral content
 
-MANDATORY NAME FILTER: Every result MUST explicitly mention "${name}" by name in the title, snippet, or content.
-If "${name}" does not appear → set sentiment to "neutral" and risk to "none".
+MANDATORY NAME FILTER: Every result MUST mention either the full name "${name}" or the first name "${firstName}" OR the last name "${lastName}" in the title, snippet, or content.
+If neither appears → set sentiment to "neutral" and risk to "none".
 
 ARTICLES TO CLASSIFY:
 ${articleList}
@@ -327,7 +330,7 @@ Return a JSON array only — no explanation, no markdown code fences. Each eleme
 {
   "url": "...",
   "title": "...",
-  "snippet": "...",
+  "snippet": "3 sentence explanation of the reputational significance of this article, written in your own words based on the title and content — not copied from the source. Write the snippet in the same language as the article (e.g. Italian if the article is in Italian, English if in English).",
   "sentiment": "negative" | "positive" | "neutral",
   "risk": "high" | "medium" | "low" | "none",
   "source": "domain.com",
@@ -363,20 +366,34 @@ function deriveScoreServer(negCount: number, posCount: number): number {
   }
   if (negCount <= 5) {
     const base = 85 - (negCount - 1) * 4;
-    return Math.min(85, Math.max(61, base + Math.round((Math.min(posCount, 10) / 10) * 5)));
+    return Math.min(
+      85,
+      Math.max(61, base + Math.round((Math.min(posCount, 10) / 10) * 5)),
+    );
   }
   if (negCount <= 10) {
     const base = 60 - (negCount - 6) * 7;
-    return Math.min(60, Math.max(26, base + Math.round((Math.min(posCount, 10) / 10) * 5)));
+    return Math.min(
+      60,
+      Math.max(26, base + Math.round((Math.min(posCount, 10) / 10) * 5)),
+    );
   }
   return Math.max(0, 25 - (negCount - 11) * 2);
 }
 
 function fallbackSummary(score: number) {
   return {
-    headline: score >= 86 ? "Clean profile — low urgency" : score >= 61 ? "Some concerns — moderate priority" : "Significant issues — high priority",
+    headline:
+      score >= 86
+        ? "Clean profile — low urgency"
+        : score >= 61
+          ? "Some concerns — moderate priority"
+          : "Significant issues — high priority",
     issues: ["Summary unavailable"],
-    talkingPoints: ["Discuss their current online presence", "Highlight risks of unmanaged reputation"],
+    talkingPoints: [
+      "Discuss their current online presence",
+      "Highlight risks of unmanaged reputation",
+    ],
   };
 }
 
@@ -386,14 +403,23 @@ async function generateMeetingSummary(
   score: number,
   links: WebLink[],
 ): Promise<{ headline: string; issues: string[]; talkingPoints: string[] }> {
-  const negLinks = links.filter((l) => l.sentiment === "negative" || l.risk === "high" || l.risk === "medium");
+  const negLinks = links.filter(
+    (l) =>
+      l.sentiment === "negative" || l.risk === "high" || l.risk === "medium",
+  );
   const posLinks = links.filter((l) => l.sentiment === "positive");
   const findingsSummary = [
     negLinks.length > 0
-      ? `Negative:\n${negLinks.slice(0, 6).map((l) => `- ${l.title} (${l.source}, risk: ${l.risk})`).join("\n")}`
+      ? `Negative:\n${negLinks
+          .slice(0, 6)
+          .map((l) => `- ${l.title} (${l.source}, risk: ${l.risk})`)
+          .join("\n")}`
       : "No negative results found.",
     posLinks.length > 0
-      ? `Positive:\n${posLinks.slice(0, 4).map((l) => `- ${l.title} (${l.source})`).join("\n")}`
+      ? `Positive:\n${posLinks
+          .slice(0, 4)
+          .map((l) => `- ${l.title} (${l.source})`)
+          .join("\n")}`
       : "No positive results found.",
   ].join("\n\n");
 
@@ -418,7 +444,9 @@ Return a JSON object (no markdown, no explanation) with:
   const textBlock = response.content.find((b) => b.type === "text");
   if (!textBlock || textBlock.type !== "text") return fallbackSummary(score);
   try {
-    const json = JSON.parse(textBlock.text.trim().match(/\{[\s\S]*\}/)?.[0] ?? "");
+    const json = JSON.parse(
+      textBlock.text.trim().match(/\{[\s\S]*\}/)?.[0] ?? "",
+    );
     return json;
   } catch {
     return fallbackSummary(score);
@@ -434,13 +462,14 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const { name, keywords, nationality, resultsCap, includeSummary } = (await req.json()) as {
-    name: string;
-    keywords: string[];
-    nationality?: string;
-    resultsCap?: number;
-    includeSummary?: boolean;
-  };
+  const { name, keywords, nationality, resultsCap, includeSummary } =
+    (await req.json()) as {
+      name: string;
+      keywords: string[];
+      nationality?: string;
+      resultsCap?: number;
+      includeSummary?: boolean;
+    };
 
   if (!name) {
     return NextResponse.json({ error: "name is required" }, { status: 400 });
@@ -456,8 +485,8 @@ export async function POST(req: NextRequest) {
     // One search per keyword with exact full-name match; fallback if no keywords
     const searchQueries =
       (keywords ?? []).length > 0
-        ? (keywords ?? []).map((kw) => `"${name}" ${kw}`)
-        : [`"${name}"`];
+        ? (keywords ?? []).map((kw) => `${name} ${kw}`)
+        : [`${name}`];
 
     const cap = resultsCap ?? 20;
 
@@ -510,10 +539,21 @@ export async function POST(req: NextRequest) {
     const negCount = negative.length;
     const posCount = positive.length + neutral.length;
     const summary = includeSummary
-      ? await generateMeetingSummary(client, name, deriveScoreServer(negCount, posCount), deduped)
+      ? await generateMeetingSummary(
+          client,
+          name,
+          deriveScoreServer(negCount, posCount),
+          deduped,
+        )
       : undefined;
 
-    return NextResponse.json({ links: deduped, negative, positive, neutral, ...(summary ? { summary } : {}) });
+    return NextResponse.json({
+      links: deduped,
+      negative,
+      positive,
+      neutral,
+      ...(summary ? { summary } : {}),
+    });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
     return NextResponse.json({ error: message }, { status: 500 });
