@@ -346,11 +346,6 @@ export default function LoginPage() {
               </button>
             </div>
 
-            {/* Sign-up link hidden — beta invites only */}
-            {/* <p style={{ textAlign: "center", marginTop: "1.25rem", color: "var(--color-muted)", fontSize: "0.875rem" }}>
-              Don&apos;t have an account?{" "}
-              <a href="/auth" style={{ color: "var(--color-primary)", fontWeight: 500, textDecoration: "none" }}>Sign up free</a>
-            </p> */}
           </div>
         </div>
       </main>
