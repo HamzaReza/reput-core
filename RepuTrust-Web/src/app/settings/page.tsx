@@ -2,7 +2,7 @@
 
 import Footer from "@/components/common/Footer";
 import Header from "@/components/common/Header";
-import { isAuthed, auth, users, clearAuth, ScanDepth } from "@/lib/api";
+import { isAuthed, getCachedMe, users, ScanDepth } from "@/lib/api";
 import { COUNTRY_NAMES } from "@/lib/countries";
 import { useRouter } from "next/navigation";
 import React, { useEffect, useState } from "react";
@@ -23,7 +23,7 @@ export default function SettingsPage() {
   const router = useRouter();
   const [authed, setAuthed] = useState<boolean | null>(null);
 
-  // Profile fields
+  // Profile fields (read-only in beta)
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [phone, setPhone] = useState("");
@@ -32,17 +32,12 @@ export default function SettingsPage() {
   const [dob, setDob] = useState("");
   const [scanDepth, setScanDepth] = useState<ScanDepth>("Standard");
   const [keywords, setKeywords] = useState<string[]>([]);
-  const [originalKeywords, setOriginalKeywords] = useState<string[]>([]);
-  const [keywordInput, setKeywordInput] = useState("");
-  const [saveLoading, setSaveLoading] = useState(false);
-  const [saveError, setSaveError] = useState("");
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [deleteLoading, setDeleteLoading] = useState(false);
-  const [deleteError, setDeleteError] = useState("");
+  const [showBetaDeleteMsg, setShowBetaDeleteMsg] = useState(false);
+  const [showBetaScanMsg, setShowBetaScanMsg] = useState(false);
 
   useEffect(() => {
     if (!isAuthed()) {
-      router.replace("/auth");
+      router.replace("/login");
       return;
     }
     setAuthed(true);
@@ -50,7 +45,7 @@ export default function SettingsPage() {
     const loadProfile = async () => {
       try {
         const [user, profile] = await Promise.all([
-          auth.me(),
+          getCachedMe(),
           users.getProfile().catch(() => null),
         ]);
         if (user.name) {
@@ -63,11 +58,8 @@ export default function SettingsPage() {
         if (user.nationality) setNationality(user.nationality);
         if (user.date_of_birth) setDob(user.date_of_birth);
         if (user.scan_depth) setScanDepth(user.scan_depth);
-        if (profile) {
-          if (profile.keywords?.length) {
-            setKeywords(profile.keywords);
-            setOriginalKeywords(profile.keywords);
-          }
+        if (profile?.keywords?.length) {
+          setKeywords(profile.keywords);
         }
       } catch {
         // Fallback to localStorage cache
@@ -83,52 +75,6 @@ export default function SettingsPage() {
     };
     loadProfile();
   }, [router]);
-
-  const saveChanges = async () => {
-    setSaveError("");
-    setSaveLoading(true);
-    try {
-      const fullName = `${firstName.trim()} ${lastName.trim()}`.trim();
-      await users.updateMe({ name: fullName, phone: phone.trim(), nationality: nationality || undefined, date_of_birth: dob || undefined, scan_depth: scanDepth });
-      const finalKeywords = keywordInput.trim()
-        ? [...keywords, keywordInput.replace(/,/g, "").trim()].filter(Boolean)
-        : keywords;
-      await users.upsertProfile({ keywords: finalKeywords });
-
-      setOriginalKeywords(finalKeywords);
-
-      try {
-        localStorage.setItem("reput_name", fullName);
-        localStorage.setItem("reput_keywords", finalKeywords.join(","));
-        localStorage.setItem("reput_firstname", firstName.trim());
-        localStorage.setItem("reput_lastname", lastName.trim());
-        localStorage.setItem("reput_phone", phone.trim());
-      } catch {}
-
-      sessionStorage.removeItem("reput_scan");
-      localStorage.removeItem("reput_last_scan_name");
-      localStorage.removeItem("reput_last_scan_keywords");
-
-      router.push("/dashboard");
-    } catch (err: unknown) {
-      setSaveError(err instanceof Error ? err.message : "Failed to save.");
-    } finally {
-      setSaveLoading(false);
-    }
-  };
-
-  const deleteAccount = async () => {
-    setDeleteError("");
-    setDeleteLoading(true);
-    try {
-      await users.deleteMe();
-      clearAuth();
-      router.replace("/auth");
-    } catch (err: unknown) {
-      setDeleteError(err instanceof Error ? err.message : "Failed to delete account.");
-      setDeleteLoading(false);
-    }
-  };
 
   if (!authed) return null;
 
@@ -222,8 +168,8 @@ export default function SettingsPage() {
                     <input
                       type="text"
                       value={firstName}
-                      onChange={(e) => setFirstName(e.target.value)}
-                      style={fieldStyle}
+                      readOnly
+                      style={{ ...fieldStyle, cursor: "default" }}
                       placeholder="Name"
                     />
                   </div>
@@ -242,8 +188,8 @@ export default function SettingsPage() {
                     <input
                       type="text"
                       value={lastName}
-                      onChange={(e) => setLastName(e.target.value)}
-                      style={fieldStyle}
+                      readOnly
+                      style={{ ...fieldStyle, cursor: "default" }}
                       placeholder="Lastname"
                     />
                   </div>
@@ -263,8 +209,8 @@ export default function SettingsPage() {
                   <input
                     type="tel"
                     value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                    style={fieldStyle}
+                    readOnly
+                    style={{ ...fieldStyle, cursor: "default" }}
                     placeholder="Telephone"
                   />
                 </div>
@@ -283,8 +229,8 @@ export default function SettingsPage() {
                   <input
                     type="email"
                     value={profileEmail}
-                    onChange={(e) => setProfileEmail(e.target.value)}
-                    style={fieldStyle}
+                    readOnly
+                    style={{ ...fieldStyle, cursor: "default" }}
                     placeholder="E-mail"
                   />
                 </div>
@@ -302,12 +248,14 @@ export default function SettingsPage() {
                   </label>
                   <select
                     value={nationality}
-                    onChange={(e) => setNationality(e.target.value)}
+                    disabled
                     style={{
                       ...fieldStyle,
                       appearance: "none",
                       WebkitAppearance: "none",
                       paddingRight: "2.5rem",
+                      cursor: "default",
+                      opacity: 1,
                     }}
                   >
                     <option value="">Select nationality</option>
@@ -352,23 +300,13 @@ export default function SettingsPage() {
                   >
                     Date of Birth
                   </label>
-                  <label
-                    htmlFor="settings-dob-input"
-                    style={{ ...fieldStyle, position: "relative", cursor: "pointer", display: "flex", alignItems: "center" }}
-                  >
-                    <span style={{ color: dob ? "#1e293b" : "#94a3b8", pointerEvents: "none", fontSize: "0.95rem" }}>
+                  <div style={{ ...fieldStyle, cursor: "default", display: "flex", alignItems: "center" }}>
+                    <span style={{ color: dob ? "#1e293b" : "#94a3b8", fontSize: "0.95rem" }}>
                       {dob
                         ? new Date(dob + "T00:00:00").toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" })
-                        : "Select date"}
+                        : "—"}
                     </span>
-                    <input
-                      id="settings-dob-input"
-                      type="date"
-                      value={dob}
-                      onChange={(e) => setDob(e.target.value)}
-                      style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", opacity: 0, cursor: "pointer", border: "none", padding: 0 }}
-                    />
-                  </label>
+                  </div>
                 </div>
               </div>
             </div>
@@ -417,8 +355,10 @@ export default function SettingsPage() {
                   </label>
                   <select
                     value={scanDepth}
-                    onChange={(e) => setScanDepth(e.target.value as ScanDepth)}
+                    disabled
                     style={{
+                      cursor: "default",
+                      opacity: 1,
                       width: "100%",
                       padding: "0.5rem 1rem",
                       borderRadius: "0.625rem",
@@ -510,23 +450,17 @@ export default function SettingsPage() {
                   backgroundColor: "#ffffff",
                   minHeight: "3rem",
                   alignItems: "center",
-                  cursor: "text",
+                  cursor: "default",
                 }}
-                onClick={() =>
-                  (
-                    document.getElementById(
-                      "settings-keyword-input",
-                    ) as HTMLInputElement | null
-                  )?.focus()
-                }
               >
-                {keywords.map((kw) => (
+                {keywords.length === 0 ? (
+                  <span style={{ color: "#94a3b8", fontSize: "0.9375rem", padding: "0.25rem 0.5rem" }}>—</span>
+                ) : keywords.map((kw) => (
                   <span
                     key={kw}
                     style={{
                       display: "inline-flex",
                       alignItems: "center",
-                      gap: "0.375rem",
                       padding: "0.25rem 0.75rem",
                       borderRadius: "0.5rem",
                       backgroundColor: "#4479DA",
@@ -537,74 +471,8 @@ export default function SettingsPage() {
                     }}
                   >
                     {kw}
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setKeywords((prev) => prev.filter((k) => k !== kw));
-                      }}
-                      style={{
-                        background: "none",
-                        border: "none",
-                        cursor: "pointer",
-                        padding: 0,
-                        lineHeight: 1,
-                        color: "rgba(255,255,255,0.8)",
-                        fontSize: "1rem",
-                        display: "flex",
-                        alignItems: "center",
-                      }}
-                      aria-label={`Remove ${kw}`}
-                    >
-                      ×
-                    </button>
                   </span>
                 ))}
-                <input
-                  id="settings-keyword-input"
-                  type="text"
-                  value={keywordInput}
-                  onChange={(e) => setKeywordInput(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (
-                      (e.key === "Enter" ||
-                        e.key === "," ||
-                        e.key === "Tab") &&
-                      keywordInput.trim()
-                    ) {
-                      e.preventDefault();
-                      const val = keywordInput.replace(/,/g, "").trim();
-                      if (val && !keywords.includes(val)) {
-                        setKeywords((prev) => [...prev, val]);
-                      }
-                      setKeywordInput("");
-                    } else if (
-                      e.key === "Backspace" &&
-                      !keywordInput &&
-                      keywords.length
-                    ) {
-                      setKeywords((prev) => prev.slice(0, -1));
-                    }
-                  }}
-                  onBlur={() => {
-                    const val = keywordInput.replace(/,/g, "").trim();
-                    if (val && !keywords.includes(val)) {
-                      setKeywords((prev) => [...prev, val]);
-                    }
-                    setKeywordInput("");
-                  }}
-                  placeholder={keywords.length === 0 ? "Type a keyword and press Enter…" : ""}
-                  style={{
-                    flex: 1,
-                    minWidth: "10rem",
-                    border: "none",
-                    outline: "none",
-                    backgroundColor: "transparent",
-                    fontSize: "0.9375rem",
-                    color: "#1e293b",
-                    padding: "0.25rem 0.5rem",
-                  }}
-                />
               </div>
             </div>
 
@@ -764,13 +632,10 @@ export default function SettingsPage() {
               >
                 Permanently delete your account and all associated data. This action cannot be undone.
               </p>
-              {deleteError && (
-                <p style={{ color: "#fca5a5", fontSize: "0.875rem", marginBottom: "0.75rem" }}>{deleteError}</p>
-              )}
-              {!showDeleteConfirm ? (
+              {!showBetaDeleteMsg ? (
                 <button
                   type="button"
-                  onClick={() => setShowDeleteConfirm(true)}
+                  onClick={() => setShowBetaDeleteMsg(true)}
                   style={{
                     padding: "0.625rem 1.5rem",
                     borderRadius: "0.625rem",
@@ -787,45 +652,25 @@ export default function SettingsPage() {
               ) : (
                 <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
                   <p style={{ color: "#fef2f2", fontWeight: 600, fontSize: "0.9375rem" }}>
-                    Are you sure? This will permanently delete your account.
+                    This account was created specifically for the RepuTrust Beta and cannot be deleted.
                   </p>
-                  <div style={{ display: "flex", gap: "0.75rem" }}>
-                    <button
-                      type="button"
-                      onClick={deleteAccount}
-                      disabled={deleteLoading}
-                      style={{
-                        padding: "0.625rem 1.5rem",
-                        borderRadius: "0.625rem",
-                        border: "none",
-                        background: "#ffffff",
-                        color: "#b91c1c",
-                        fontWeight: 700,
-                        fontSize: "0.9375rem",
-                        cursor: deleteLoading ? "not-allowed" : "pointer",
-                        opacity: deleteLoading ? 0.7 : 1,
-                      }}
-                    >
-                      {deleteLoading ? "Deleting…" : "Yes, delete my account"}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => { setShowDeleteConfirm(false); setDeleteError(""); }}
-                      disabled={deleteLoading}
-                      style={{
-                        padding: "0.625rem 1.5rem",
-                        borderRadius: "0.625rem",
-                        border: "2px solid rgba(255,255,255,0.6)",
-                        background: "transparent",
-                        color: "#ffffff",
-                        fontWeight: 600,
-                        fontSize: "0.9375rem",
-                        cursor: "pointer",
-                      }}
-                    >
-                      Cancel
-                    </button>
-                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowBetaDeleteMsg(false)}
+                    style={{
+                      padding: "0.625rem 1.5rem",
+                      borderRadius: "0.625rem",
+                      border: "2px solid rgba(255,255,255,0.6)",
+                      background: "transparent",
+                      color: "#ffffff",
+                      fontWeight: 600,
+                      fontSize: "0.9375rem",
+                      cursor: "pointer",
+                      alignSelf: "flex-start",
+                    }}
+                  >
+                    Dismiss
+                  </button>
                 </div>
               )}
             </div>
@@ -840,25 +685,59 @@ export default function SettingsPage() {
                 width: "100%",
               }}
             >
-              {saveError && (
-                <p style={{ color: "#FF6B4A", fontSize: "0.875rem", textAlign: "center" }}>{saveError}</p>
+              {showBetaScanMsg ? (
+                <div
+                  className="glass"
+                  style={{
+                    borderRadius: "0.75rem",
+                    padding: "1.25rem 1.5rem",
+                    border: "1px solid var(--color-border)",
+                    textAlign: "center",
+                    maxWidth: "min(28rem, 100%)",
+                    width: "100%",
+                    boxSizing: "border-box",
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center",
+                    gap: "0.75rem",
+                  }}
+                >
+                  <p style={{ fontSize: "0.9375rem", color: "var(--color-foreground)", fontWeight: 600, margin: 0 }}>
+                    During the Beta, each user receives one scan. Recalculating is not available.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setShowBetaScanMsg(false)}
+                    style={{
+                      padding: "0.5rem 1.25rem",
+                      borderRadius: "0.625rem",
+                      border: "1px solid var(--color-border)",
+                      background: "transparent",
+                      color: "var(--color-foreground)",
+                      fontWeight: 600,
+                      fontSize: "0.875rem",
+                      cursor: "pointer",
+                    }}
+                  >
+                    Dismiss
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setShowBetaScanMsg(true)}
+                  className="glow-button"
+                  style={{
+                    fontWeight: 700,
+                    minWidth: "min(18rem, 100%)",
+                    boxSizing: "border-box",
+                    padding: "0.75rem 2.75rem",
+                    borderRadius: "0.625rem",
+                    transition: "all 0.3s",
+                  }}
+                >
+                  Recalculate score
+                </button>
               )}
-              <button
-                onClick={saveChanges}
-                disabled={saveLoading}
-                className="glow-button"
-                style={{
-                  fontWeight: 700,
-                  minWidth: "min(18rem, 100%)",
-                  boxSizing: "border-box",
-                  padding: "0.75rem 2.75rem",
-                  borderRadius: "0.625rem",
-                  transition: "all 0.3s",
-                  opacity: saveLoading ? 0.8 : 1,
-                }}
-              >
-                {saveLoading ? "Saving…" : "Recalculate score"}
-              </button>
             </div>
           </div>
         </div>

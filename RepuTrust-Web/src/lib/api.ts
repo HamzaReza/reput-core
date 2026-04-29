@@ -23,6 +23,9 @@ export function clearAuth(): void {
     localStorage.clear();
     if (splash) localStorage.setItem("reput_splash_shown", splash);
   } catch {}
+  try {
+    sessionStorage.clear();
+  } catch {}
 }
 
 export function isAuthed(): boolean {
