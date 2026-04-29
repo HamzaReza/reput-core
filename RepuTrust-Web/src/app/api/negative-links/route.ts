@@ -555,7 +555,11 @@ export async function POST(req: NextRequest) {
 
     const cappedArticles = articles.slice(0, cap);
     const scrapeResults = await Promise.allSettled(
-      cappedArticles.map((a) => scrapeWithFirecrawl(a.url)),
+      cappedArticles.map((a) =>
+        a.url.toLowerCase().endsWith(".pdf")
+          ? Promise.resolve(null)
+          : scrapeWithFirecrawl(a.url),
+      ),
     );
 
     scrapeResults.forEach((result, i) => {
@@ -564,23 +568,10 @@ export async function POST(req: NextRequest) {
       }
     });
 
-    // ── Pre-filter: drop articles that don't mention the name + at least one keyword ──
-    const fullNameLower = sanitizedName.toLowerCase();
-    const keywordTerms = normalizedKeywords.map((k) => k.toLowerCase());
-
-    const nameMatchedArticles = cappedArticles.filter((a) => {
-      const haystack = `${a.title} ${a.snippet} ${a.content}`.toLowerCase();
-      const hasName = haystack.includes(fullNameLower);
-      const hasKeyword =
-        keywordTerms.length === 0 ||
-        keywordTerms.some((k) => haystack.includes(k));
-      return hasName && hasKeyword;
-    });
-
     // ── Phase 3: Single Claude classification call ────────────────────────────
     const classified = await classifyWithClaude(
       client,
-      nameMatchedArticles,
+      cappedArticles,
       sanitizedName,
       nationality ?? null,
       normalizedKeywords,
