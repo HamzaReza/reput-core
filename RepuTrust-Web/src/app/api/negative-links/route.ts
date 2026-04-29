@@ -238,6 +238,27 @@ async function searchSerper(
   return data.organic ?? [];
 }
 
+async function isPdf(url: string): Promise<boolean> {
+  const path = url.toLowerCase().split("?")[0];
+  if (path.includes(".pdf")) return true;
+
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 3000);
+    const res = await fetch(url, { method: "GET", signal: controller.signal });
+    clearTimeout(timer);
+    const contentType = res.headers.get("content-type") ?? "";
+    const contentDisposition = res.headers.get("content-disposition") ?? "";
+    controller.abort(); // headers received — abort before downloading the body
+    return (
+      contentType.includes("application/pdf") ||
+      contentDisposition.toLowerCase().includes(".pdf")
+    );
+  } catch {
+    return false;
+  }
+}
+
 async function scrapeWithFirecrawl(url: string): Promise<string | null> {
   const key = process.env.FIRECRAWL_API_KEY;
   if (!key) return null;
@@ -255,7 +276,6 @@ async function scrapeWithFirecrawl(url: string): Promise<string | null> {
       body: JSON.stringify({
         url,
         formats: ["markdown"],
-        parsers: [],
         onlyMainContent: true,
       }),
       signal: controller.signal,
@@ -526,8 +546,8 @@ export async function POST(req: NextRequest) {
     const normalizedKeywords = keywords ?? [];
     const searchQueries =
       normalizedKeywords.length > 0
-        ? normalizedKeywords.map((kw) => `"${sanitizedName}" ${kw}`)
-        : [`"${sanitizedName}"`];
+        ? normalizedKeywords.map((kw) => `${sanitizedName} ${kw}`)
+        : [`${sanitizedName}`];
 
     const cap = resultsCap ?? 20;
 
@@ -555,10 +575,8 @@ export async function POST(req: NextRequest) {
 
     const cappedArticles = articles.slice(0, cap);
     const scrapeResults = await Promise.allSettled(
-      cappedArticles.map((a) =>
-        a.url.toLowerCase().endsWith(".pdf")
-          ? Promise.resolve(null)
-          : scrapeWithFirecrawl(a.url),
+      cappedArticles.map(async (a) =>
+        (await isPdf(a.url)) ? null : scrapeWithFirecrawl(a.url),
       ),
     );
 
