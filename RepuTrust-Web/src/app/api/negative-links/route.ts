@@ -173,13 +173,13 @@ const COUNTRY_TO_LANGUAGE: Record<string, string> = {
   PL: "pl",
   RO: "ro",
   HU: "hu",
-  CZ: "cz",
+  CZ: "cs",
   SK: "sk",
   HR: "hr",
   RU: "ru",
-  UA: "ua",
+  UA: "uk",
   TR: "tr",
-  AR: "ar",
+  AR: "es",
   JP: "ja",
   KR: "ko",
   CN: "zh-CN",
@@ -193,10 +193,15 @@ const COUNTRY_TO_LANGUAGE: Record<string, string> = {
   ID: "id",
   MY: "ms",
   GR: "el",
-  SV: "sv",
+  SE: "sv",
   NO: "no",
   FI: "fi",
   DK: "da",
+  GB: "en",
+  US: "en",
+  CA: "en",
+  AU: "en",
+  IE: "en",
 };
 
 async function searchSerper(
@@ -247,7 +252,12 @@ async function scrapeWithFirecrawl(url: string): Promise<string | null> {
         "Content-Type": "application/json",
         Authorization: `Bearer ${key}`,
       },
-      body: JSON.stringify({ url, formats: ["markdown"] }),
+      body: JSON.stringify({
+        url,
+        formats: ["markdown"],
+        parsers: [],
+        onlyMainContent: true,
+      }),
       signal: controller.signal,
     });
 
@@ -257,8 +267,12 @@ async function scrapeWithFirecrawl(url: string): Promise<string | null> {
     const data = (await res.json()) as FirecrawlResponse;
     if (!data.success || !data.data?.markdown) return null;
 
-    return data.data.markdown.slice(0, 600);
-  } catch {
+    return data.data.markdown.slice(0, 4000);
+  } catch (err) {
+    console.error(
+      `[firecrawl] Failed to scrape ${url}:`,
+      err instanceof Error ? err.message : err,
+    );
     return null;
   }
 }
@@ -268,6 +282,7 @@ async function classifyWithClaude(
   articles: ArticleForClassification[],
   name: string,
   nationality: string | null,
+  keywords: string[],
 ): Promise<WebLink[]> {
   if (articles.length === 0) return [];
 
@@ -287,6 +302,9 @@ Content: ${a.content}`,
   const nationalityLine = nationality
     ? `The subject is from ${nationality}. Only include results clearly relevant to this person and their region.`
     : "";
+
+  const keywordList =
+    keywords.length > 0 ? keywords.join(", ") : "general reputation";
 
   const prompt = `You are a reputation intelligence analyst. Classify the following ${articles.length} articles about "${name}".
 
@@ -320,8 +338,19 @@ RISK CLASSIFICATION:
 - "low": minor criticism or weak negative mentions
 - "none": positive or neutral content
 
-MANDATORY NAME FILTER: Every result MUST mention either the full name "${name}" or the first name "${firstName}" OR the last name "${lastName}" in the title, snippet, or content.
-If neither appears → set sentiment to "neutral" and risk to "none".
+MANDATORY NAME FILTER:
+Before classifying, check whether the subject "${name}" is clearly identifiable in the title, snippet, or content.
+
+INCLUDE the article if:
+•⁠  The full name "${name}" appears (case-insensitive), OR
+•⁠  Both "${firstName}" AND "${lastName}" appear in close proximity (within the same sentence or paragraph)
+
+EXCLUDE the article if:
+•⁠  Only the first name appears without the last name, OR
+•⁠  Only the last name appears without the first name, OR
+•⁠  Neither appears at all
+
+If EXCLUDED → do not include this article in the output array at all. Return nothing for it.
 
 ARTICLES TO CLASSIFY:
 ${articleList}
@@ -344,6 +373,12 @@ Return ONLY the JSON array. If no valid articles, return [].`;
     max_tokens: 8192,
     messages: [{ role: "user", content: prompt }],
   });
+
+  if (response.stop_reason === "max_tokens") {
+    console.warn(
+      "[classify] Claude hit max_tokens — JSON may be truncated, returning partial or empty results",
+    );
+  }
 
   const textBlock = response.content.find((b) => b.type === "text");
   if (!textBlock || textBlock.type !== "text") return [];
@@ -475,6 +510,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "name is required" }, { status: 400 });
   }
 
+  const sanitizedName = name
+    .trim()
+    .slice(0, 200)
+    .replace(/[\r\n]/g, " ");
+
   const client = new Anthropic({ apiKey });
   const countryCode = nationality
     ? countryCodeFromNationality(nationality)
@@ -483,10 +523,11 @@ export async function POST(req: NextRequest) {
   try {
     // ── Phase 1: Parallel Serper searches ─────────────────────────────────────
     // One search per keyword with exact full-name match; fallback if no keywords
+    const normalizedKeywords = keywords ?? [];
     const searchQueries =
-      (keywords ?? []).length > 0
-        ? (keywords ?? []).map((kw) => `"${name}" ${kw}`)
-        : [`"${name}"`];
+      normalizedKeywords.length > 0
+        ? normalizedKeywords.map((kw) => `"${sanitizedName}" ${kw}`)
+        : [`"${sanitizedName}"`];
 
     const cap = resultsCap ?? 20;
 
@@ -514,7 +555,11 @@ export async function POST(req: NextRequest) {
 
     const cappedArticles = articles.slice(0, cap);
     const scrapeResults = await Promise.allSettled(
-      cappedArticles.map((a) => scrapeWithFirecrawl(a.url)),
+      cappedArticles.map((a) =>
+        a.url.toLowerCase().endsWith(".pdf")
+          ? Promise.resolve(null)
+          : scrapeWithFirecrawl(a.url),
+      ),
     );
 
     scrapeResults.forEach((result, i) => {
@@ -527,8 +572,9 @@ export async function POST(req: NextRequest) {
     const classified = await classifyWithClaude(
       client,
       cappedArticles,
-      name,
+      sanitizedName,
       nationality ?? null,
+      normalizedKeywords,
     );
 
     const deduped = dedupeLinks(classified).slice(0, cap);
@@ -537,11 +583,11 @@ export async function POST(req: NextRequest) {
     const neutral = deduped.filter((l) => l.sentiment === "neutral");
 
     const negCount = negative.length;
-    const posCount = positive.length + neutral.length;
+    const posCount = positive.length;
     const summary = includeSummary
       ? await generateMeetingSummary(
           client,
-          name,
+          sanitizedName,
           deriveScoreServer(negCount, posCount),
           deduped,
         )

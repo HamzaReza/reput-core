@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { meetings, type Meeting } from "@/lib/api";
 
 const STATUS_COLORS: Record<string, { bg: string; color: string }> = {
@@ -21,11 +21,13 @@ interface Props {
 }
 
 export default function MeetingsTab({ active }: Props) {
+  const hasLoadedRef = useRef(false);
   const [meetingList, setMeetingList] = useState<Meeting[]>([]);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (!active) return;
+    if (!active || hasLoadedRef.current) return;
+    hasLoadedRef.current = true;
     setLoading(true);
     meetings
       .getMy()
