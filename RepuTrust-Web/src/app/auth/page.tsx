@@ -180,7 +180,6 @@ function AuthPageInner() {
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [phone, setPhone] = useState("");
-  const [profileEmail, setProfileEmail] = useState("");
   const [nationality, setNationality] = useState("");
   const [dob, setDob] = useState("");
   const [keywords, setKeywords] = useState<string[]>([]);
@@ -325,7 +324,7 @@ function AuthPageInner() {
             onSubmit={async (e) => {
               e.preventDefault();
               setStep1Error("");
-              setProfileEmail(email);
+
               setStep1Loading(true);
               try {
                 const res = await auth.register(email, password);
@@ -743,6 +742,38 @@ function AuthPageInner() {
           To find out your ReputScore we will need some information about you
         </p>
 
+        {/* ⚠ Permanence warning */}
+        <div
+          style={{
+            display: "flex",
+            gap: "0.75rem",
+            alignItems: "flex-start",
+            backgroundColor: "rgba(0,0,0,0.35)",
+            border: "1px solid rgba(255,80,80,0.65)",
+            borderRadius: "0.625rem",
+            padding: "0.875rem 1rem",
+            marginBottom: "1.5rem",
+          }}
+        >
+          <span style={{ fontSize: "1.1rem", lineHeight: 1, flexShrink: 0, marginTop: "0.05rem" }}>🚨</span>
+          <div>
+            <p
+              style={{
+                fontWeight: 700,
+                fontSize: "0.8125rem",
+                color: "#fca5a5",
+                marginBottom: "0.25rem",
+                letterSpacing: "0.02em",
+              }}
+            >
+              IMPORTANT — Please enter your details carefully
+            </p>
+            <p style={{ fontSize: "0.8125rem", color: "rgba(255,255,255,0.88)", lineHeight: 1.55, margin: 0 }}>
+              The information you provide here is used to calculate your ReputScore. You will not be able to change it or request a new calculation after submission.
+            </p>
+          </div>
+        </div>
+
         <form
           onSubmit={async (e) => {
             e.preventDefault();
@@ -756,6 +787,10 @@ function AuthPageInner() {
                 setKeywords(finalKeywords);
               }
               setKeywordInput("");
+            }
+            if (!nationality) {
+              setStep3Error("Please select your nationality.");
+              return;
             }
             if (finalKeywords.length === 0) {
               setKeywordsError("Please add at least one keyword.");
@@ -898,16 +933,7 @@ function AuthPageInner() {
             style={inputStyle}
             placeholder="Telephone"
           />
-          <input
-            type="email"
-            value={profileEmail}
-            onChange={(e) => setProfileEmail(e.target.value)}
-            style={inputStyle}
-            placeholder="E-mail"
-            required
-          />
-
-          <CountryPicker value={nationality} onChange={setNationality} />
+          <CountryPicker value={nationality} onChange={setNationality} required />
 
           <div
             style={{ ...inputStyle, position: "relative", cursor: "pointer" }}
@@ -1825,9 +1851,11 @@ function AuthPageInner() {
 function CountryPicker({
   value,
   onChange,
+  required,
 }: {
   value: string;
   onChange: (v: string) => void;
+  required?: boolean;
 }) {
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
@@ -1860,6 +1888,7 @@ function CountryPicker({
           value={open ? query : value}
           placeholder="Nationality"
           autoComplete="off"
+          required={required}
           onFocus={() => {
             setQuery("");
             setOpen(true);

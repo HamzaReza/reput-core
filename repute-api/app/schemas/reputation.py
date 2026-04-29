@@ -25,6 +25,13 @@ class ReputationScanOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class ReputationScanUpdate(BaseModel):
+    score: int = Field(ge=0, le=100)
+    risk_level: str
+    results: list[ReputationResult]
+    summary: dict
+
+
 class ReputationScanCreate(BaseModel):
     """Used internally when triggering a new scan."""
     keywords: list[str] = Field(default_factory=list)

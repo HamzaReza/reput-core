@@ -23,19 +23,17 @@ except ImportError:
                 pass
             return e.code, body
 
-API_URL = "https://reput-production.up.railway.app/api/v1/auth/register"
+ENVIRONMENTS = {
+    "production": "https://ealixir-reput-production.up.railway.app/api/v1/auth/register",
+    "develop":    "https://ealixir-reput-develop.up.railway.app/api/v1/auth/register",
+}
 CSV_FILE = "accounts.csv"
 DELAY = 0.5  # seconds between requests
 
-def main():
-    try:
-        with open(CSV_FILE, newline="", encoding="utf-8") as f:
-            reader = csv.DictReader(f)
-            rows = list(reader)
-    except FileNotFoundError:
-        print(f"ERROR: {CSV_FILE} not found. Create it with columns: email,password")
-        sys.exit(1)
-
+def register_all(rows, env_name, api_url):
+    print(f"\n{'='*60}")
+    print(f"  {env_name.upper()}: {api_url}")
+    print(f"{'='*60}")
     success, failed = 0, 0
 
     for i, row in enumerate(rows, 1):
@@ -43,17 +41,17 @@ def main():
         password = row.get("password", "").strip()
 
         if not email or not password:
-            print(f"[{i}/{len(rows)}] SKIP   — missing email or password")
+            print(f"[{i}/{len(rows)}] SKIP    — missing email or password")
             failed += 1
             continue
 
-        status, body = post(API_URL, {"email": email, "password": password})
+        status, body = post(api_url, {"email": email, "password": password})
 
         if status == 201:
-            print(f"[{i}/{len(rows)}] OK     {email}")
+            print(f"[{i}/{len(rows)}] OK      {email}")
             success += 1
         elif status == 409:
-            print(f"[{i}/{len(rows)}] EXISTS {email} — already registered")
+            print(f"[{i}/{len(rows)}] EXISTS  {email} — already registered")
             failed += 1
         elif status == 422:
             detail = body.get("detail", body)
@@ -61,13 +59,26 @@ def main():
             failed += 1
         else:
             detail = body.get("detail", body)
-            print(f"[{i}/{len(rows)}] ERROR  {email} — HTTP {status}: {detail}")
+            print(f"[{i}/{len(rows)}] ERROR   {email} — HTTP {status}: {detail}")
             failed += 1
 
         if i < len(rows):
             time.sleep(DELAY)
 
-    print(f"\nDone: {success} registered, {failed} failed out of {len(rows)} accounts.")
+    print(f"\n  Result: {success} registered, {failed} failed out of {len(rows)} accounts.")
+    return success, failed
+
+def main():
+    try:
+        with open(CSV_FILE, newline="", encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            rows = list(reader)
+    except FileNotFoundError:
+        print(f"ERROR: {CSV_FILE} not found.")
+        sys.exit(1)
+
+    for env_name, api_url in ENVIRONMENTS.items():
+        register_all(rows, env_name, api_url)
 
 if __name__ == "__main__":
     main()

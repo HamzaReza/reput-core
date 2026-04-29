@@ -3,11 +3,12 @@
 import Footer from "@/components/common/Footer";
 import Header from "@/components/common/Header";
 import { feedback, type FeedbackItem } from "@/lib/api";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
 
 export default function FeedbackAdminPage() {
+  const hasLoadedRef = useRef(false);
   const [items, setItems] = useState<FeedbackItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -17,6 +18,8 @@ export default function FeedbackAdminPage() {
   const [pageSizeOpen, setPageSizeOpen] = useState(false);
 
   useEffect(() => {
+    if (hasLoadedRef.current) return;
+    hasLoadedRef.current = true;
     feedback
       .list()
       .then(setItems)
