@@ -7,14 +7,12 @@ import ScheduleMeetingCTA, {
   CalModalButton,
 } from "@/components/dashboard/ScheduleMeetingCTA";
 import {
+  auth,
   feedback,
-  getCachedMe,
   isAuthed,
   reputation,
-  USER_CACHE_KEY,
   users,
   type ReputationScan,
-  type User,
 } from "@/lib/api";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
@@ -22,6 +20,7 @@ import { useEffect, useRef, useState } from "react";
 type RiskLevel = "Negative" | "Poor" | "Mediocre" | "Good";
 
 function apiRiskToUi(risk: string): RiskLevel {
+  console.log("🚀 ~ page.tsx:23 ~ apiRiskToUi ~ risk:", risk);
   if (risk === "high") return "Negative";
   if (risk === "medium") return "Poor";
   if (risk === "low") return "Mediocre";
@@ -295,87 +294,6 @@ function RepuGauge({
   );
 }
 
-type LinkItem = {
-  url: string;
-  title: string;
-  snippet: string;
-  sentiment?: string;
-  risk: string;
-  source: string;
-  type: string;
-};
-
-
-async function fetchAndMergeScan(
-  user: User,
-): Promise<{ merged: ReputationScan; derivedScore: number } | null> {
-  const currentKeywords: string[] = user.profile?.keywords ?? [];
-  const [scan, linksRes] = await Promise.allSettled([
-    reputation.triggerScan(),
-    fetch("/api/negative-links", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        name: user.name ?? "",
-        keywords: currentKeywords,
-        nationality: user.nationality ?? "",
-      }),
-    }).then(
-      (r) =>
-        r.json() as Promise<{
-          links: LinkItem[];
-          negative: LinkItem[];
-          positive: LinkItem[];
-          neutral: LinkItem[];
-        }>,
-    ),
-  ]);
-
-  const scanResult = scan.status === "fulfilled" ? scan.value : null;
-  const linksData = linksRes.status === "fulfilled" ? linksRes.value : null;
-
-  if (
-    linksRes.status === "rejected" ||
-    !linksData ||
-    "error" in (linksData as object) ||
-    linksData.links == null
-  ) {
-    return null;
-  }
-
-  const allLinks = linksData.links;
-  const negCount = allLinks.filter(
-    (l) =>
-      l.sentiment === "negative" || l.risk === "high" || l.risk === "medium",
-  ).length;
-  const posCount = allLinks.filter(
-    (l) =>
-      l.sentiment === "positive" ||
-      l.sentiment === "neutral" ||
-      l.risk === "low" ||
-      l.risk === "none",
-  ).length;
-  const derivedScore = deriveScore(negCount, posCount);
-
-  const merged = {
-    ...(scanResult ?? {}),
-    score: derivedScore,
-    risk_level:
-      derivedScore >= 86 ? "low" : derivedScore >= 61 ? "medium" : "high",
-    results: allLinks.map((l) => ({ ...l, risk: l.risk as string })),
-    summary: {
-      total_results: allLinks.length,
-      high_risk: allLinks.filter((l) => l.risk === "high").length,
-      medium_risk: allLinks.filter((l) => l.risk === "medium").length,
-      low_risk: allLinks.filter((l) => l.risk === "low").length,
-    },
-  } as ReputationScan;
-
-  if (scanResult?.id) void reputation.updateScan(scanResult.id, merged);
-
-  return { merged, derivedScore };
-}
-
 export default function DashboardPage() {
   const router = useRouter();
   const toast = useToast();
@@ -410,7 +328,7 @@ export default function DashboardPage() {
   const hasLoadedRef = useRef(false);
   useEffect(() => {
     if (!isAuthed()) {
-      router.replace("/login");
+      router.replace("/auth");
       return;
     }
     setAuthed(true);
@@ -419,6 +337,7 @@ export default function DashboardPage() {
       if (hasLoadedRef.current) return;
       hasLoadedRef.current = true;
       try {
+        // Load cached scan from sessionStorage — avoids re-fetching on tab navigation
         const cached = sessionStorage.getItem("reput_scan");
         if (cached) {
           const parsed: ReputationScan = JSON.parse(cached);
@@ -426,7 +345,7 @@ export default function DashboardPage() {
           setScore(parsed.score);
         }
 
-        const user = await getCachedMe();
+        const user = await auth.me();
         if (!user.profile_complete) {
           router.replace("/auth?step=3");
           return;
@@ -442,27 +361,102 @@ export default function DashboardPage() {
         const currentKeywords: string[] = user.profile?.keywords ?? [];
         if (currentKeywords.length) setScanKeywords(currentKeywords);
 
-        // Session cache is warm — nothing more to do
-        if (cached) return;
+        const currentName = user.name ?? "";
+        const prevName = localStorage.getItem("reput_last_scan_name") ?? "";
+        const nameChanged = prevName !== currentName;
 
-        // No session cache — check DB first
-        const latest = await reputation.getLatest();
-        if (latest) {
-          setScanData(latest);
-          setScore(latest.score);
-          sessionStorage.setItem("reput_scan", JSON.stringify(latest));
-          return;
-        }
+        const keywordsKey = [...currentKeywords].sort().join(",");
+        const prevKeywordsKey =
+          localStorage.getItem("reput_last_scan_keywords") ?? "";
+        const keywordsChanged = prevKeywordsKey !== keywordsKey;
 
-        // No DB scan yet — run the one-time scan
-        const result = await fetchAndMergeScan(user);
-        if (!result) {
-          setScanError(true);
-          return;
+        // Trigger scan on first visit, or when name or keywords changed
+        if (!cached || nameChanged || keywordsChanged) {
+          type LinkItem = {
+            url: string;
+            title: string;
+            snippet: string;
+            sentiment?: string;
+            risk: string;
+            source: string;
+            type: string;
+          };
+          type LinksResponse = {
+            links: LinkItem[];
+            negative: LinkItem[];
+            positive: LinkItem[];
+            neutral: LinkItem[];
+          };
+
+          const [scan, linksRes] = await Promise.allSettled([
+            reputation.triggerScan(),
+            fetch("/api/negative-links", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                name: user.name ?? "",
+                keywords: currentKeywords,
+                nationality: user.nationality ?? "",
+              }),
+            }).then((r) => r.json() as Promise<LinksResponse>),
+          ]);
+
+          const scanResult = scan.status === "fulfilled" ? scan.value : null;
+          const linksData =
+            linksRes.status === "fulfilled" ? linksRes.value : null;
+
+          const searchFailed =
+            linksRes.status === "rejected" ||
+            !linksData ||
+            "error" in (linksData as object) ||
+            linksData.links == null;
+
+          if (searchFailed) {
+            setScanError(true);
+            return;
+          }
+
+          const allLinks: LinkItem[] = linksData.links;
+
+          const negCount = allLinks.filter((l) => {
+            return (
+              l.sentiment === "negative" ||
+              l.risk === "high" ||
+              l.risk === "medium"
+            );
+          }).length;
+          const posCount = allLinks.filter(
+            (l) =>
+              l.sentiment === "positive" ||
+              l.sentiment === "neutral" ||
+              l.risk === "low" ||
+              l.risk === "none",
+          ).length;
+          const derivedScore = deriveScore(negCount, posCount);
+
+          const merged = {
+            ...(scanResult ?? {}),
+            score: derivedScore,
+            risk_level:
+              derivedScore >= 86
+                ? "low"
+                : derivedScore >= 61
+                  ? "medium"
+                  : "high",
+            results: allLinks.map((l) => ({ ...l, risk: l.risk as string })),
+            summary: {
+              total_results: allLinks.length,
+              high_risk: allLinks.filter((l) => l.risk === "high").length,
+              medium_risk: allLinks.filter((l) => l.risk === "medium").length,
+              low_risk: allLinks.filter((l) => l.risk === "low").length,
+            },
+          };
+          setScanData(merged as typeof scanResult & typeof merged);
+          setScore(derivedScore);
+          sessionStorage.setItem("reput_scan", JSON.stringify(merged));
+          localStorage.setItem("reput_last_scan_keywords", keywordsKey);
+          localStorage.setItem("reput_last_scan_name", currentName);
         }
-        setScanData(result.merged);
-        setScore(result.derivedScore);
-        sessionStorage.setItem("reput_scan", JSON.stringify(result.merged));
       } catch {
         setScanError(true);
       } finally {
@@ -517,29 +511,89 @@ export default function DashboardPage() {
 
   async function handleRecalculate() {
     sessionStorage.removeItem("reput_scan");
-    sessionStorage.removeItem(USER_CACHE_KEY);
+    localStorage.removeItem("reput_last_scan_name");
+    localStorage.removeItem("reput_last_scan_keywords");
     try {
-      // Always check DB first — use existing scan if present
-      const latest = await reputation.getLatest();
-      if (latest) {
-        setScanData(latest);
-        setScore(latest.score);
-        setScanError(false);
-        sessionStorage.setItem("reput_scan", JSON.stringify(latest));
-        return;
-      }
-      // No DB scan yet — retry the one-time scan
-      const user = await getCachedMe();
-      const result = await fetchAndMergeScan(user);
-      if (!result) {
+      const user = await auth.me();
+      const currentKeywords: string[] = user.profile?.keywords ?? [];
+      type LinkItem = {
+        url: string;
+        title: string;
+        snippet: string;
+        sentiment?: string;
+        risk: string;
+        source: string;
+        type: string;
+      };
+      type LinksResponse = {
+        links: LinkItem[];
+        negative: LinkItem[];
+        positive: LinkItem[];
+        neutral: LinkItem[];
+      };
+      const [scan, linksRes] = await Promise.allSettled([
+        reputation.triggerScan(),
+        fetch("/api/negative-links", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: user.name ?? "",
+            keywords: currentKeywords,
+            nationality: user.nationality ?? "",
+          }),
+        }).then((r) => r.json() as Promise<LinksResponse>),
+      ]);
+      const scanResult = scan.status === "fulfilled" ? scan.value : null;
+      const linksData = linksRes.status === "fulfilled" ? linksRes.value : null;
+
+      const searchFailed =
+        linksRes.status === "rejected" ||
+        !linksData ||
+        "error" in (linksData as object) ||
+        linksData.links == null;
+
+      if (searchFailed) {
         setScanError(true);
         toast.show("Scan failed. Please try again.");
         return;
       }
-      setScanData(result.merged);
-      setScore(result.derivedScore);
+
+      const allLinks: LinkItem[] = linksData.links;
+      const negCount = allLinks.filter((l) => {
+        return (
+          l.sentiment === "negative" || l.risk === "high" || l.risk === "medium"
+        );
+      }).length;
+      const posCount = allLinks.filter(
+        (l) =>
+          l.sentiment === "positive" ||
+          l.sentiment === "neutral" ||
+          l.risk === "low" ||
+          l.risk === "none",
+      ).length;
+      const derivedScore = deriveScore(negCount, posCount);
+      const merged = {
+        ...(scanResult ?? {}),
+        score: derivedScore,
+        risk_level:
+          derivedScore >= 86 ? "low" : derivedScore >= 61 ? "medium" : "high",
+        results: allLinks.map((l) => ({ ...l, risk: l.risk as string })),
+        summary: {
+          total_results: allLinks.length,
+          high_risk: allLinks.filter((l) => l.risk === "high").length,
+          medium_risk: allLinks.filter((l) => l.risk === "medium").length,
+          low_risk: allLinks.filter((l) => l.risk === "low").length,
+        },
+      };
+      setScanData(merged as typeof scanResult & typeof merged);
+      setScore(derivedScore);
       setScanError(false);
-      sessionStorage.setItem("reput_scan", JSON.stringify(result.merged));
+      sessionStorage.setItem("reput_scan", JSON.stringify(merged));
+      localStorage.setItem(
+        "reput_last_scan_keywords",
+        [...currentKeywords].sort().join(","),
+      );
+      localStorage.setItem("reput_last_scan_name", user.name ?? "");
     } catch {
       setScanError(true);
       toast.show("Scan failed. Please try again.");
@@ -563,7 +617,6 @@ export default function DashboardPage() {
     ? negativeResults
     : negativeResults.slice(0, 3);
   const blurredNegativeLinks = isPro ? [] : negativeResults.slice(3);
-  const sl = scoreLabel(score);
 
   return (
     <div
@@ -928,7 +981,7 @@ export default function DashboardPage() {
                           style={{
                             fontSize: "2.5rem",
                             fontWeight: 800,
-                            color: sl.color,
+                            color: scoreLabel(score).color,
                             lineHeight: 1,
                             marginBottom: "0.25rem",
                           }}
@@ -940,11 +993,11 @@ export default function DashboardPage() {
                             fontSize: "0.75rem",
                             fontWeight: 700,
                             letterSpacing: "0.12em",
-                            color: sl.color,
+                            color: scoreLabel(score).color,
                             textTransform: "uppercase",
                           }}
                         >
-                          {sl.label}
+                          {scoreLabel(score).label}
                         </p>
                       </div>
                     </>
