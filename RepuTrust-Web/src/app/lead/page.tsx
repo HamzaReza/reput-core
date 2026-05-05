@@ -30,6 +30,7 @@ interface ScanResult {
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 const RESULTS_CAP_OPTIONS = [10, 20, 30, 40, 50];
+const KEYWORDS_CAP_OPTIONS = [3, 4, 5, 6, 7, 8];
 
 
 type RiskLevel = "Negative" | "Poor" | "Mediocre" | "Good";
@@ -270,6 +271,7 @@ export default function LeadPage() {
   const [country, setCountry] = useState("");
   const [description, setDescription] = useState("");
   const [resultsCap, setResultsCap] = useState(20);
+  const [keywordsCap, setKeywordsCap] = useState(5);
 
   // Scan state
   const [loading, setLoading] = useState(false);
@@ -342,6 +344,7 @@ export default function LeadPage() {
           country,
           description: description.trim(),
           resultsCap,
+          keywordsCap,
         }),
       });
       const data = await res.json();
@@ -468,6 +471,37 @@ export default function LeadPage() {
                     minHeight: "6rem",
                   }}
                 />
+              </div>
+
+              {/* Keywords cap */}
+              <div>
+                <label style={labelStyle}>Keywords</label>
+                <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+                  {KEYWORDS_CAP_OPTIONS.map((n) => (
+                    <button
+                      key={n}
+                      type="button"
+                      onClick={() => setKeywordsCap(n)}
+                      style={{
+                        padding: "0.4rem 1rem",
+                        borderRadius: "0.5rem",
+                        fontSize: "0.875rem",
+                        fontWeight: 500,
+                        cursor: "pointer",
+                        transition: "all 0.15s",
+                        border: "1.5px solid",
+                        borderColor: keywordsCap === n ? "#4479DA" : "var(--color-border, #e2e8f0)",
+                        backgroundColor: keywordsCap === n ? "#eef3ff" : "#ffffff",
+                        color: keywordsCap === n ? "#4479DA" : "var(--color-muted, #64748b)",
+                      }}
+                    >
+                      {n}
+                    </button>
+                  ))}
+                </div>
+                <p style={{ margin: "0.375rem 0 0", fontSize: "0.75rem", color: "#94a3b8" }}>
+                  Number of search keywords Claude generates from the description
+                </p>
               </div>
 
               {/* Results cap */}
