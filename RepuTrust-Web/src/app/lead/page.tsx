@@ -32,14 +32,32 @@ interface ScanResult {
 const RESULTS_CAP_OPTIONS = [10, 20, 30, 40, 50];
 const KEYWORDS_CAP_OPTIONS = [3, 4, 5, 6, 7, 8];
 
-
 type RiskLevel = "Negative" | "Poor" | "Mediocre" | "Good";
 
-const RISK_COLORS: Record<RiskLevel, { bg: string; color: string; border: string }> = {
-  Negative: { bg: "rgba(255,61,0,0.12)", color: "#FF6B4A", border: "rgba(255,61,0,0.3)" },
-  Poor: { bg: "rgba(255,140,0,0.1)", color: "#FF8C00", border: "rgba(255,140,0,0.3)" },
-  Mediocre: { bg: "rgba(255,214,0,0.1)", color: "#FFD600", border: "rgba(255,214,0,0.3)" },
-  Good: { bg: "rgba(76,175,80,0.1)", color: "#4CAF50", border: "rgba(76,175,80,0.3)" },
+const RISK_COLORS: Record<
+  RiskLevel,
+  { bg: string; color: string; border: string }
+> = {
+  Negative: {
+    bg: "rgba(255,61,0,0.12)",
+    color: "#FF6B4A",
+    border: "rgba(255,61,0,0.3)",
+  },
+  Poor: {
+    bg: "rgba(255,140,0,0.1)",
+    color: "#FF8C00",
+    border: "rgba(255,140,0,0.3)",
+  },
+  Mediocre: {
+    bg: "rgba(255,214,0,0.1)",
+    color: "#FFD600",
+    border: "rgba(255,214,0,0.3)",
+  },
+  Good: {
+    bg: "rgba(76,175,80,0.1)",
+    color: "#4CAF50",
+    border: "rgba(76,175,80,0.3)",
+  },
 };
 
 const STATUS_MESSAGES = [
@@ -113,7 +131,11 @@ const labelStyle: React.CSSProperties = {
 
 // ── RepuGauge ──────────────────────────────────────────────────────────────────
 function RepuGauge({ score }: { score: number }) {
-  const cx = 140, cy = 140, r = 112, arcStroke = 22, avatarR = 50;
+  const cx = 140,
+    cy = 140,
+    r = 112,
+    arcStroke = 22,
+    avatarR = 50;
   const toRad = (d: number) => (d * Math.PI) / 180;
   const pt = (deg: number) => ({
     x: cx + r * Math.cos(toRad(deg)),
@@ -130,7 +152,8 @@ function RepuGauge({ score }: { score: number }) {
   const blendSpan = 9;
 
   const arcPath = (startDeg: number, endDeg: number) => {
-    const s = pt(startDeg), e = pt(endDeg);
+    const s = pt(startDeg),
+      e = pt(endDeg);
     const span = startDeg - endDeg;
     return `M ${s.x.toFixed(2)} ${s.y.toFixed(2)} A ${r} ${r} 0 ${span > 180 ? 1 : 0} 1 ${e.x.toFixed(2)} ${e.y.toFixed(2)}`;
   };
@@ -144,15 +167,28 @@ function RepuGauge({ score }: { score: number }) {
   const vb = `${cx - r - pad} ${cy - r - pad} ${(r + pad) * 2} ${(r + pad) * 2}`;
 
   return (
-    <svg viewBox={vb} width="100%" style={{ maxWidth: "21rem", display: "block", margin: "0 auto" }}>
+    <svg
+      viewBox={vb}
+      width="100%"
+      style={{ maxWidth: "21rem", display: "block", margin: "0 auto" }}
+    >
       <defs>
         <clipPath id="leadAvatarClip">
           <circle cx={cx} cy={cy} r={avatarR} />
         </clipPath>
         {blendPairs.map(([c1, c2, angle], i) => {
-          const s = pt(angle + blendSpan), e = pt(angle - blendSpan);
+          const s = pt(angle + blendSpan),
+            e = pt(angle - blendSpan);
           return (
-            <linearGradient key={i} id={`leadBlend${i}`} gradientUnits="userSpaceOnUse" x1={s.x} y1={s.y} x2={e.x} y2={e.y}>
+            <linearGradient
+              key={i}
+              id={`leadBlend${i}`}
+              gradientUnits="userSpaceOnUse"
+              x1={s.x}
+              y1={s.y}
+              x2={e.x}
+              y2={e.y}
+            >
               <stop offset="0%" stopColor={c1} />
               <stop offset="100%" stopColor={c2} />
             </linearGradient>
@@ -172,20 +208,59 @@ function RepuGauge({ score }: { score: number }) {
         `}</style>
       </defs>
 
-      <circle cx={cx} cy={cy} r={r} fill="none" stroke="rgba(148,163,184,0.25)" strokeWidth={arcStroke} />
+      <circle
+        cx={cx}
+        cy={cy}
+        r={r}
+        fill="none"
+        stroke="rgba(148,163,184,0.25)"
+        strokeWidth={arcStroke}
+      />
       {bandColors.map((color, i) => (
-        <path key={i} d={arcPath(bandAngles[i], bandAngles[i + 1])} fill="none" stroke={color} strokeWidth={arcStroke} strokeLinecap="butt" />
+        <path
+          key={i}
+          d={arcPath(bandAngles[i], bandAngles[i + 1])}
+          fill="none"
+          stroke={color}
+          strokeWidth={arcStroke}
+          strokeLinecap="butt"
+        />
       ))}
       {blendPairs.map(([, , angle], i) => (
-        <path key={i} d={arcPath(angle + blendSpan, angle - blendSpan)} fill="none" stroke={`url(#leadBlend${i})`} strokeWidth={arcStroke} strokeLinecap="butt" />
+        <path
+          key={i}
+          d={arcPath(angle + blendSpan, angle - blendSpan)}
+          fill="none"
+          stroke={`url(#leadBlend${i})`}
+          strokeWidth={arcStroke}
+          strokeLinecap="butt"
+        />
       ))}
       <circle cx={pt(210).x} cy={pt(210).y} r={arcStroke / 2} fill="#FF3D00" />
       <circle cx={pt(-30).x} cy={pt(-30).y} r={arcStroke / 2} fill="#4CAF50" />
       <circle cx={cx} cy={cy} r={avatarR + 4} fill="#ffffff" />
       <circle cx={cx} cy={cy} r={avatarR} fill="rgba(150,175,210,0.1)" />
-      <circle cx={cx} cy={cy - avatarR * 0.25} r={avatarR * 0.29} fill="rgba(150,175,210,0.38)" />
-      <ellipse cx={cx} cy={cy + avatarR * 0.58} rx={avatarR * 0.52} ry={avatarR * 0.37} fill="rgba(150,175,210,0.38)" />
-      <circle cx={cx} cy={cy} r={avatarR} fill="none" stroke="rgba(148,163,184,0.35)" strokeWidth={2} />
+      <circle
+        cx={cx}
+        cy={cy - avatarR * 0.25}
+        r={avatarR * 0.29}
+        fill="rgba(150,175,210,0.38)"
+      />
+      <ellipse
+        cx={cx}
+        cy={cy + avatarR * 0.58}
+        rx={avatarR * 0.52}
+        ry={avatarR * 0.37}
+        fill="rgba(150,175,210,0.38)"
+      />
+      <circle
+        cx={cx}
+        cy={cy}
+        r={avatarR}
+        fill="none"
+        stroke="rgba(148,163,184,0.35)"
+        strokeWidth={2}
+      />
       <g className="lead-needle-g">
         <path
           d={`M ${cx + needleLen} ${cy} L ${cx + avatarR + 2} ${cy + hw} A ${hw} ${hw} 0 0 1 ${cx + avatarR + 2} ${cy - hw} Z`}
@@ -197,19 +272,36 @@ function RepuGauge({ score }: { score: number }) {
 }
 
 // ── CountryPicker ──────────────────────────────────────────────────────────────
-function CountryPicker({ value, onChange, required }: { value: string; onChange: (v: string) => void; required?: boolean }) {
+function CountryPicker({
+  value,
+  onChange,
+  required,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  required?: boolean;
+}) {
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
   const filtered = query.trim()
-    ? COUNTRY_NAMES.filter((c) => c.toLowerCase().includes(query.toLowerCase())).slice(0, 80)
+    ? COUNTRY_NAMES.filter((c) =>
+        c.toLowerCase().includes(query.toLowerCase()),
+      ).slice(0, 80)
     : COUNTRY_NAMES;
 
-  const handleSelect = (name: string) => { onChange(name); setQuery(""); setOpen(false); };
+  const handleSelect = (name: string) => {
+    onChange(name);
+    setQuery("");
+    setOpen(false);
+  };
 
   const onBlur = (e: React.FocusEvent) => {
-    if (!containerRef.current?.contains(e.relatedTarget as Node)) { setOpen(false); setQuery(""); }
+    if (!containerRef.current?.contains(e.relatedTarget as Node)) {
+      setOpen(false);
+      setQuery("");
+    }
   };
 
   return (
@@ -221,27 +313,92 @@ function CountryPicker({ value, onChange, required }: { value: string; onChange:
           placeholder="Select a country"
           autoComplete="off"
           required={required && !value}
-          onFocus={() => { setQuery(""); setOpen(true); }}
-          onChange={(e) => { setQuery(e.target.value); if (!open) setOpen(true); }}
+          onFocus={() => {
+            setQuery("");
+            setOpen(true);
+          }}
+          onChange={(e) => {
+            setQuery(e.target.value);
+            if (!open) setOpen(true);
+          }}
           style={{
             ...inputStyle,
             paddingRight: "2.5rem",
             color: value && !open ? "#1e293b" : open ? "#1e293b" : "#94a3b8",
           }}
         />
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(100,116,139,0.6)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
-          style={{ position: "absolute", right: "1rem", top: "50%", transform: open ? "translateY(-50%) rotate(180deg)" : "translateY(-50%)", pointerEvents: "none", transition: "transform 0.2s" }}>
+        <svg
+          width="16"
+          height="16"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="rgba(100,116,139,0.6)"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          style={{
+            position: "absolute",
+            right: "1rem",
+            top: "50%",
+            transform: open
+              ? "translateY(-50%) rotate(180deg)"
+              : "translateY(-50%)",
+            pointerEvents: "none",
+            transition: "transform 0.2s",
+          }}
+        >
           <polyline points="6 9 12 15 18 9" />
         </svg>
       </div>
       {open && (
-        <div style={{ position: "absolute", top: "calc(100% + 4px)", left: 0, right: 0, backgroundColor: "#ffffff", border: "1px solid var(--color-border, #e2e8f0)", borderRadius: "0.625rem", boxShadow: "0 8px 24px rgba(0,0,0,0.12)", maxHeight: "min(14rem, 40vh)", overflowY: "auto", zIndex: 200 }}>
+        <div
+          style={{
+            position: "absolute",
+            top: "calc(100% + 4px)",
+            left: 0,
+            right: 0,
+            backgroundColor: "#ffffff",
+            border: "1px solid var(--color-border, #e2e8f0)",
+            borderRadius: "0.625rem",
+            boxShadow: "0 8px 24px rgba(0,0,0,0.12)",
+            maxHeight: "min(14rem, 40vh)",
+            overflowY: "auto",
+            zIndex: 200,
+          }}
+        >
           {filtered.length === 0 ? (
-            <div style={{ padding: "0.75rem 1rem", color: "#94a3b8", fontSize: "0.875rem" }}>No results</div>
+            <div
+              style={{
+                padding: "0.75rem 1rem",
+                color: "#94a3b8",
+                fontSize: "0.875rem",
+              }}
+            >
+              No results
+            </div>
           ) : (
             filtered.map((name) => (
-              <button key={name} type="button" onMouseDown={(e) => { e.preventDefault(); handleSelect(name); }}
-                style={{ display: "block", width: "100%", textAlign: "left", padding: "0.625rem 1rem", border: "none", borderBottom: "1px solid #f1f5f9", backgroundColor: name === value ? "#eef3ff" : "transparent", color: "#1e293b", fontSize: "0.9375rem", cursor: "pointer", fontWeight: name === value ? 500 : 400 }}>
+              <button
+                key={name}
+                type="button"
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  handleSelect(name);
+                }}
+                style={{
+                  display: "block",
+                  width: "100%",
+                  textAlign: "left",
+                  padding: "0.625rem 1rem",
+                  border: "none",
+                  borderBottom: "1px solid #f1f5f9",
+                  backgroundColor: name === value ? "#eef3ff" : "transparent",
+                  color: "#1e293b",
+                  fontSize: "0.9375rem",
+                  cursor: "pointer",
+                  fontWeight: name === value ? 500 : 400,
+                }}
+              >
                 {name}
               </button>
             ))
@@ -255,8 +412,21 @@ function CountryPicker({ value, onChange, required }: { value: string; onChange:
 // ── Spinner ────────────────────────────────────────────────────────────────────
 function Spinner() {
   return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"
-      style={{ animation: "reput-spin 0.75s linear infinite", display: "inline-block", verticalAlign: "middle", marginRight: "0.5rem" }}>
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.5"
+      strokeLinecap="round"
+      style={{
+        animation: "reput-spin 0.75s linear infinite",
+        display: "inline-block",
+        verticalAlign: "middle",
+        marginRight: "0.5rem",
+      }}
+    >
       <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
     </svg>
   );
@@ -282,7 +452,9 @@ export default function LeadPage() {
   const [result, setResult] = useState<ScanResult | null>(null);
   const [score, setScore] = useState(0);
   const [error, setError] = useState("");
-  const [expandedLinkIndex, setExpandedLinkIndex] = useState<string | null>(null);
+  const [expandedLinkIndex, setExpandedLinkIndex] = useState<string | null>(
+    null,
+  );
 
   const statusIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const statusSwapRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -297,8 +469,10 @@ export default function LeadPage() {
   };
 
   const startCycles = () => {
-    setStatusIdx(0); setStatusVisible(true);
-    setTipIdx(0); setTipVisible(true);
+    setStatusIdx(0);
+    setStatusVisible(true);
+    setTipIdx(0);
+    setTipVisible(true);
 
     statusIntervalRef.current = setInterval(() => {
       setStatusVisible(false);
@@ -321,7 +495,13 @@ export default function LeadPage() {
 
   const handleSubmit = async (e: React.SyntheticEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (!firstName.trim() || !lastName.trim() || !company.trim() || !country || !description.trim()) {
+    if (
+      !firstName.trim() ||
+      !lastName.trim() ||
+      !company.trim() ||
+      !country ||
+      !description.trim()
+    ) {
       setError("All fields are required.");
       return;
     }
@@ -355,8 +535,19 @@ export default function LeadPage() {
 
       const scanResult = data as ScanResult;
       const allLinks = scanResult.links;
-      const negCount = allLinks.filter((l) => l.sentiment === "negative" || l.risk === "high" || l.risk === "medium").length;
-      const posCount = allLinks.filter((l) => l.sentiment === "positive" || l.sentiment === "neutral" || l.risk === "low" || l.risk === "none").length;
+      const negCount = allLinks.filter(
+        (l) =>
+          l.sentiment === "negative" ||
+          l.risk === "high" ||
+          l.risk === "medium",
+      ).length;
+      const posCount = allLinks.filter(
+        (l) =>
+          l.sentiment === "positive" ||
+          l.sentiment === "neutral" ||
+          l.risk === "low" ||
+          l.risk === "none",
+      ).length;
       setScore(deriveScore(negCount, posCount));
       setResult(scanResult);
     } catch {
@@ -370,7 +561,15 @@ export default function LeadPage() {
   const allLinks = result?.links ?? [];
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", minHeight: "100vh", width: "100%", backgroundColor: "var(--color-background, #ffffff)" }}>
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        minHeight: "100vh",
+        width: "100%",
+        backgroundColor: "var(--color-background, #ffffff)",
+      }}
+    >
       <style>{`
         @keyframes repu-blob-morph {
           0%   { border-radius: 44% 56% 53% 47% / 50% 46% 54% 50%; transform: rotate(0deg); }
@@ -391,27 +590,76 @@ export default function LeadPage() {
       `}</style>
 
       {/* Header */}
-      <div style={{ backgroundColor: "#ffffff", borderBottom: "1px solid var(--color-border, #e2e8f0)", padding: "0.875rem 1.5rem", display: "flex", alignItems: "center" }}>
+      <div
+        style={{
+          backgroundColor: "#ffffff",
+          borderBottom: "1px solid var(--color-border, #e2e8f0)",
+          padding: "0.875rem 1.5rem",
+          display: "flex",
+          alignItems: "center",
+        }}
+      >
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/images/logo-grey.png" alt="ReputTrust" style={{ height: "1.875rem", objectFit: "contain" }} />
+        <img
+          src="/images/logo-grey.png"
+          alt="ReputTrust"
+          style={{ height: "1.875rem", objectFit: "contain" }}
+        />
       </div>
 
       <main style={{ flex: 1, paddingTop: "2rem", paddingBottom: "3rem" }}>
-        <div style={{ maxWidth: "52rem", margin: "0 auto", padding: "0 clamp(1rem, 4vw, 1.5rem)" }}>
-
+        <div
+          style={{
+            maxWidth: "52rem",
+            margin: "0 auto",
+            padding: "0 clamp(1rem, 4vw, 1.5rem)",
+          }}
+        >
           {/* ── Form card ── */}
-          <div className="glass glow-border" style={{ borderRadius: "0.875rem", padding: "2rem", marginBottom: "2rem" }}>
-            <h1 style={{ margin: "0 0 0.375rem", fontSize: "1.375rem", fontWeight: 700, color: "var(--color-foreground, #1e293b)" }}>
+          <div
+            className="glass glow-border"
+            style={{
+              borderRadius: "0.875rem",
+              padding: "2rem",
+              marginBottom: "2rem",
+            }}
+          >
+            <h1
+              style={{
+                margin: "0 0 0.375rem",
+                fontSize: "1.375rem",
+                fontWeight: 700,
+                color: "var(--color-foreground, #1e293b)",
+              }}
+            >
               Reputation Scan
             </h1>
-            <p style={{ margin: "0 0 1.75rem", fontSize: "0.9375rem", color: "var(--color-muted, #64748b)" }}>
+            <p
+              style={{
+                margin: "0 0 1.75rem",
+                fontSize: "0.9375rem",
+                color: "var(--color-muted, #64748b)",
+              }}
+            >
               Enter the prospect&apos;s details to generate a reputation report.
             </p>
 
-            <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
-
+            <form
+              onSubmit={handleSubmit}
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                gap: "1.25rem",
+              }}
+            >
               {/* First / Last Name */}
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "1fr 1fr",
+                  gap: "1rem",
+                }}
+              >
                 <div>
                   <label style={labelStyle}>First Name *</label>
                   <input
@@ -476,7 +724,9 @@ export default function LeadPage() {
               {/* Keywords cap */}
               <div>
                 <label style={labelStyle}>Keywords</label>
-                <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+                <div
+                  style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}
+                >
                   {KEYWORDS_CAP_OPTIONS.map((n) => (
                     <button
                       key={n}
@@ -490,24 +740,40 @@ export default function LeadPage() {
                         cursor: "pointer",
                         transition: "all 0.15s",
                         border: "1.5px solid",
-                        borderColor: keywordsCap === n ? "#4479DA" : "var(--color-border, #e2e8f0)",
-                        backgroundColor: keywordsCap === n ? "#eef3ff" : "#ffffff",
-                        color: keywordsCap === n ? "#4479DA" : "var(--color-muted, #64748b)",
+                        borderColor:
+                          keywordsCap === n
+                            ? "#4479DA"
+                            : "var(--color-border, #e2e8f0)",
+                        backgroundColor:
+                          keywordsCap === n ? "#eef3ff" : "#ffffff",
+                        color:
+                          keywordsCap === n
+                            ? "#4479DA"
+                            : "var(--color-muted, #64748b)",
                       }}
                     >
                       {n}
                     </button>
                   ))}
                 </div>
-                <p style={{ margin: "0.375rem 0 0", fontSize: "0.75rem", color: "#94a3b8" }}>
-                  Number of search keywords Claude generates from the description
+                <p
+                  style={{
+                    margin: "0.375rem 0 0",
+                    fontSize: "0.75rem",
+                    color: "#94a3b8",
+                  }}
+                >
+                  Number of search keywords EALUMINATE generates from the
+                  description
                 </p>
               </div>
 
               {/* Results cap */}
               <div>
                 <label style={labelStyle}>Results Cap</label>
-                <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+                <div
+                  style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}
+                >
                   {RESULTS_CAP_OPTIONS.map((cap) => (
                     <button
                       key={cap}
@@ -521,31 +787,61 @@ export default function LeadPage() {
                         cursor: "pointer",
                         transition: "all 0.15s",
                         border: "1.5px solid",
-                        borderColor: resultsCap === cap ? "#4479DA" : "var(--color-border, #e2e8f0)",
-                        backgroundColor: resultsCap === cap ? "#eef3ff" : "#ffffff",
-                        color: resultsCap === cap ? "#4479DA" : "var(--color-muted, #64748b)",
+                        borderColor:
+                          resultsCap === cap
+                            ? "#4479DA"
+                            : "var(--color-border, #e2e8f0)",
+                        backgroundColor:
+                          resultsCap === cap ? "#eef3ff" : "#ffffff",
+                        color:
+                          resultsCap === cap
+                            ? "#4479DA"
+                            : "var(--color-muted, #64748b)",
                       }}
                     >
                       {cap}
                     </button>
                   ))}
                 </div>
-                <p style={{ margin: "0.375rem 0 0", fontSize: "0.75rem", color: "#94a3b8" }}>
+                <p
+                  style={{
+                    margin: "0.375rem 0 0",
+                    fontSize: "0.75rem",
+                    color: "#94a3b8",
+                  }}
+                >
                   Results fetched and analysed per keyword
                 </p>
               </div>
 
               {error && (
-                <p style={{ margin: 0, fontSize: "0.875rem", color: "#ef4444" }}>{error}</p>
+                <p
+                  style={{ margin: 0, fontSize: "0.875rem", color: "#ef4444" }}
+                >
+                  {error}
+                </p>
               )}
 
               <button
                 type="submit"
                 disabled={loading}
                 className="glow-button"
-                style={{ width: "100%", padding: "0.75rem", fontWeight: 700, borderRadius: "0.625rem", opacity: loading ? 0.8 : 1 }}
+                style={{
+                  width: "100%",
+                  padding: "0.75rem",
+                  fontWeight: 700,
+                  borderRadius: "0.625rem",
+                  opacity: loading ? 0.8 : 1,
+                }}
               >
-                {loading ? <><Spinner />Scanning…</> : "Run Scan"}
+                {loading ? (
+                  <>
+                    <Spinner />
+                    Scanning…
+                  </>
+                ) : (
+                  "Run Scan"
+                )}
               </button>
             </form>
           </div>
@@ -566,27 +862,132 @@ export default function LeadPage() {
           >
             {/* Loading */}
             {loading && (
-              <div className="animate-fade-in" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "2rem", width: "100%", maxWidth: "22rem" }}>
-                <div style={{ position: "relative", width: "160px", height: "160px", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                  <div style={{ position: "absolute", width: "160px", height: "160px", borderRadius: "50%", background: "radial-gradient(ellipse at center, rgba(68,121,218,0.28) 0%, rgba(72,212,184,0.14) 45%, transparent 70%)", filter: "blur(22px)", animation: "reput-aura-breathe 3.5s ease-in-out infinite" }} />
-                  <div style={{ width: "100px", height: "100px", borderRadius: "44% 56% 53% 47% / 50% 46% 54% 50%", background: "linear-gradient(135deg, #48D4B8 0%, #4479DA 100%)", boxShadow: "0 0 40px rgba(68,121,218,0.5), 0 0 80px rgba(72,212,184,0.25), inset 0 0 30px rgba(72,212,184,0.2)", animation: "repu-blob-morph 3s linear infinite", position: "relative", zIndex: 1 }}>
-                    <div style={{ position: "absolute", top: "14%", left: "18%", width: "32%", height: "22%", borderRadius: "50%", background: "rgba(255,255,255,0.18)", filter: "blur(5px)" }} />
+              <div
+                className="animate-fade-in"
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  gap: "2rem",
+                  width: "100%",
+                  maxWidth: "22rem",
+                }}
+              >
+                <div
+                  style={{
+                    position: "relative",
+                    width: "160px",
+                    height: "160px",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  <div
+                    style={{
+                      position: "absolute",
+                      width: "160px",
+                      height: "160px",
+                      borderRadius: "50%",
+                      background:
+                        "radial-gradient(ellipse at center, rgba(68,121,218,0.28) 0%, rgba(72,212,184,0.14) 45%, transparent 70%)",
+                      filter: "blur(22px)",
+                      animation: "reput-aura-breathe 3.5s ease-in-out infinite",
+                    }}
+                  />
+                  <div
+                    style={{
+                      width: "100px",
+                      height: "100px",
+                      borderRadius: "44% 56% 53% 47% / 50% 46% 54% 50%",
+                      background:
+                        "linear-gradient(135deg, #48D4B8 0%, #4479DA 100%)",
+                      boxShadow:
+                        "0 0 40px rgba(68,121,218,0.5), 0 0 80px rgba(72,212,184,0.25), inset 0 0 30px rgba(72,212,184,0.2)",
+                      animation: "repu-blob-morph 3s linear infinite",
+                      position: "relative",
+                      zIndex: 1,
+                    }}
+                  >
+                    <div
+                      style={{
+                        position: "absolute",
+                        top: "14%",
+                        left: "18%",
+                        width: "32%",
+                        height: "22%",
+                        borderRadius: "50%",
+                        background: "rgba(255,255,255,0.18)",
+                        filter: "blur(5px)",
+                      }}
+                    />
                   </div>
                 </div>
 
-                <p style={{ fontSize: "0.7rem", fontWeight: 500, color: "var(--color-muted)", letterSpacing: "0.14em", textTransform: "uppercase", animation: "reput-label-breathe 3s ease-in-out infinite" }}>
+                <p
+                  style={{
+                    fontSize: "0.7rem",
+                    fontWeight: 500,
+                    color: "var(--color-muted)",
+                    letterSpacing: "0.14em",
+                    textTransform: "uppercase",
+                    animation: "reput-label-breathe 3s ease-in-out infinite",
+                  }}
+                >
                   We&apos;re calculating the ReputScore
                 </p>
 
-                <p style={{ fontSize: "0.65rem", fontWeight: 400, color: "#9ca3af", letterSpacing: "0.12em", textTransform: "uppercase", opacity: statusVisible ? 1 : 0, transition: "opacity 0.5s ease", minHeight: "1.2em", textAlign: "center", margin: 0, willChange: "opacity" }}>
+                <p
+                  style={{
+                    fontSize: "0.65rem",
+                    fontWeight: 400,
+                    color: "#9ca3af",
+                    letterSpacing: "0.12em",
+                    textTransform: "uppercase",
+                    opacity: statusVisible ? 1 : 0,
+                    transition: "opacity 0.5s ease",
+                    minHeight: "1.2em",
+                    textAlign: "center",
+                    margin: 0,
+                    willChange: "opacity",
+                  }}
+                >
                   {STATUS_MESSAGES[statusIdx]}
                 </p>
 
-                <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: "0.75rem", padding: "1rem 1.25rem", width: "100%", textAlign: "left" }}>
-                  <div style={{ fontSize: "0.6rem", fontWeight: 700, letterSpacing: "0.12em", color: "#6b7280", marginBottom: "0.5rem" }}>
+                <div
+                  style={{
+                    background: "#fff",
+                    border: "1px solid #e5e7eb",
+                    borderRadius: "0.75rem",
+                    padding: "1rem 1.25rem",
+                    width: "100%",
+                    textAlign: "left",
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: "0.6rem",
+                      fontWeight: 700,
+                      letterSpacing: "0.12em",
+                      color: "#6b7280",
+                      marginBottom: "0.5rem",
+                    }}
+                  >
                     💡 DID YOU KNOW?
                   </div>
-                  <p style={{ fontSize: "0.78rem", color: "#374151", lineHeight: 1.6, margin: 0, opacity: tipVisible ? 1 : 0, transition: "opacity 0.5s ease", minHeight: "3em", willChange: "opacity" }}>
+                  <p
+                    style={{
+                      fontSize: "0.78rem",
+                      color: "#374151",
+                      lineHeight: 1.6,
+                      margin: 0,
+                      opacity: tipVisible ? 1 : 0,
+                      transition: "opacity 0.5s ease",
+                      minHeight: "3em",
+                      willChange: "opacity",
+                    }}
+                  >
                     {DID_YOU_KNOW[tipIdx]}
                   </p>
                 </div>
@@ -595,9 +996,21 @@ export default function LeadPage() {
 
             {/* Loaded */}
             {!loading && result && (
-              <div className="animate-fade-up" style={{ width: "100%", textAlign: "center" }}>
+              <div
+                className="animate-fade-up"
+                style={{ width: "100%", textAlign: "center" }}
+              >
                 {/* Name */}
-                <h2 style={{ fontSize: "1.5rem", fontWeight: 800, color: "var(--color-foreground)", letterSpacing: "0.08em", marginBottom: "2rem", textTransform: "uppercase" }}>
+                <h2
+                  style={{
+                    fontSize: "1.5rem",
+                    fontWeight: 800,
+                    color: "var(--color-foreground)",
+                    letterSpacing: "0.08em",
+                    marginBottom: "2rem",
+                    textTransform: "uppercase",
+                  }}
+                >
                   {fullName}
                 </h2>
 
@@ -605,36 +1018,156 @@ export default function LeadPage() {
                 <RepuGauge score={score} />
 
                 {/* Score label */}
-                <div style={{ display: "inline-block", marginTop: "-3.25rem", position: "relative", zIndex: 1, padding: "0.625rem 2rem", borderRadius: "0.625rem", backgroundColor: "var(--color-surface, #fff)", border: "1px solid var(--color-border)" }}>
-                  <p style={{ fontSize: "2.5rem", fontWeight: 800, color: scoreLabel(score).color, lineHeight: 1, marginBottom: "0.25rem" }}>
+                <div
+                  style={{
+                    display: "inline-block",
+                    marginTop: "-3.25rem",
+                    position: "relative",
+                    zIndex: 1,
+                    padding: "0.625rem 2rem",
+                    borderRadius: "0.625rem",
+                    backgroundColor: "var(--color-surface, #fff)",
+                    border: "1px solid var(--color-border)",
+                  }}
+                >
+                  <p
+                    style={{
+                      fontSize: "2.5rem",
+                      fontWeight: 800,
+                      color: scoreLabel(score).color,
+                      lineHeight: 1,
+                      marginBottom: "0.25rem",
+                    }}
+                  >
                     {score}
                   </p>
-                  <p style={{ fontSize: "0.75rem", fontWeight: 700, letterSpacing: "0.12em", color: scoreLabel(score).color, textTransform: "uppercase" }}>
+                  <p
+                    style={{
+                      fontSize: "0.75rem",
+                      fontWeight: 700,
+                      letterSpacing: "0.12em",
+                      color: scoreLabel(score).color,
+                      textTransform: "uppercase",
+                    }}
+                  >
                     {scoreLabel(score).label}
                   </p>
                 </div>
 
                 {/* Meeting Brief */}
                 {result.summary && (
-                  <div style={{ marginTop: "1.25rem", borderRadius: "0.75rem", border: "1px solid #e2e8f0", backgroundColor: "#f8fafc", textAlign: "left", overflow: "hidden" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", padding: "0.75rem 1rem", borderBottom: "1px solid #e2e8f0", backgroundColor: "#f1f5f9" }}>
-                      <span style={{ fontSize: "0.625rem", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "#64748b" }}>Internal · Meeting Brief</span>
+                  <div
+                    style={{
+                      marginTop: "1.25rem",
+                      borderRadius: "0.75rem",
+                      border: "1px solid #e2e8f0",
+                      backgroundColor: "#f8fafc",
+                      textAlign: "left",
+                      overflow: "hidden",
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "0.5rem",
+                        padding: "0.75rem 1rem",
+                        borderBottom: "1px solid #e2e8f0",
+                        backgroundColor: "#f1f5f9",
+                      }}
+                    >
+                      <span
+                        style={{
+                          fontSize: "0.625rem",
+                          fontWeight: 700,
+                          letterSpacing: "0.1em",
+                          textTransform: "uppercase",
+                          color: "#64748b",
+                        }}
+                      >
+                        Internal · Meeting Brief
+                      </span>
                     </div>
                     <div style={{ padding: "1rem" }}>
-                      <p style={{ fontSize: "0.9375rem", fontWeight: 700, color: "#1e293b", margin: "0 0 0.875rem" }}>{result.summary.headline}</p>
+                      <p
+                        style={{
+                          fontSize: "0.9375rem",
+                          fontWeight: 700,
+                          color: "#1e293b",
+                          margin: "0 0 0.875rem",
+                        }}
+                      >
+                        {result.summary.headline}
+                      </p>
                       <div style={{ marginBottom: "0.875rem" }}>
-                        <p style={{ fontSize: "0.6875rem", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "#94a3b8", marginBottom: "0.375rem" }}>Key Points</p>
-                        <ul style={{ margin: 0, paddingLeft: "1.1rem", display: "flex", flexDirection: "column", gap: "0.25rem" }}>
+                        <p
+                          style={{
+                            fontSize: "0.6875rem",
+                            fontWeight: 700,
+                            letterSpacing: "0.1em",
+                            textTransform: "uppercase",
+                            color: "#94a3b8",
+                            marginBottom: "0.375rem",
+                          }}
+                        >
+                          Key Points
+                        </p>
+                        <ul
+                          style={{
+                            margin: 0,
+                            paddingLeft: "1.1rem",
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: "0.25rem",
+                          }}
+                        >
                           {result.summary.issues.map((issue, i) => (
-                            <li key={i} style={{ fontSize: "0.8125rem", color: "#475569", lineHeight: 1.5 }}>{issue}</li>
+                            <li
+                              key={i}
+                              style={{
+                                fontSize: "0.8125rem",
+                                color: "#475569",
+                                lineHeight: 1.5,
+                              }}
+                            >
+                              {issue}
+                            </li>
                           ))}
                         </ul>
                       </div>
                       <div>
-                        <p style={{ fontSize: "0.6875rem", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "#94a3b8", marginBottom: "0.375rem" }}>Meeting Angles</p>
-                        <ol style={{ margin: 0, paddingLeft: "1.1rem", display: "flex", flexDirection: "column", gap: "0.25rem" }}>
+                        <p
+                          style={{
+                            fontSize: "0.6875rem",
+                            fontWeight: 700,
+                            letterSpacing: "0.1em",
+                            textTransform: "uppercase",
+                            color: "#94a3b8",
+                            marginBottom: "0.375rem",
+                          }}
+                        >
+                          Meeting Angles
+                        </p>
+                        <ol
+                          style={{
+                            margin: 0,
+                            paddingLeft: "1.1rem",
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: "0.25rem",
+                          }}
+                        >
                           {result.summary.talkingPoints.map((point, i) => (
-                            <li key={i} style={{ fontSize: "0.8125rem", color: "#475569", lineHeight: 1.5 }}>{point}</li>
+                            <li
+                              key={i}
+                              style={{
+                                fontSize: "0.8125rem",
+                                color: "#475569",
+                                lineHeight: 1.5,
+                              }}
+                            >
+                              {point}
+                            </li>
                           ))}
                         </ol>
                       </div>
@@ -643,46 +1176,191 @@ export default function LeadPage() {
                 )}
 
                 {allLinks.length === 0 && (
-                  <div style={{ marginTop: "1.5rem", padding: "1.5rem", borderRadius: "0.75rem", border: "1px solid var(--color-border)", textAlign: "center", color: "var(--color-muted)" }}>
+                  <div
+                    style={{
+                      marginTop: "1.5rem",
+                      padding: "1.5rem",
+                      borderRadius: "0.75rem",
+                      border: "1px solid var(--color-border)",
+                      textAlign: "center",
+                      color: "var(--color-muted)",
+                    }}
+                  >
                     No results found.
                   </div>
                 )}
 
                 {allLinks.length > 0 && (
-                  <div style={{ marginTop: "1.5rem", textAlign: "left", display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+                  <div
+                    style={{
+                      marginTop: "1.5rem",
+                      textAlign: "left",
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "0.75rem",
+                    }}
+                  >
                     {allLinks.map((item, i) => {
                       const uiRisk = apiRiskToUi(item.risk);
                       const risk = RISK_COLORS[uiRisk];
-                      const domain = (() => { try { return new URL(item.url).hostname.replace("www.", ""); } catch { return item.source ?? ""; } })();
+                      const domain = (() => {
+                        try {
+                          return new URL(item.url).hostname.replace("www.", "");
+                        } catch {
+                          return item.source ?? "";
+                        }
+                      })();
                       const isExpanded = expandedLinkIndex === String(i);
                       return (
                         <div
                           key={item.url}
-                          style={{ display: "flex", borderRadius: "0.75rem", overflow: "hidden", border: `1px solid ${risk.border}`, background: `linear-gradient(135deg, ${risk.bg} 0%, rgba(255,255,255,0) 60%)`, boxShadow: `inset 0 0 0 0.5px ${risk.border}, 0 1px 4px rgba(0,0,0,0.06)`, cursor: "pointer" }}
-                          onClick={() => setExpandedLinkIndex(isExpanded ? null : String(i))}
+                          style={{
+                            display: "flex",
+                            borderRadius: "0.75rem",
+                            overflow: "hidden",
+                            border: `1px solid ${risk.border}`,
+                            background: `linear-gradient(135deg, ${risk.bg} 0%, rgba(255,255,255,0) 60%)`,
+                            boxShadow: `inset 0 0 0 0.5px ${risk.border}, 0 1px 4px rgba(0,0,0,0.06)`,
+                            cursor: "pointer",
+                          }}
+                          onClick={() =>
+                            setExpandedLinkIndex(isExpanded ? null : String(i))
+                          }
                         >
-                          <div style={{ width: "2px", flexShrink: 0, background: `linear-gradient(180deg, ${risk.color} 0%, transparent 100%)` }} />
-                          <div style={{ flex: 1, padding: "0.9rem 1rem 0.85rem", minWidth: 0 }}>
-                            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.4rem", marginBottom: "0.45rem", flexWrap: "wrap", rowGap: "0.3rem" }}>
-                              <span style={{ fontFamily: "ui-monospace,'SF Mono',monospace", fontSize: "0.65rem", fontWeight: 600, color: "var(--color-muted)", background: "rgba(0,0,0,0.04)", padding: "0.1rem 0.45rem", borderRadius: "4px", border: "1px solid var(--color-border)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0, maxWidth: "60%" }}>
+                          <div
+                            style={{
+                              width: "2px",
+                              flexShrink: 0,
+                              background: `linear-gradient(180deg, ${risk.color} 0%, transparent 100%)`,
+                            }}
+                          />
+                          <div
+                            style={{
+                              flex: 1,
+                              padding: "0.9rem 1rem 0.85rem",
+                              minWidth: 0,
+                            }}
+                          >
+                            <div
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "space-between",
+                                gap: "0.4rem",
+                                marginBottom: "0.45rem",
+                                flexWrap: "wrap",
+                                rowGap: "0.3rem",
+                              }}
+                            >
+                              <span
+                                style={{
+                                  fontFamily:
+                                    "ui-monospace,'SF Mono',monospace",
+                                  fontSize: "0.65rem",
+                                  fontWeight: 600,
+                                  color: "var(--color-muted)",
+                                  background: "rgba(0,0,0,0.04)",
+                                  padding: "0.1rem 0.45rem",
+                                  borderRadius: "4px",
+                                  border: "1px solid var(--color-border)",
+                                  overflow: "hidden",
+                                  textOverflow: "ellipsis",
+                                  whiteSpace: "nowrap",
+                                  minWidth: 0,
+                                  maxWidth: "60%",
+                                }}
+                              >
                                 {domain}
                               </span>
-                              <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", flexShrink: 0 }}>
-                                <span style={{ fontFamily: "ui-monospace,'SF Mono',monospace", fontSize: "0.6rem", fontWeight: 800, letterSpacing: "0.1em", textTransform: "uppercase", padding: "0.2rem 0.55rem", borderRadius: "4px", backgroundColor: risk.bg, color: risk.color, border: `1px solid ${risk.border}`, whiteSpace: "nowrap" }}>
+                              <div
+                                style={{
+                                  display: "flex",
+                                  alignItems: "center",
+                                  gap: "0.4rem",
+                                  flexShrink: 0,
+                                }}
+                              >
+                                <span
+                                  style={{
+                                    fontFamily:
+                                      "ui-monospace,'SF Mono',monospace",
+                                    fontSize: "0.6rem",
+                                    fontWeight: 800,
+                                    letterSpacing: "0.1em",
+                                    textTransform: "uppercase",
+                                    padding: "0.2rem 0.55rem",
+                                    borderRadius: "4px",
+                                    backgroundColor: risk.bg,
+                                    color: risk.color,
+                                    border: `1px solid ${risk.border}`,
+                                    whiteSpace: "nowrap",
+                                  }}
+                                >
                                   ▲ {uiRisk}
                                 </span>
-                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
-                                  style={{ color: "var(--color-muted)", transform: isExpanded ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.2s ease", flexShrink: 0 }}>
+                                <svg
+                                  width="12"
+                                  height="12"
+                                  viewBox="0 0 24 24"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  strokeWidth="2.5"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  style={{
+                                    color: "var(--color-muted)",
+                                    transform: isExpanded
+                                      ? "rotate(180deg)"
+                                      : "rotate(0deg)",
+                                    transition: "transform 0.2s ease",
+                                    flexShrink: 0,
+                                  }}
+                                >
                                   <path d="M6 9l6 6 6-6" />
                                 </svg>
                               </div>
                             </div>
-                            <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "0.5rem" }}>
-                              <p style={{ fontSize: "0.875rem", fontWeight: 700, color: "var(--color-foreground)", lineHeight: 1.35, margin: 0, letterSpacing: "-0.01em" }}>
+                            <div
+                              style={{
+                                display: "flex",
+                                alignItems: "flex-start",
+                                justifyContent: "space-between",
+                                gap: "0.5rem",
+                              }}
+                            >
+                              <p
+                                style={{
+                                  fontSize: "0.875rem",
+                                  fontWeight: 700,
+                                  color: "var(--color-foreground)",
+                                  lineHeight: 1.35,
+                                  margin: 0,
+                                  letterSpacing: "-0.01em",
+                                }}
+                              >
                                 {item.title}
                               </p>
-                              <a href={item.url} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} style={{ flexShrink: 0, color: "var(--color-muted)", marginTop: "0.1rem" }}>
-                                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                              <a
+                                href={item.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                onClick={(e) => e.stopPropagation()}
+                                style={{
+                                  flexShrink: 0,
+                                  color: "var(--color-muted)",
+                                  marginTop: "0.1rem",
+                                }}
+                              >
+                                <svg
+                                  width="11"
+                                  height="11"
+                                  viewBox="0 0 24 24"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  strokeWidth="2.5"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                >
                                   <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
                                   <polyline points="15 3 21 3 21 9" />
                                   <line x1="10" y1="14" x2="21" y2="3" />
@@ -691,8 +1369,21 @@ export default function LeadPage() {
                             </div>
                             {isExpanded && (
                               <>
-                                <div style={{ height: "1px", background: `linear-gradient(90deg, ${risk.border} 0%, transparent 80%)`, margin: "0.5rem 0 0.4rem" }} />
-                                <p style={{ fontSize: "0.775rem", color: "var(--color-muted)", lineHeight: 1.6, margin: 0 }}>
+                                <div
+                                  style={{
+                                    height: "1px",
+                                    background: `linear-gradient(90deg, ${risk.border} 0%, transparent 80%)`,
+                                    margin: "0.5rem 0 0.4rem",
+                                  }}
+                                />
+                                <p
+                                  style={{
+                                    fontSize: "0.775rem",
+                                    color: "var(--color-muted)",
+                                    lineHeight: 1.6,
+                                    margin: 0,
+                                  }}
+                                >
                                   {item.snippet}
                                 </p>
                               </>
