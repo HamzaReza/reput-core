@@ -231,41 +231,6 @@ function dedupeLinks(all: WebLink[]): WebLink[] {
   return Array.from(map.values());
 }
 
-async function extractKeywordsFromDescription(
-  client: Anthropic,
-  name: string,
-  company: string,
-  description: string,
-  keywordCount: number,
-): Promise<string[]> {
-  const companyLine = company ? ` who works at ${company}` : "";
-  const response = await client.messages.create({
-    model: "claude-haiku-4-5-20251001",
-    max_tokens: 256,
-    messages: [
-      {
-        role: "user",
-        content: `You are a reputation intelligence analyst. Based on this background about "${name}"${companyLine}, generate exactly ${keywordCount} targeted search keywords that would help find negative press, legal issues, controversies, lawsuits, fraud, or reputational risks.
-
-Background:
-${description}
-
-Return ONLY a JSON array of exactly ${keywordCount} keyword strings. Do not include the person's name — only supplementary terms. Example: ["fraud", "lawsuit", "controversy"]`,
-      },
-    ],
-  });
-
-  const textBlock = response.content.find((b) => b.type === "text");
-  if (!textBlock || textBlock.type !== "text") return [];
-  const match = textBlock.text.trim().match(/\[[\s\S]*\]/);
-  if (!match) return [];
-  try {
-    return JSON.parse(match[0]) as string[];
-  } catch {
-    return [];
-  }
-}
-
 async function searchSerper(
   query: string,
   countryCode: string | null,
@@ -572,21 +537,27 @@ export async function POST(req: NextRequest) {
     company,
     country,
     description,
+    keywords,
     resultsCap,
-    keywordsCap,
   } = (await req.json()) as {
     firstName: string;
     lastName: string;
-    company: string;
+    company?: string;
     country: string;
     description: string;
+    keywords: string[];
     resultsCap?: number;
-    keywordsCap?: number;
   };
 
-  if (!firstName || !lastName || !company || !country || !description) {
+  if (
+    !firstName ||
+    !lastName ||
+    !country ||
+    !description ||
+    !keywords?.length
+  ) {
     return NextResponse.json(
-      { error: "All fields are required" },
+      { error: "Required fields missing" },
       { status: 400 },
     );
   }
@@ -601,33 +572,11 @@ export async function POST(req: NextRequest) {
     ? (COUNTRY_TO_LANGUAGE[countryCode.toUpperCase()] ?? null)
     : null;
 
-  console.log("[generate-lead] Input:", {
-    firstName,
-    lastName,
-    company,
-    country,
-    description,
-    resultsCap,
-  });
-
   try {
-    // ── Phase 0: Extract search keywords from description ─────────────────────
-    const keywordCount = Math.min(8, Math.max(3, keywordsCap ?? 5));
-    const keywords = await extractKeywordsFromDescription(
-      client,
-      sanitizedName,
-      company,
-      sanitizedDescription,
-      keywordCount,
-    );
-    console.log("[generate-lead] Claude keywords:", keywords);
-
     // ── Phase 1: Parallel Serper searches ─────────────────────────────────────
-    const searchQueries =
-      keywords.length > 0
-        ? keywords.map((kw) => `${sanitizedName} ${kw}`)
-        : [`${sanitizedName}`];
-    console.log("[generate-lead] Serper queries:", searchQueries);
+    const searchQueries = keywords.map(
+      (kw: string) => `${sanitizedName} ${kw}`,
+    );
 
     const cap = resultsCap ?? 20;
 
