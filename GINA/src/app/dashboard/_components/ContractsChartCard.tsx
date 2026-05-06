@@ -1,8 +1,8 @@
 "use client";
 
 import {
-  LineChart,
-  Line,
+  BarChart,
+  Bar,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -29,7 +29,7 @@ function fillMonths(data: MonthPoint[]): { month: string; count: number }[] {
   });
 }
 
-export default function LineChartCard({
+export default function ContractsChartCard({
   title,
   data,
 }: {
@@ -41,7 +41,7 @@ export default function LineChartCard({
   return (
     <div
       className="glass glow-border animate-fade-up"
-      style={{ borderRadius: "0.875rem", padding: "1.25rem", animationDelay: "0.22s" }}
+      style={{ borderRadius: "0.875rem", padding: "1.25rem", animationDelay: "0.29s" }}
     >
       <div style={{ marginBottom: "1rem" }}>
         <p
@@ -58,7 +58,7 @@ export default function LineChartCard({
 
       <div style={{ height: "240px" }}>
         <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={chartData} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
+          <BarChart data={chartData} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
             <XAxis
               dataKey="month"
@@ -80,17 +80,10 @@ export default function LineChartCard({
                 boxShadow: "0 4px 16px rgba(0,0,0,0.08)",
                 fontSize: "0.8125rem",
               }}
+              cursor={{ fill: "rgba(34,197,94,0.06)" }}
             />
-            <Line
-              type="monotone"
-              dataKey="count"
-              name="Count"
-              stroke="#22c55e"
-              strokeWidth={2}
-              dot={false}
-              activeDot={{ r: 4 }}
-            />
-          </LineChart>
+            <Bar dataKey="count" name="Count" fill="#22c55e" radius={[4, 4, 0, 0]} />
+          </BarChart>
         </ResponsiveContainer>
       </div>
     </div>

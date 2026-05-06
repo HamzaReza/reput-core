@@ -1,7 +1,8 @@
 "use client";
 
+import { leads } from "@/lib/api";
 import { COUNTRY_NAMES } from "@/lib/countries";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 interface WebLink {
@@ -559,12 +560,13 @@ export default function LeadPage() {
   const [keywordsReady, setKeywordsReady] = useState(false);
   const [usedKeywords, setUsedKeywords] = useState<string[]>([]);
 
+  const [employeeName, setEmployeeName] = useState("");
+  const [employeeEmail, setEmployeeEmail] = useState("");
+  const [leadId, setLeadId] = useState<string | null>(null);
+
   const [preAnalysisLoading, setPreAnalysisLoading] = useState(false);
   const [preAnalysisDone, setPreAnalysisDone] = useState(false);
   const [preAnalysisSummary, setPreAnalysisSummary] = useState("");
-  const [preAnalysisSources, setPreAnalysisSources] = useState<
-    { title: string; url: string; snippet: string }[]
-  >([]);
 
   const [loading, setLoading] = useState(false);
   const [statusIdx, setStatusIdx] = useState(0);
@@ -613,19 +615,23 @@ export default function LeadPage() {
     }, 5000);
   };
 
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem("reput_user");
+      if (raw) {
+        const u = JSON.parse(raw);
+        setEmployeeName(u.name || u.email || "");
+        setEmployeeEmail(u.email || "");
+      }
+    } catch {}
+  }, []);
+
   const fullName = `${firstName.trim()} ${lastName.trim()}`.trim();
 
   const handleExportSummaryPdf = () => {
     const win = window.open("", "_blank");
     if (!win) return;
-    const sourcesHtml = preAnalysisSources.length
-      ? `<h2>Sources</h2><ul>${preAnalysisSources
-          .map(
-            (s) =>
-              `<li><a href="${s.url}" target="_blank">${s.title}</a><br/><span class="url">${s.url}</span></li>`,
-          )
-          .join("")}</ul>`
-      : "";
+    const sourcesHtml = "";
     win.document.write(`<!DOCTYPE html><html><head>
 <meta charset="utf-8"/>
 <title>Research Summary — ${fullName}</title>
@@ -662,7 +668,7 @@ ${sourcesHtml}
       setEditableKeywords([]);
       setPreAnalysisDone(false);
       setPreAnalysisSummary("");
-      setPreAnalysisSources([]);
+      setLeadId(null);
     }
   };
 
@@ -677,12 +683,15 @@ ${sourcesHtml}
       return;
     }
     setError("");
+    setResult(null);
+    setScore(0);
+    setExpandedLinkIndex(null);
     setPreAnalysisLoading(true);
     setPreAnalysisDone(false);
     setKeywordsReady(false);
     setEditableKeywords([]);
     setPreAnalysisSummary("");
-    setPreAnalysisSources([]);
+    setLeadId(null);
     try {
       const res = await fetch("/api/pre-analysis", {
         method: "POST",
@@ -702,10 +711,23 @@ ${sourcesHtml}
         return;
       }
       setPreAnalysisSummary(data.summary ?? "");
-      setPreAnalysisSources(data.sources ?? []);
       setEditableKeywords(data.keywords ?? []);
       setKeywordsReady(true);
       setPreAnalysisDone(true);
+
+      // Create lead entry in DB
+      try {
+        const ld = await leads.create({
+          name: fullName || undefined,
+          company: company.trim() || undefined,
+          country,
+          background: description.trim(),
+          keywords_suggested: data.keywords ?? [],
+        });
+        if (ld.id) setLeadId(ld.id);
+      } catch {
+        /* non-fatal */
+      }
     } catch {
       setError("Network error. Please try again.");
     } finally {
@@ -761,8 +783,24 @@ ${sourcesHtml}
           l.risk === "low" ||
           l.risk === "none",
       ).length;
-      setScore(deriveScore(negCount, posCount));
+      const finalScore = deriveScore(negCount, posCount);
+      setScore(finalScore);
       setResult(scanResult);
+
+      // Append scan results to the lead entry
+      if (leadId) {
+        try {
+          await leads.update(leadId, {
+            links: scanResult.links as unknown[],
+            summary: scanResult.summary
+              ? ({ ...scanResult.summary } as Record<string, unknown>)
+              : undefined,
+            score: finalScore,
+          });
+        } catch {
+          /* non-fatal */
+        }
+      }
     } catch {
       setError("Network error. Please try again.");
     } finally {
@@ -988,87 +1026,70 @@ ${sourcesHtml}
                   padding: "1.25rem",
                 }}
               >
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.625rem" }}>
-                <p
-                  style={{
-                    fontSize: "0.875rem",
-                    fontWeight: 700,
-                    margin: 0,
-                    color: "var(--color-foreground, #1e293b)",
-                  }}
-                >
-                  Research Summary
-                </p>
-                <button
-                  type="button"
-                  onClick={handleExportSummaryPdf}
+                <div
                   style={{
                     display: "flex",
                     alignItems: "center",
-                    gap: "0.35rem",
-                    fontSize: "0.75rem",
-                    fontWeight: 600,
-                    color: "#48D4B8",
-                    background: "none",
-                    border: "none",
-                    cursor: "pointer",
-                    padding: 0,
+                    justifyContent: "space-between",
+                    marginBottom: "0.625rem",
                   }}
                 >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                    <polyline points="7 10 12 15 17 10"/>
-                    <line x1="12" y1="15" x2="12" y2="3"/>
-                  </svg>
-                  Export PDF
-                </button>
+                  <p
+                    style={{
+                      fontSize: "0.875rem",
+                      fontWeight: 700,
+                      margin: 0,
+                      color: "var(--color-foreground, #1e293b)",
+                    }}
+                  >
+                    Research Summary
+                  </p>
+                  {preAnalysisSummary !==
+                    "Either no public information found for this subject or the context provided is not enough to generate a summary." && (
+                    <button
+                      type="button"
+                      onClick={handleExportSummaryPdf}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "0.35rem",
+                        fontSize: "0.75rem",
+                        fontWeight: 600,
+                        color: "#48D4B8",
+                        background: "none",
+                        border: "none",
+                        cursor: "pointer",
+                        padding: 0,
+                      }}
+                    >
+                      <svg
+                        width="14"
+                        height="14"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2.5"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                        <polyline points="7 10 12 15 17 10" />
+                        <line x1="12" y1="15" x2="12" y2="3" />
+                      </svg>
+                      Export PDF
+                    </button>
+                  )}
                 </div>
                 <p
                   style={{
                     fontSize: "0.8125rem",
                     color: "var(--color-muted, #64748b)",
                     lineHeight: 1.65,
-                    margin: preAnalysisSources.length ? "0 0 1rem" : "0",
+                    margin: 0,
                   }}
                 >
                   {preAnalysisSummary}
                 </p>
-                {preAnalysisSources.length > 0 && (
-                  <div>
-                    <p
-                      style={{
-                        fontSize: "0.6875rem",
-                        fontWeight: 700,
-                        color: "var(--color-muted, #64748b)",
-                        margin: "0 0 0.375rem",
-                        textTransform: "uppercase",
-                        letterSpacing: "0.05em",
-                      }}
-                    >
-                      Sources
-                    </p>
-                    {preAnalysisSources.map((s, i) => (
-                      <a
-                        key={i}
-                        href={s.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        style={{
-                          display: "block",
-                          fontSize: "0.8rem",
-                          color: "#48D4B8",
-                          marginBottom: "0.25rem",
-                          overflow: "hidden",
-                          textOverflow: "ellipsis",
-                          whiteSpace: "nowrap",
-                          textDecoration: "none",
-                        }}
-                      >
-                        {s.title}
-                      </a>
-                    ))}
-                  </div>
-                )}
               </div>
             )}
 

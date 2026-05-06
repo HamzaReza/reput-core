@@ -410,3 +410,76 @@ export const contracts = {
 
   getMy: () => request<Contract[]>("/contracts/my", {}, true),
 };
+
+// ── Dashboard types & endpoints ───────────────────────────────────────────────
+
+export interface DashboardStats {
+  users: number;
+  scans: number;
+  leads: number;
+  contracts: number;
+}
+
+export interface MonthPoint {
+  month: string;
+  count: number;
+}
+
+export interface DashboardCharts {
+  users: MonthPoint[];
+  scans: MonthPoint[];
+  contracts: MonthPoint[];
+}
+
+export const dashboard = {
+  stats: () => request<DashboardStats>("/dashboard/stats", {}, true),
+  charts: () => request<DashboardCharts>("/dashboard/charts", {}, true),
+};
+
+// ── Leads types & endpoints ───────────────────────────────────────────────────
+
+export interface LeadCreatePayload {
+  name?: string;
+  company?: string;
+  country?: string;
+  background?: string;
+  keywords_suggested?: string[];
+}
+
+export interface LeadUpdatePayload {
+  links?: unknown[];
+  summary?: Record<string, unknown> | null;
+  score?: number;
+}
+
+export interface RecentLead {
+  id: string;
+  name: string | null;
+  company: string | null;
+  country: string | null;
+  background: string | null;
+  score: number | null;
+  scanned_by_name: string | null;
+  scanned_by_email: string | null;
+  researched_at: string | null;
+  scanned_at: string | null;
+}
+
+export const leads = {
+  create: (data: LeadCreatePayload) =>
+    request<{ id: string }>(
+      "/leads/",
+      { method: "POST", body: JSON.stringify(data) },
+      true,
+    ),
+
+  update: (id: string, data: LeadUpdatePayload) =>
+    request<{ ok: boolean }>(
+      `/leads/${id}`,
+      { method: "PATCH", body: JSON.stringify(data) },
+      true,
+    ),
+
+  list: (limit = 5) =>
+    request<RecentLead[]>(`/leads/?limit=${limit}`, {}, true),
+};

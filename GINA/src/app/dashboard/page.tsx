@@ -5,19 +5,31 @@ import { useEffect, useState } from "react";
 import TopBar from "./_components/TopBar";
 import StatsRow from "./_components/StatsRow";
 import RecentScans from "./_components/RecentScans";
-import TeamActivity from "./_components/TeamActivity";
-import QuickActions from "./_components/QuickActions";
+import { dashboard, DashboardStats, MonthPoint } from "@/lib/api";
 
 function ChartPlaceholder() {
   return (
-    <div
-      style={{
-        borderRadius: "0.875rem",
-        height: "314px",
-        backgroundColor: "#f1f5f9",
-        border: "1px solid var(--color-border, #e2e8f0)",
-      }}
-    />
+    <>
+      <style>{`
+        @keyframes chart-shimmer {
+          0%   { background-position: -400px 0; }
+          100% { background-position: calc(400px + 100%) 0; }
+        }
+        .chart-shimmer {
+          background: linear-gradient(90deg, #e2e8f0 25%, #f1f5f9 50%, #e2e8f0 75%);
+          background-size: 400px 100%;
+          animation: chart-shimmer 1.4s ease-in-out infinite;
+        }
+      `}</style>
+      <div
+        className="chart-shimmer"
+        style={{
+          borderRadius: "0.875rem",
+          height: "314px",
+          border: "1px solid var(--color-border, #e2e8f0)",
+        }}
+      />
+    </>
   );
 }
 
@@ -31,19 +43,38 @@ const LineChartCard = dynamic(() => import("./_components/LineChartCard"), {
   loading: () => <ChartPlaceholder />,
 });
 
+const ContractsChartCard = dynamic(
+  () => import("./_components/ContractsChartCard"),
+  {
+    ssr: false,
+    loading: () => <ChartPlaceholder />,
+  },
+);
+
+const EMPTY_STATS: DashboardStats = { users: 0, scans: 0, leads: 0, contracts: 0 };
+const EMPTY_CHARTS = { users: [] as MonthPoint[], scans: [] as MonthPoint[], contracts: [] as MonthPoint[] };
+
 export default function DashboardHome() {
   const [userName, setUserName] = useState("User");
-  const [userEmail, setUserEmail] = useState("");
+  const [statsData, setStatsData] = useState<DashboardStats>(EMPTY_STATS);
+  const [chartsData, setChartsData] = useState(EMPTY_CHARTS);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     try {
       const raw = localStorage.getItem("reput_user");
       if (raw) {
         const u = JSON.parse(raw);
-        setUserEmail(u.email ?? "");
         setUserName(u.name || u.email || "User");
       }
     } catch {}
+  }, []);
+
+  useEffect(() => {
+    Promise.all([
+      dashboard.stats().then(setStatsData).catch(() => {}),
+      dashboard.charts().then(setChartsData).catch(() => {}),
+    ]).finally(() => setLoading(false));
   }, []);
 
   return (
@@ -55,26 +86,33 @@ export default function DashboardHome() {
         boxSizing: "border-box",
       }}
     >
-      {/* Top bar */}
       <TopBar userName={userName} userEmail="" />
 
-      {/* Stats row */}
-      <StatsRow />
+      <StatsRow data={statsData} loading={loading} />
 
-      {/* Charts row */}
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 400px), 1fr))",
+          gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 320px), 1fr))",
           gap: "1.25rem",
           marginBottom: "1.25rem",
         }}
       >
-        <BarChartCard />
-        <LineChartCard />
+        {loading ? (
+          <>
+            <ChartPlaceholder />
+            <ChartPlaceholder />
+            <ChartPlaceholder />
+          </>
+        ) : (
+          <>
+            <BarChartCard title="Scans by Month" data={chartsData.scans} />
+            <LineChartCard title="User Growth" data={chartsData.users} />
+            <ContractsChartCard title="Contracts" data={chartsData.contracts} />
+          </>
+        )}
       </div>
 
-      {/* Bottom row */}
       <div>
         <RecentScans />
       </div>
