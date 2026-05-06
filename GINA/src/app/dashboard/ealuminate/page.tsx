@@ -1,8 +1,8 @@
 "use client";
 
-import { COUNTRY_NAMES } from "@/lib/countries";
 import { leads } from "@/lib/api";
-import { useRef, useState, useEffect } from "react";
+import { COUNTRY_NAMES } from "@/lib/countries";
+import { useEffect, useRef, useState } from "react";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 interface WebLink {
@@ -722,7 +722,9 @@ ${sourcesHtml}
           keywords_suggested: data.keywords ?? [],
         });
         if (ld.id) setLeadId(ld.id);
-      } catch { /* non-fatal */ }
+      } catch {
+        /* non-fatal */
+      }
     } catch {
       setError("Network error. Please try again.");
     } finally {
@@ -787,10 +789,14 @@ ${sourcesHtml}
         try {
           await leads.update(leadId, {
             links: scanResult.links as unknown[],
-            summary: scanResult.summary ?? undefined,
+            summary: scanResult.summary
+              ? ({ ...scanResult.summary } as Record<string, unknown>)
+              : undefined,
             score: finalScore,
           });
-        } catch { /* non-fatal */ }
+        } catch {
+          /* non-fatal */
+        }
       }
     } catch {
       setError("Network error. Please try again.");
@@ -1017,40 +1023,56 @@ ${sourcesHtml}
                   padding: "1.25rem",
                 }}
               >
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.625rem" }}>
-                <p
-                  style={{
-                    fontSize: "0.875rem",
-                    fontWeight: 700,
-                    margin: 0,
-                    color: "var(--color-foreground, #1e293b)",
-                  }}
-                >
-                  Research Summary
-                </p>
-                <button
-                  type="button"
-                  onClick={handleExportSummaryPdf}
+                <div
                   style={{
                     display: "flex",
                     alignItems: "center",
-                    gap: "0.35rem",
-                    fontSize: "0.75rem",
-                    fontWeight: 600,
-                    color: "#48D4B8",
-                    background: "none",
-                    border: "none",
-                    cursor: "pointer",
-                    padding: 0,
+                    justifyContent: "space-between",
+                    marginBottom: "0.625rem",
                   }}
                 >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                    <polyline points="7 10 12 15 17 10"/>
-                    <line x1="12" y1="15" x2="12" y2="3"/>
-                  </svg>
-                  Export PDF
-                </button>
+                  <p
+                    style={{
+                      fontSize: "0.875rem",
+                      fontWeight: 700,
+                      margin: 0,
+                      color: "var(--color-foreground, #1e293b)",
+                    }}
+                  >
+                    Research Summary
+                  </p>
+                  <button
+                    type="button"
+                    onClick={handleExportSummaryPdf}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "0.35rem",
+                      fontSize: "0.75rem",
+                      fontWeight: 600,
+                      color: "#48D4B8",
+                      background: "none",
+                      border: "none",
+                      cursor: "pointer",
+                      padding: 0,
+                    }}
+                  >
+                    <svg
+                      width="14"
+                      height="14"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2.5"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                      <polyline points="7 10 12 15 17 10" />
+                      <line x1="12" y1="15" x2="12" y2="3" />
+                    </svg>
+                    Export PDF
+                  </button>
                 </div>
                 <p
                   style={{
