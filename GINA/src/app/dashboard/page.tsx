@@ -1,92 +1,82 @@
 "use client";
 
-import Link from "next/link";
+import dynamic from "next/dynamic";
+import { useEffect, useState } from "react";
+import TopBar from "./_components/TopBar";
+import StatsRow from "./_components/StatsRow";
+import RecentScans from "./_components/RecentScans";
+import TeamActivity from "./_components/TeamActivity";
+import QuickActions from "./_components/QuickActions";
 
-export default function DashboardHome() {
+function ChartPlaceholder() {
   return (
     <div
       style={{
-        padding: "clamp(1.5rem, 4vw, 2.5rem)",
-        maxWidth: "56rem",
-        margin: "0 auto",
+        borderRadius: "0.875rem",
+        height: "314px",
+        backgroundColor: "#f1f5f9",
+        border: "1px solid var(--color-border, #e2e8f0)",
+      }}
+    />
+  );
+}
+
+const BarChartCard = dynamic(() => import("./_components/BarChartCard"), {
+  ssr: false,
+  loading: () => <ChartPlaceholder />,
+});
+
+const LineChartCard = dynamic(() => import("./_components/LineChartCard"), {
+  ssr: false,
+  loading: () => <ChartPlaceholder />,
+});
+
+export default function DashboardHome() {
+  const [userName, setUserName] = useState("User");
+  const [userEmail, setUserEmail] = useState("");
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem("reput_user");
+      if (raw) {
+        const u = JSON.parse(raw);
+        setUserEmail(u.email ?? "");
+        setUserName(u.name || u.email || "User");
+      }
+    } catch {}
+  }, []);
+
+  return (
+    <div
+      style={{
+        padding: "clamp(1.25rem, 4vw, 2rem)",
+        backgroundColor: "#f8fafc",
+        minHeight: "100%",
         boxSizing: "border-box",
-        width: "100%",
       }}
     >
-      {/* Greeting */}
-      <div style={{ marginBottom: "2rem" }}>
-        <h1
-          style={{
-            fontSize: "clamp(1.375rem, 3vw, 1.75rem)",
-            fontWeight: 800,
-            color: "var(--color-foreground, #1e293b)",
-            margin: "0 0 0.375rem",
-          }}
-        >
-          Welcome to GINA
-        </h1>
-        <p style={{ color: "var(--color-muted, #64748b)", fontSize: "0.9375rem", margin: 0 }}>
-          Lead intelligence &amp; reputation platform. Select a tool from the sidebar to get started.
-        </p>
-      </div>
+      {/* Top bar */}
+      <TopBar userName={userName} userEmail="" />
 
-      {/* Tool cards */}
+      {/* Stats row */}
+      <StatsRow />
+
+      {/* Charts row */}
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 18rem), 1fr))",
+          gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 400px), 1fr))",
           gap: "1.25rem",
+          marginBottom: "1.25rem",
         }}
       >
-        <Link href="/dashboard/lead" style={{ textDecoration: "none" }}>
-          <div
-            className="glass glow-border"
-            style={{
-              borderRadius: "0.875rem",
-              padding: "1.5rem",
-              cursor: "pointer",
-              transition: "transform 0.15s",
-            }}
-          >
-            <div
-              style={{
-                width: "2.5rem",
-                height: "2.5rem",
-                borderRadius: "0.625rem",
-                backgroundColor: "rgba(68,121,218,0.1)",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                marginBottom: "1rem",
-              }}
-            >
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#4479DA" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="11" cy="11" r="8" />
-                <line x1="21" y1="21" x2="16.65" y2="16.65" />
-              </svg>
-            </div>
-            <h2
-              style={{
-                fontSize: "1rem",
-                fontWeight: 700,
-                color: "var(--color-foreground, #1e293b)",
-                margin: "0 0 0.375rem",
-              }}
-            >
-              Lead Generate
-            </h2>
-            <p
-              style={{
-                fontSize: "0.875rem",
-                color: "var(--color-muted, #64748b)",
-                margin: 0,
-                lineHeight: 1.5,
-              }}
-            >
-              Research a prospect&apos;s online reputation, generate a ReputScore, and get a meeting brief.
-            </p>
-          </div>
-        </Link>
+        <BarChartCard />
+        <LineChartCard />
+      </div>
+
+      {/* Bottom row */}
+      <div>
+        <RecentScans />
       </div>
     </div>
   );

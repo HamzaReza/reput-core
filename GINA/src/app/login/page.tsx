@@ -64,7 +64,10 @@ export default function LoginPage() {
         localStorage.setItem("reput_user", JSON.stringify(res.user));
         localStorage.setItem("reput_name", res.user.name || res.user.email);
         if (res.user.profile?.keywords?.length) {
-          localStorage.setItem("reput_keywords", res.user.profile.keywords.join(","));
+          localStorage.setItem(
+            "reput_keywords",
+            res.user.profile.keywords.join(","),
+          );
         }
         if (res.user.profile?.avatar_url) {
           localStorage.setItem("reput_avatar", res.user.profile.avatar_url);
@@ -197,13 +200,17 @@ export default function LoginPage() {
               justifyContent: "center",
             }}
           >
-            {loading ? <><Spinner />Signing in…</> : "Login"}
+            {loading ? (
+              <>
+                <Spinner />
+                Signing in…
+              </>
+            ) : (
+              "Login"
+            )}
           </button>
         </form>
-
       </div>
-
     </div>
   );
 }
-
