@@ -5,8 +5,7 @@ import { useEffect, useState } from "react";
 import TopBar from "./_components/TopBar";
 import StatsRow from "./_components/StatsRow";
 import RecentScans from "./_components/RecentScans";
-import TeamActivity from "./_components/TeamActivity";
-import QuickActions from "./_components/QuickActions";
+import { dashboard, DashboardStats, MonthPoint } from "@/lib/api";
 
 function ChartPlaceholder() {
   return (
@@ -31,19 +30,35 @@ const LineChartCard = dynamic(() => import("./_components/LineChartCard"), {
   loading: () => <ChartPlaceholder />,
 });
 
+const ContractsChartCard = dynamic(
+  () => import("./_components/ContractsChartCard"),
+  {
+    ssr: false,
+    loading: () => <ChartPlaceholder />,
+  },
+);
+
+const EMPTY_STATS: DashboardStats = { users: 0, scans: 0, leads: 0, contracts: 0 };
+const EMPTY_CHARTS = { users: [] as MonthPoint[], scans: [] as MonthPoint[], contracts: [] as MonthPoint[] };
+
 export default function DashboardHome() {
   const [userName, setUserName] = useState("User");
-  const [userEmail, setUserEmail] = useState("");
+  const [statsData, setStatsData] = useState<DashboardStats>(EMPTY_STATS);
+  const [chartsData, setChartsData] = useState(EMPTY_CHARTS);
 
   useEffect(() => {
     try {
       const raw = localStorage.getItem("reput_user");
       if (raw) {
         const u = JSON.parse(raw);
-        setUserEmail(u.email ?? "");
         setUserName(u.name || u.email || "User");
       }
     } catch {}
+  }, []);
+
+  useEffect(() => {
+    dashboard.stats().then(setStatsData).catch(() => {});
+    dashboard.charts().then(setChartsData).catch(() => {});
   }, []);
 
   return (
@@ -55,26 +70,23 @@ export default function DashboardHome() {
         boxSizing: "border-box",
       }}
     >
-      {/* Top bar */}
       <TopBar userName={userName} userEmail="" />
 
-      {/* Stats row */}
-      <StatsRow />
+      <StatsRow data={statsData} />
 
-      {/* Charts row */}
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 400px), 1fr))",
+          gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 320px), 1fr))",
           gap: "1.25rem",
           marginBottom: "1.25rem",
         }}
       >
-        <BarChartCard />
-        <LineChartCard />
+        <BarChartCard title="Scans by Month" data={chartsData.scans} />
+        <LineChartCard title="User Growth" data={chartsData.users} />
+        <ContractsChartCard title="Contracts" data={chartsData.contracts} />
       </div>
 
-      {/* Bottom row */}
       <div>
         <RecentScans />
       </div>

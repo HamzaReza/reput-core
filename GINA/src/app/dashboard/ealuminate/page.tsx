@@ -1,7 +1,8 @@
 "use client";
 
 import { COUNTRY_NAMES } from "@/lib/countries";
-import { useRef, useState } from "react";
+import { leads } from "@/lib/api";
+import { useRef, useState, useEffect } from "react";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 interface WebLink {
@@ -559,12 +560,13 @@ export default function LeadPage() {
   const [keywordsReady, setKeywordsReady] = useState(false);
   const [usedKeywords, setUsedKeywords] = useState<string[]>([]);
 
+  const [employeeName, setEmployeeName] = useState("");
+  const [employeeEmail, setEmployeeEmail] = useState("");
+  const [leadId, setLeadId] = useState<string | null>(null);
+
   const [preAnalysisLoading, setPreAnalysisLoading] = useState(false);
   const [preAnalysisDone, setPreAnalysisDone] = useState(false);
   const [preAnalysisSummary, setPreAnalysisSummary] = useState("");
-  const [preAnalysisSources, setPreAnalysisSources] = useState<
-    { title: string; url: string; snippet: string }[]
-  >([]);
 
   const [loading, setLoading] = useState(false);
   const [statusIdx, setStatusIdx] = useState(0);
@@ -613,19 +615,23 @@ export default function LeadPage() {
     }, 5000);
   };
 
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem("reput_user");
+      if (raw) {
+        const u = JSON.parse(raw);
+        setEmployeeName(u.name || u.email || "");
+        setEmployeeEmail(u.email || "");
+      }
+    } catch {}
+  }, []);
+
   const fullName = `${firstName.trim()} ${lastName.trim()}`.trim();
 
   const handleExportSummaryPdf = () => {
     const win = window.open("", "_blank");
     if (!win) return;
-    const sourcesHtml = preAnalysisSources.length
-      ? `<h2>Sources</h2><ul>${preAnalysisSources
-          .map(
-            (s) =>
-              `<li><a href="${s.url}" target="_blank">${s.title}</a><br/><span class="url">${s.url}</span></li>`,
-          )
-          .join("")}</ul>`
-      : "";
+    const sourcesHtml = "";
     win.document.write(`<!DOCTYPE html><html><head>
 <meta charset="utf-8"/>
 <title>Research Summary — ${fullName}</title>
@@ -662,7 +668,7 @@ ${sourcesHtml}
       setEditableKeywords([]);
       setPreAnalysisDone(false);
       setPreAnalysisSummary("");
-      setPreAnalysisSources([]);
+      setLeadId(null);
     }
   };
 
@@ -682,7 +688,7 @@ ${sourcesHtml}
     setKeywordsReady(false);
     setEditableKeywords([]);
     setPreAnalysisSummary("");
-    setPreAnalysisSources([]);
+    setLeadId(null);
     try {
       const res = await fetch("/api/pre-analysis", {
         method: "POST",
@@ -702,10 +708,21 @@ ${sourcesHtml}
         return;
       }
       setPreAnalysisSummary(data.summary ?? "");
-      setPreAnalysisSources(data.sources ?? []);
       setEditableKeywords(data.keywords ?? []);
       setKeywordsReady(true);
       setPreAnalysisDone(true);
+
+      // Create lead entry in DB
+      try {
+        const ld = await leads.create({
+          name: fullName || undefined,
+          company: company.trim() || undefined,
+          country,
+          background: description.trim(),
+          keywords_suggested: data.keywords ?? [],
+        });
+        if (ld.id) setLeadId(ld.id);
+      } catch { /* non-fatal */ }
     } catch {
       setError("Network error. Please try again.");
     } finally {
@@ -761,8 +778,20 @@ ${sourcesHtml}
           l.risk === "low" ||
           l.risk === "none",
       ).length;
-      setScore(deriveScore(negCount, posCount));
+      const finalScore = deriveScore(negCount, posCount);
+      setScore(finalScore);
       setResult(scanResult);
+
+      // Append scan results to the lead entry
+      if (leadId) {
+        try {
+          await leads.update(leadId, {
+            links: scanResult.links as unknown[],
+            summary: scanResult.summary ?? undefined,
+            score: finalScore,
+          });
+        } catch { /* non-fatal */ }
+      }
     } catch {
       setError("Network error. Please try again.");
     } finally {
@@ -1028,47 +1057,11 @@ ${sourcesHtml}
                     fontSize: "0.8125rem",
                     color: "var(--color-muted, #64748b)",
                     lineHeight: 1.65,
-                    margin: preAnalysisSources.length ? "0 0 1rem" : "0",
+                    margin: 0,
                   }}
                 >
                   {preAnalysisSummary}
                 </p>
-                {preAnalysisSources.length > 0 && (
-                  <div>
-                    <p
-                      style={{
-                        fontSize: "0.6875rem",
-                        fontWeight: 700,
-                        color: "var(--color-muted, #64748b)",
-                        margin: "0 0 0.375rem",
-                        textTransform: "uppercase",
-                        letterSpacing: "0.05em",
-                      }}
-                    >
-                      Sources
-                    </p>
-                    {preAnalysisSources.map((s, i) => (
-                      <a
-                        key={i}
-                        href={s.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        style={{
-                          display: "block",
-                          fontSize: "0.8rem",
-                          color: "#48D4B8",
-                          marginBottom: "0.25rem",
-                          overflow: "hidden",
-                          textOverflow: "ellipsis",
-                          whiteSpace: "nowrap",
-                          textDecoration: "none",
-                        }}
-                      >
-                        {s.title}
-                      </a>
-                    ))}
-                  </div>
-                )}
               </div>
             )}
 
