@@ -137,7 +137,8 @@ async function searchSerper(
 }
 
 const FALLBACK = {
-  summary: "No public information found for this subject.",
+  summary:
+    "Either no public information found for this subject or the context provided is not enough to generate a summary.",
   keywords: [],
   sources: [],
 };

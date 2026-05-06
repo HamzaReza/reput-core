@@ -456,6 +456,8 @@ export interface RecentLead {
   id: string;
   name: string | null;
   company: string | null;
+  country: string | null;
+  background: string | null;
   score: number | null;
   scanned_by_name: string | null;
   scanned_by_email: string | null;
