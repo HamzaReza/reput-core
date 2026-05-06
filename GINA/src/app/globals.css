@@ -1,0 +1,204 @@
+@import "tailwindcss";
+
+:root {
+  --color-button: #4479da;
+  --color-primary: #4479da;
+  --color-primary-dark: #3568c4;
+  --color-primary-light: #6b94e8;
+
+  --color-background: #ffffff;
+  --color-surface: #ffffff;
+  --color-foreground: #1e293b;
+  --color-border: #e2e8f0;
+  --color-muted: #64748b;
+
+  --color-success: #22c55e;
+  --color-warning: #eab308;
+  --color-error: #ef4444;
+}
+
+@theme inline {
+  --color-primary: var(--color-primary);
+  --color-primary-dark: var(--color-primary-dark);
+  --color-primary-light: var(--color-primary-light);
+  --color-background: var(--color-background);
+  --color-surface: var(--color-surface);
+  --color-foreground: var(--color-foreground);
+  --color-border: var(--color-border);
+  --color-muted: var(--color-muted);
+}
+
+/* Plain white card with a light border */
+.glass {
+  background: #ffffff;
+  border: 1px solid var(--color-border);
+}
+
+.glass-dark {
+  background: #f8fafc;
+  border: 1px solid var(--color-border);
+}
+
+/* Subtle border that sharpens on hover */
+.glow-border {
+  border: 1px solid var(--color-border);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+.glow-border:hover {
+  border-color: rgba(68, 121, 218, 0.4);
+  box-shadow: 0 4px 16px rgba(68, 121, 218, 0.08);
+}
+
+/* Solid blue heading text */
+.neon-text {
+  color: var(--color-primary);
+}
+
+/* Primary action button */
+.glow-button {
+  font-weight: 600;
+  color: #ffffff;
+  background-color: var(--color-button);
+  border-radius: 0.625rem;
+  transition: background-color 0.2s ease, box-shadow 0.2s ease;
+}
+.glow-button:hover {
+  background-color: var(--color-primary-dark);
+  box-shadow: 0 6px 20px rgba(68, 121, 218, 0.3);
+}
+
+/* No-op: keeps class references working without any visual pattern */
+.grid-bg {
+  background: #ffffff;
+}
+
+.header-nav-link:hover {
+  color: var(--color-primary) !important;
+}
+
+/* ── Keyframes ────────────────────────────────────────────────────────── */
+
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(18px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes scaleIn {
+  from { opacity: 0; transform: scale(0.94); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+@keyframes slideInRight {
+  from { opacity: 0; transform: translateX(24px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes reput-spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0px); }
+  50%       { transform: translateY(-10px); }
+}
+
+@keyframes gaugeIn {
+  from { opacity: 0; transform: scale(0.88); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+/* ── Utility animation classes ───────────────────────────────────────── */
+
+.animate-fade-up {
+  animation: fadeUp 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.45s ease both;
+}
+
+.animate-scale-in {
+  animation: scaleIn 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.animate-slide-right {
+  animation: slideInRight 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* Stagger helpers */
+.delay-100 { animation-delay: 0.1s; }
+.delay-150 { animation-delay: 0.15s; }
+.delay-200 { animation-delay: 0.2s; }
+.delay-300 { animation-delay: 0.3s; }
+.delay-400 { animation-delay: 0.4s; }
+.delay-500 { animation-delay: 0.5s; }
+.delay-600 { animation-delay: 0.6s; }
+.delay-700 { animation-delay: 0.7s; }
+
+/* ── Button press micro-interaction ──────────────────────────────────── */
+.glow-button {
+  transition: background-color 0.2s ease, box-shadow 0.2s ease, transform 0.12s ease !important;
+}
+.glow-button:active {
+  transform: scale(0.97);
+}
+
+/* ── Card lift on hover ───────────────────────────────────────────────── */
+.glow-border {
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease !important;
+}
+.glow-border:hover {
+  transform: translateY(-2px);
+}
+
+/* ── Link card ────────────────────────────────────────────────────────── */
+.link-card {
+  transition: box-shadow 0.2s ease, transform 0.2s ease, border-color 0.2s ease;
+}
+.link-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 32px rgba(0,0,0,0.09);
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html {
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  overflow-x: hidden;
+}
+
+body {
+  width: 100%;
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow-x: hidden;
+  background: #ffffff;
+  color: var(--color-foreground);
+  font-family:
+    "Avenir Next",
+    Avenir,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    Roboto,
+    "Helvetica Neue",
+    sans-serif;
+  line-height: 1.6;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}

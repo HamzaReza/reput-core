@@ -21,7 +21,6 @@ import { useEffect, useRef, useState } from "react";
 type RiskLevel = "Negative" | "Poor" | "Mediocre" | "Good";
 
 function apiRiskToUi(risk: string): RiskLevel {
-  console.log("🚀 ~ page.tsx:23 ~ apiRiskToUi ~ risk:", risk);
   if (risk === "high") return "Negative";
   if (risk === "medium") return "Poor";
   if (risk === "low") return "Mediocre";
@@ -344,7 +343,8 @@ async function fetchAndMergeScan(
 
   const allLinks = linksData.links;
   const negCount = allLinks.filter(
-    (l) => l.sentiment === "negative" || l.risk === "high" || l.risk === "medium",
+    (l) =>
+      l.sentiment === "negative" || l.risk === "high" || l.risk === "medium",
   ).length;
   const posCount = allLinks.filter(
     (l) =>
@@ -358,7 +358,8 @@ async function fetchAndMergeScan(
   const merged = {
     ...(scanResult ?? {}),
     score: derivedScore,
-    risk_level: derivedScore >= 86 ? "low" : derivedScore >= 61 ? "medium" : "high",
+    risk_level:
+      derivedScore >= 86 ? "low" : derivedScore >= 61 ? "medium" : "high",
     results: allLinks.map((l) => ({ ...l, risk: l.risk as string })),
     summary: {
       total_results: allLinks.length,
