@@ -34,6 +34,32 @@ async def create_lead(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> dict:
+    # Upsert: if a row with the same name + country exists, refresh it
+    existing = None
+    if payload.name and payload.country:
+        result = await db.execute(
+            select(LeadGenerated).where(
+                LeadGenerated.name == payload.name,
+                LeadGenerated.country == payload.country,
+            ).limit(1)
+        )
+        existing = result.scalar_one_or_none()
+
+    if existing is not None:
+        existing.scanned_by_name = current_user.name or current_user.email
+        existing.scanned_by_email = current_user.email
+        existing.company = payload.company
+        existing.background = payload.background
+        existing.keywords_suggested = payload.keywords_suggested
+        existing.researched_at = datetime.now(timezone.utc)
+        existing.links = None
+        existing.summary = None
+        existing.score = None
+        existing.scanned_at = None
+        db.add(existing)
+        await db.flush()
+        return {"id": str(existing.id)}
+
     lead = LeadGenerated(
         scanned_by_name=current_user.name or current_user.email,
         scanned_by_email=current_user.email,
@@ -92,6 +118,8 @@ async def list_leads(
             "id": str(lead.id),
             "name": lead.name,
             "company": lead.company,
+            "country": lead.country,
+            "background": lead.background,
             "score": lead.score,
             "scanned_by_name": lead.scanned_by_name,
             "scanned_by_email": lead.scanned_by_email,

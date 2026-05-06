@@ -51,7 +51,7 @@ const CARDS = [
   },
 ];
 
-export default function StatsRow({ data }: { data: DashboardStats }) {
+export default function StatsRow({ data, loading = false }: { data: DashboardStats; loading?: boolean }) {
   return (
     <div
       style={{
@@ -61,6 +61,18 @@ export default function StatsRow({ data }: { data: DashboardStats }) {
         marginBottom: "1.25rem",
       }}
     >
+      <style>{`
+        @keyframes stats-shimmer {
+          0%   { background-position: -200px 0; }
+          100% { background-position: calc(200px + 100%) 0; }
+        }
+        .stats-shimmer {
+          background: linear-gradient(90deg, #e2e8f0 25%, #f1f5f9 50%, #e2e8f0 75%);
+          background-size: 200px 100%;
+          animation: stats-shimmer 1.2s ease-in-out infinite;
+          border-radius: 0.375rem;
+        }
+      `}</style>
       {CARDS.map((card, i) => (
         <div
           key={card.key}
@@ -106,17 +118,21 @@ export default function StatsRow({ data }: { data: DashboardStats }) {
             </div>
           </div>
 
-          <p
-            style={{
-              fontSize: "1.625rem",
-              fontWeight: 800,
-              color: "var(--color-foreground, #1e293b)",
-              margin: "0 0 0.25rem",
-              lineHeight: 1.1,
-            }}
-          >
-            {data[card.key] > 0 ? data[card.key].toLocaleString() : "—"}
-          </p>
+          {loading ? (
+            <div className="stats-shimmer" style={{ height: "2rem", width: "60%", marginBottom: "0.25rem" }} />
+          ) : (
+            <p
+              style={{
+                fontSize: "1.625rem",
+                fontWeight: 800,
+                color: "var(--color-foreground, #1e293b)",
+                margin: "0 0 0.25rem",
+                lineHeight: 1.1,
+              }}
+            >
+              {data[card.key] > 0 ? data[card.key].toLocaleString() : "—"}
+            </p>
+          )}
         </div>
       ))}
     </div>

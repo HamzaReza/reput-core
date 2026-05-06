@@ -47,19 +47,19 @@ async def get_charts(
     users_data = await monthly("""
         SELECT DATE_TRUNC('month', created_at)::text AS month, COUNT(*)::int AS count
         FROM users
-        WHERE created_at >= NOW() - INTERVAL '6 months'
+        WHERE created_at >= DATE_TRUNC('year', NOW())
         GROUP BY 1 ORDER BY 1
     """)
     scans_data = await monthly("""
         SELECT DATE_TRUNC('month', scanned_at)::text AS month, COUNT(*)::int AS count
         FROM reputation_scans
-        WHERE scanned_at >= NOW() - INTERVAL '6 months'
+        WHERE scanned_at >= DATE_TRUNC('year', NOW())
         GROUP BY 1 ORDER BY 1
     """)
     contracts_data = await monthly("""
         SELECT DATE_TRUNC('month', created_at)::text AS month, COUNT(*)::int AS count
         FROM contracts
-        WHERE created_at >= NOW() - INTERVAL '6 months'
+        WHERE created_at >= DATE_TRUNC('year', NOW())
         GROUP BY 1 ORDER BY 1
     """)
 
