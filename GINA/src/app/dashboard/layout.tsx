@@ -7,6 +7,7 @@ import { useEffect, useState } from "react";
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [authed, setAuthed] = useState<boolean | null>(null);
 
   useEffect(() => {
@@ -31,7 +32,46 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         backgroundColor: "var(--color-background, #ffffff)",
       }}
     >
-      <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+      {/* Sidebar + edge toggle button */}
+      <div className="gina-sidebar-wrapper" style={{ position: "relative", flexShrink: 0, height: "100%" }}>
+        <Sidebar
+          open={sidebarOpen}
+          onClose={() => setSidebarOpen(false)}
+          collapsed={sidebarCollapsed}
+        />
+        <button
+          onClick={() => setSidebarCollapsed((c) => !c)}
+          aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+          style={{
+            position: "absolute",
+            right: "-12px",
+            top: "76px",
+            width: "24px",
+            height: "24px",
+            borderRadius: "50%",
+            backgroundColor: "#ffffff",
+            border: "1px solid var(--color-border, #e2e8f0)",
+            boxShadow: "0 2px 8px rgba(0,0,0,0.10)",
+            cursor: "pointer",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 20,
+            transition: "box-shadow 0.15s",
+            padding: 0,
+          }}
+        >
+          {sidebarCollapsed ? (
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#64748b" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="9 18 15 12 9 6" />
+            </svg>
+          ) : (
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#64748b" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="15 18 9 12 15 6" />
+            </svg>
+          )}
+        </button>
+      </div>
 
       {/* Main area */}
       <div
@@ -99,6 +139,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       <style>{`
         @media (max-width: 767px) {
           .gina-topbar { display: flex !important; }
+          .gina-sidebar-wrapper { display: none; }
         }
       `}</style>
     </div>

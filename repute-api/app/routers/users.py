@@ -13,6 +13,17 @@ from app.utils.auth import get_current_user
 router = APIRouter(prefix="/users", tags=["users"])
 
 
+@router.get("/", response_model=list[UserOut])
+async def list_users(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    result = await db.execute(
+        select(User).options(selectinload(User.profile)).order_by(User.created_at)
+    )
+    return [UserOut.model_validate(u) for u in result.scalars().all()]
+
+
 @router.get("/me", response_model=UserOut)
 async def get_me(
     db: AsyncSession = Depends(get_db),
