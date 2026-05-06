@@ -227,7 +227,7 @@ Respond ONLY with valid JSON in this exact shape:
 }
 
 Rules:
-- summary: factual, neutral, 10 sentences, based only on the search results
+- summary: factual, neutral, 20 sentences, based only on the search results
 - keywords: exactly ${cap} items, 1—2 words each, reputation-relevant search terms, do NOT include the person's name`;
 
     let summary = FALLBACK.summary;

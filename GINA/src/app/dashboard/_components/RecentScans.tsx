@@ -1,6 +1,8 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
+import { leads, RecentLead } from "@/lib/api";
 
 const RISK_COLORS: Record<string, string> = {
   Good: "#22c55e",
@@ -9,24 +11,68 @@ const RISK_COLORS: Record<string, string> = {
   Negative: "#ef4444",
 };
 
-const SCANS = [
-  { name: "John Smith",   company: "Acme Corp",    score: 78, risk: "Good",     status: "Complete",  time: "2h ago" },
-  { name: "Sarah Lee",    company: "TechStart",    score: 42, risk: "Poor",     status: "Complete",  time: "5h ago" },
-  { name: "Mark Rivera",  company: "Global Media", score: 31, risk: "Negative", status: "In Review", time: "1d ago" },
-  { name: "Emma Davis",   company: "Retail Plus",  score: 65, risk: "Mediocre", status: "Complete",  time: "2d ago" },
-];
+function riskFromScore(score: number | null): string {
+  if (score === null) return "Mediocre";
+  if (score >= 86) return "Good";
+  if (score >= 61) return "Mediocre";
+  if (score >= 26) return "Poor";
+  return "Negative";
+}
 
-function getInitials(name: string) {
+function relativeTime(iso: string | null): string {
+  if (!iso) return "";
+  const diff = Date.now() - new Date(iso).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  return `${Math.floor(hrs / 24)}d ago`;
+}
+
+function getInitials(name: string | null): string {
+  if (!name) return "?";
   return name.split(" ").map((w) => w[0]).join("").slice(0, 2).toUpperCase();
 }
 
+function SkeletonRow() {
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: "0.75rem",
+        paddingTop: "0.75rem",
+        paddingBottom: "0.75rem",
+        borderBottom: "1px solid var(--color-border, #e2e8f0)",
+      }}
+    >
+      <div style={{ width: 38, height: 38, borderRadius: "50%", backgroundColor: "#f1f5f9", flexShrink: 0 }} />
+      <div style={{ flex: 1 }}>
+        <div style={{ height: 12, width: "55%", backgroundColor: "#f1f5f9", borderRadius: 6, marginBottom: 6 }} />
+        <div style={{ height: 10, width: "35%", backgroundColor: "#f1f5f9", borderRadius: 6 }} />
+      </div>
+      <div style={{ width: 48, height: 20, backgroundColor: "#f1f5f9", borderRadius: 10 }} />
+      <div style={{ width: 28, height: 28, backgroundColor: "#f1f5f9", borderRadius: 6 }} />
+    </div>
+  );
+}
+
 export default function RecentScans() {
+  const [scans, setScans] = useState<RecentLead[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    leads.list(5)
+      .then(setScans)
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
   return (
     <div
       className="glass glow-border animate-fade-up"
       style={{ borderRadius: "0.875rem", padding: "1.25rem", animationDelay: "0.28s" }}
     >
-      {/* Header */}
       <div
         style={{
           display: "flex",
@@ -35,37 +81,33 @@ export default function RecentScans() {
           marginBottom: "1rem",
         }}
       >
-        <p
-          style={{
-            fontSize: "1rem",
-            fontWeight: 700,
-            color: "var(--color-foreground, #1e293b)",
-            margin: 0,
-          }}
-        >
+        <p style={{ fontSize: "1rem", fontWeight: 700, color: "var(--color-foreground, #1e293b)", margin: 0 }}>
           Recent Scans
         </p>
         <Link
           href="/dashboard/ealuminate"
-          style={{
-            fontSize: "0.8125rem",
-            fontWeight: 600,
-            color: "#4479da",
-            textDecoration: "none",
-          }}
+          style={{ fontSize: "0.8125rem", fontWeight: 600, color: "#4479da", textDecoration: "none" }}
         >
           View All
         </Link>
       </div>
 
-      {/* Scan rows */}
       <div>
-        {SCANS.map((scan, i) => {
-          const riskColor = RISK_COLORS[scan.risk] ?? "#64748b";
-          const isLast = i === SCANS.length - 1;
+        {loading && [0, 1, 2, 3].map((i) => <SkeletonRow key={i} />)}
+
+        {!loading && scans.length === 0 && (
+          <p style={{ fontSize: "0.875rem", color: "var(--color-muted, #64748b)", textAlign: "center", padding: "1.5rem 0", margin: 0 }}>
+            No scans yet. Run a scan in Ealuminate.
+          </p>
+        )}
+
+        {!loading && scans.map((scan, i) => {
+          const risk = riskFromScore(scan.score);
+          const riskColor = RISK_COLORS[risk];
+          const isLast = i === scans.length - 1;
           return (
             <div
-              key={scan.name + i}
+              key={scan.id}
               style={{
                 display: "flex",
                 alignItems: "center",
@@ -75,7 +117,6 @@ export default function RecentScans() {
                 borderBottom: isLast ? "none" : "1px solid var(--color-border, #e2e8f0)",
               }}
             >
-              {/* Avatar */}
               <div
                 style={{
                   width: "38px",
@@ -95,36 +136,15 @@ export default function RecentScans() {
                 {getInitials(scan.name)}
               </div>
 
-              {/* Name + company */}
               <div style={{ flex: 1, minWidth: 0 }}>
-                <p
-                  style={{
-                    fontSize: "0.875rem",
-                    fontWeight: 600,
-                    color: "var(--color-foreground, #1e293b)",
-                    margin: 0,
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                    whiteSpace: "nowrap",
-                  }}
-                >
-                  {scan.name}
+                <p style={{ fontSize: "0.875rem", fontWeight: 600, color: "var(--color-foreground, #1e293b)", margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {scan.name ?? "—"}
                 </p>
-                <p
-                  style={{
-                    fontSize: "0.75rem",
-                    color: "var(--color-muted, #64748b)",
-                    margin: "0.1rem 0 0",
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                    whiteSpace: "nowrap",
-                  }}
-                >
-                  {scan.company}
+                <p style={{ fontSize: "0.75rem", color: "var(--color-muted, #64748b)", margin: "0.1rem 0 0", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {scan.company ?? "—"}
                 </p>
               </div>
 
-              {/* Risk badge */}
               <span
                 style={{
                   fontSize: "0.6875rem",
@@ -136,29 +156,15 @@ export default function RecentScans() {
                   flexShrink: 0,
                 }}
               >
-                {scan.risk}
+                {risk}
               </span>
 
-              {/* Score + time */}
               <div style={{ textAlign: "right", flexShrink: 0 }}>
-                <p
-                  style={{
-                    fontSize: "0.875rem",
-                    fontWeight: 700,
-                    color: riskColor,
-                    margin: 0,
-                  }}
-                >
-                  {scan.score}
+                <p style={{ fontSize: "0.875rem", fontWeight: 700, color: riskColor, margin: 0 }}>
+                  {scan.score ?? "—"}
                 </p>
-                <p
-                  style={{
-                    fontSize: "0.7rem",
-                    color: "var(--color-muted, #64748b)",
-                    margin: "0.1rem 0 0",
-                  }}
-                >
-                  {scan.time}
+                <p style={{ fontSize: "0.7rem", color: "var(--color-muted, #64748b)", margin: "0.1rem 0 0" }}>
+                  {relativeTime(scan.researched_at)}
                 </p>
               </div>
             </div>
