@@ -278,6 +278,8 @@ export async function getCachedProfile(): Promise<UserProfile | null> {
 // ── User / Profile endpoints ──────────────────────────────────────────────────
 
 export const users = {
+  list: () => request<User[]>("/users/", {}, true),
+
   updateMe: async (data: {
     name?: string;
     phone?: string;
