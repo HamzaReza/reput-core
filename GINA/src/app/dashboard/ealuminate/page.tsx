@@ -1,9 +1,9 @@
 "use client";
 
-import { leads, clientsApi, WebLink } from "@/lib/api";
+import { clientsApi, leads, WebLink } from "@/lib/api";
 import { COUNTRY_NAMES } from "@/lib/countries";
-import { Suspense, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useRef, useState } from "react";
 
 interface MeetingSummary {
   headline: string;
@@ -52,18 +52,18 @@ const RISK_COLORS: Record<
 };
 
 const STATUS_MESSAGES = [
-  "Scanning the web for mentions…",
-  "Analyzing tone and context across sources…",
-  "Weighing the impact of each result…",
-  "Almost done — building the ReputScore…",
+  "Gathering intelligence on this prospect…",
+  "Scanning public records and web presence…",
+  "Assessing reputation signals across sources…",
+  "Compiling the prospect report for your review…",
 ];
 
 const DID_YOU_KNOW = [
-  "Your online reputation influences hiring decisions, business partnerships, and financial opportunities.",
-  "83% of people search someone's name online before a first meeting.",
-  "A single negative article on page one of Google can cost you clients, deals, and trust.",
-  "Most people have no idea what the internet says about them.",
-  "ReputScore is calculated across hundreds of sources — news, blogs, public records, and more.",
+  "Researching a prospect before a pitch significantly increases your conversion rate.",
+  "Understanding a prospect's public reputation helps you anticipate objections before the meeting.",
+  "A thorough background scan lets you tailor your approach to the right angle.",
+  "EALUMINATE scans hundreds of public sources to build a complete prospect profile.",
+  "Knowing a prospect's risk profile helps you decide how to position your offering.",
 ];
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -632,55 +632,68 @@ function EaluminatePageInner() {
   useEffect(() => {
     const id = searchParams.get("lead");
     if (!id) return;
-    leads.get(id).then(async (lead) => {
-      const parts = (lead.name ?? "").trim().split(/\s+/);
-      setFirstName(parts[0] ?? "");
-      setLastName(parts.slice(1).join(" "));
-      setCompany(lead.company ?? "");
-      setCountry(lead.country ?? "");
-      setDescription(lead.background ?? "");
-      setLeadId(lead.id);
+    leads
+      .get(id)
+      .then(async (lead) => {
+        const parts = (lead.name ?? "").trim().split(/\s+/);
+        setFirstName(parts[0] ?? "");
+        setLastName(parts.slice(1).join(" "));
+        setCompany(lead.company ?? "");
+        setCountry(lead.country ?? "");
+        setDescription(lead.background ?? "");
+        setLeadId(lead.id);
 
-      // Resolve the corresponding client so scan events can be appended
-      try {
-        const clients = await clientsApi.list(200);
-        const match = clients.find(
-          (c) => c.name === (lead.name ?? "").trim() && c.country === (lead.country ?? ""),
-        );
-        if (match) setClientId(match.id);
-      } catch { /* non-fatal */ }
+        // Resolve the corresponding client so scan events can be appended
+        try {
+          const clients = await clientsApi.list(200);
+          const match = clients.find(
+            (c) =>
+              c.name === (lead.name ?? "").trim() &&
+              c.country === (lead.country ?? ""),
+          );
+          if (match) setClientId(match.id);
+        } catch {
+          /* non-fatal */
+        }
 
-      if (lead.keywords_suggested.length > 0 || lead.pre_analysis_summary) {
-        setEditableKeywords(lead.keywords_suggested);
-        setPreAnalysisSummary(lead.pre_analysis_summary ?? "");
-        setKeywordsReady(lead.keywords_suggested.length > 0);
-        setPreAnalysisDone(true);
-      }
+        if (lead.keywords_suggested.length > 0 || lead.pre_analysis_summary) {
+          setEditableKeywords(lead.keywords_suggested);
+          setPreAnalysisSummary(lead.pre_analysis_summary ?? "");
+          setKeywordsReady(lead.keywords_suggested.length > 0);
+          setPreAnalysisDone(true);
+        }
 
-      if (lead.links && lead.links.length > 0) {
-        const links = lead.links as WebLink[];
-        const negative = links.filter(
-          (l) => l.sentiment === "negative" || l.risk === "high" || l.risk === "medium",
-        );
-        const positive = links.filter(
-          (l) => l.sentiment === "positive" || l.risk === "low" || l.risk === "none",
-        );
-        const neutral = links.filter((l) => l.sentiment === "neutral");
-        setResult({
-          links,
-          negative,
-          positive,
-          neutral,
-          summary: lead.summary ?? undefined,
-        });
-        setUsedKeywords(lead.keywords_suggested);
-      }
+        if (lead.links && lead.links.length > 0) {
+          const links = lead.links as WebLink[];
+          const negative = links.filter(
+            (l) =>
+              l.sentiment === "negative" ||
+              l.risk === "high" ||
+              l.risk === "medium",
+          );
+          const positive = links.filter(
+            (l) =>
+              l.sentiment === "positive" ||
+              l.risk === "low" ||
+              l.risk === "none",
+          );
+          const neutral = links.filter((l) => l.sentiment === "neutral");
+          setResult({
+            links,
+            negative,
+            positive,
+            neutral,
+            summary: lead.summary ?? undefined,
+          });
+          setUsedKeywords(lead.keywords_suggested);
+        }
 
-      if (lead.score !== null) {
-        setScore(lead.score);
-        setScanComplete(true);
-      }
-    }).catch(() => {});
+        if (lead.score !== null) {
+          setScore(lead.score);
+          setScanComplete(true);
+        }
+      })
+      .catch(() => {});
   }, [searchParams]);
 
   const fullName = `${firstName.trim()} ${lastName.trim()}`.trim();
@@ -897,10 +910,24 @@ ${linksHtml}
       }
 
       const scanResult = data as ScanResult;
-      const finalScore = typeof data.score === "number" ? data.score : deriveScore(
-        scanResult.links.filter((l) => l.sentiment === "negative" || l.risk === "high" || l.risk === "medium").length,
-        scanResult.links.filter((l) => l.sentiment === "positive" || l.sentiment === "neutral" || l.risk === "low" || l.risk === "none").length,
-      );
+      const finalScore =
+        typeof data.score === "number"
+          ? data.score
+          : deriveScore(
+              scanResult.links.filter(
+                (l) =>
+                  l.sentiment === "negative" ||
+                  l.risk === "high" ||
+                  l.risk === "medium",
+              ).length,
+              scanResult.links.filter(
+                (l) =>
+                  l.sentiment === "positive" ||
+                  l.sentiment === "neutral" ||
+                  l.risk === "low" ||
+                  l.risk === "none",
+              ).length,
+            );
       setScore(finalScore);
       setResult(scanResult);
       setScanComplete(true);
@@ -957,17 +984,13 @@ ${linksHtml}
       }}
     >
       <style>{`
-        @keyframes repu-blob-morph {
-          0%   { border-radius: 44% 56% 53% 47% / 50% 46% 54% 50%; transform: rotate(0deg); }
-          20%  { border-radius: 57% 43% 44% 56% / 55% 53% 47% 45%; transform: rotate(72deg); }
-          40%  { border-radius: 46% 54% 60% 40% / 42% 58% 46% 54%; transform: rotate(144deg); }
-          60%  { border-radius: 60% 40% 46% 54% / 54% 44% 56% 46%; transform: rotate(216deg); }
-          80%  { border-radius: 50% 50% 55% 45% / 48% 52% 44% 56%; transform: rotate(288deg); }
-          100% { border-radius: 44% 56% 53% 47% / 50% 46% 54% 50%; transform: rotate(360deg); }
+        @keyframes repu-logo-spin {
+          from { transform: rotate(0deg); }
+          to   { transform: rotate(360deg); }
         }
-        @keyframes reput-aura-breathe {
-          0%, 100% { opacity: 0.55; transform: scale(1); }
-          50%      { opacity: 0.85; transform: scale(1.12); }
+        @keyframes repu-ring-pulse {
+          0%   { transform: scale(1);    opacity: 0.6; }
+          100% { transform: scale(2.8);  opacity: 0; }
         }
         @keyframes reput-label-breathe {
           0%, 100% { opacity: 0.4; }
@@ -1026,11 +1049,28 @@ ${linksHtml}
                 marginBottom: "1.25rem",
               }}
             >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#48D4B8" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="#48D4B8"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
                 <polyline points="20 6 9 17 4 12" />
               </svg>
-              <p style={{ margin: 0, fontSize: "0.875rem", fontWeight: 600, color: "#48D4B8" }}>
-                Scan Complete — this lead has already been scanned. Fields are read-only.
+              <p
+                style={{
+                  margin: 0,
+                  fontSize: "0.875rem",
+                  fontWeight: 600,
+                  color: "#48D4B8",
+                }}
+              >
+                Scan Complete — this lead has already been scanned. Fields are
+                read-only.
               </p>
             </div>
           )}
@@ -1045,11 +1085,16 @@ ${linksHtml}
                 <input
                   type="text"
                   value={firstName}
-                  onChange={(e) => !scanComplete && setFirstName(e.target.value)}
+                  onChange={(e) =>
+                    !scanComplete && setFirstName(e.target.value)
+                  }
                   placeholder="e.g. John"
                   required
                   readOnly={scanComplete}
-                  style={{ ...inputStyle, backgroundColor: scanComplete ? "#f8fafc" : "#ffffff" }}
+                  style={{
+                    ...inputStyle,
+                    backgroundColor: scanComplete ? "#f8fafc" : "#ffffff",
+                  }}
                 />
               </div>
               <div>
@@ -1061,7 +1106,10 @@ ${linksHtml}
                   placeholder="e.g. Smith"
                   required
                   readOnly={scanComplete}
-                  style={{ ...inputStyle, backgroundColor: scanComplete ? "#f8fafc" : "#ffffff" }}
+                  style={{
+                    ...inputStyle,
+                    backgroundColor: scanComplete ? "#f8fafc" : "#ffffff",
+                  }}
                 />
               </div>
             </div>
@@ -1075,7 +1123,10 @@ ${linksHtml}
                 onChange={(e) => !scanComplete && setCompany(e.target.value)}
                 placeholder="e.g. Acme Corp (optional)"
                 readOnly={scanComplete}
-                style={{ ...inputStyle, backgroundColor: scanComplete ? "#f8fafc" : "#ffffff" }}
+                style={{
+                  ...inputStyle,
+                  backgroundColor: scanComplete ? "#f8fafc" : "#ffffff",
+                }}
               />
             </div>
 
@@ -1099,7 +1150,9 @@ ${linksHtml}
               <label style={labelStyle}>Background &amp; Context *</label>
               <textarea
                 value={description}
-                onChange={(e) => !scanComplete && handleDescriptionChange(e.target.value)}
+                onChange={(e) =>
+                  !scanComplete && handleDescriptionChange(e.target.value)
+                }
                 placeholder="Describe the subject's background, industry, role, known controversies, associations, or any context that may be relevant to the scan…"
                 rows={4}
                 required
@@ -1297,7 +1350,9 @@ ${linksHtml}
 
                 <button
                   type="button"
-                  disabled={loading || editableKeywords.length === 0 || scanComplete}
+                  disabled={
+                    loading || editableKeywords.length === 0 || scanComplete
+                  }
                   onClick={handleRunScan}
                   className="glow-button"
                   style={{
@@ -1305,7 +1360,10 @@ ${linksHtml}
                     padding: "0.75rem",
                     fontWeight: 700,
                     borderRadius: "0.625rem",
-                    opacity: loading || editableKeywords.length === 0 || scanComplete ? 0.5 : 1,
+                    opacity:
+                      loading || editableKeywords.length === 0 || scanComplete
+                        ? 0.5
+                        : 1,
                     cursor: scanComplete ? "default" : "pointer",
                   }}
                 >
@@ -1334,7 +1392,7 @@ ${linksHtml}
             display: loading || result ? "flex" : "none",
             flexDirection: "column",
             alignItems: "center",
-            justifyContent: "flex-start",
+            justifyContent: "center",
           }}
         >
           {/* Loading */}
@@ -1345,129 +1403,120 @@ ${linksHtml}
                 display: "flex",
                 flexDirection: "column",
                 alignItems: "center",
-                gap: "2rem",
+                gap: "1rem",
                 width: "100%",
                 maxWidth: "22rem",
+                textAlign: "center",
               }}
             >
+              {/* Logo + pulsing rings */}
               <div
                 style={{
                   position: "relative",
-                  width: "160px",
-                  height: "160px",
+                  width: 120,
+                  height: 120,
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
                 }}
               >
+                {/* Ring 1 */}
                 <div
                   style={{
                     position: "absolute",
-                    width: "160px",
-                    height: "160px",
+                    top: 0,
+                    left: 0,
+                    width: 120,
+                    height: 120,
                     borderRadius: "50%",
-                    background:
-                      "radial-gradient(ellipse at center, rgba(68,121,218,0.28) 0%, rgba(72,212,184,0.14) 45%, transparent 70%)",
-                    filter: "blur(22px)",
-                    animation: "reput-aura-breathe 3.5s ease-in-out infinite",
+                    border: "2px solid #48D4B8",
+                    animation: "repu-ring-pulse 2.4s ease-out infinite",
+                    animationDelay: "0s",
                   }}
                 />
+                {/* Ring 2 */}
                 <div
                   style={{
-                    width: "100px",
-                    height: "100px",
-                    borderRadius: "44% 56% 53% 47% / 50% 46% 54% 50%",
-                    background:
-                      "linear-gradient(135deg, #48D4B8 0%, #4479DA 100%)",
-                    boxShadow:
-                      "0 0 40px rgba(68,121,218,0.5), 0 0 80px rgba(72,212,184,0.25), inset 0 0 30px rgba(72,212,184,0.2)",
-                    animation: "repu-blob-morph 3s linear infinite",
+                    position: "absolute",
+                    top: 0,
+                    left: 0,
+                    width: 120,
+                    height: 120,
+                    borderRadius: "50%",
+                    border: "2px solid #4479DA",
+                    animation: "repu-ring-pulse 2.4s ease-out infinite",
+                    animationDelay: "0.8s",
+                  }}
+                />
+                {/* Ring 3 */}
+                <div
+                  style={{
+                    position: "absolute",
+                    top: 0,
+                    left: 0,
+                    width: 120,
+                    height: 120,
+                    borderRadius: "50%",
+                    border: "2px solid #48D4B8",
+                    animation: "repu-ring-pulse 2.4s ease-out infinite",
+                    animationDelay: "1.6s",
+                  }}
+                />
+                <img
+                  src="/images/logo-icon.png"
+                  alt="GINA"
+                  style={{
+                    width: 90,
+                    height: 90,
+                    objectFit: "contain",
+                    animation: "repu-logo-spin 4s linear infinite",
                     position: "relative",
                     zIndex: 1,
                   }}
-                >
-                  <div
-                    style={{
-                      position: "absolute",
-                      top: "14%",
-                      left: "18%",
-                      width: "32%",
-                      height: "22%",
-                      borderRadius: "50%",
-                      background: "rgba(255,255,255,0.18)",
-                      filter: "blur(5px)",
-                    }}
-                  />
-                </div>
+                />
               </div>
 
-              <p
-                style={{
-                  fontSize: "0.7rem",
-                  fontWeight: 500,
-                  color: "var(--color-muted)",
-                  letterSpacing: "0.14em",
-                  textTransform: "uppercase",
-                  animation: "reput-label-breathe 3s ease-in-out infinite",
-                }}
-              >
-                We&apos;re calculating the ReputScore
-              </p>
-
-              <p
-                style={{
-                  fontSize: "0.65rem",
-                  fontWeight: 400,
-                  color: "#9ca3af",
-                  letterSpacing: "0.12em",
-                  textTransform: "uppercase",
-                  opacity: statusVisible ? 1 : 0,
-                  transition: "opacity 0.5s ease",
-                  minHeight: "1.2em",
-                  textAlign: "center",
-                  margin: 0,
-                  willChange: "opacity",
-                }}
-              >
-                {STATUS_MESSAGES[statusIdx]}
-              </p>
-
+              {/* Status */}
               <div
                 style={{
-                  background: "#fff",
-                  border: "1px solid #e5e7eb",
-                  borderRadius: "0.75rem",
-                  padding: "1rem 1.25rem",
-                  width: "100%",
-                  textAlign: "left",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "0.5rem",
                 }}
               >
-                <div
-                  style={{
-                    fontSize: "0.6rem",
-                    fontWeight: 700,
-                    letterSpacing: "0.12em",
-                    color: "#6b7280",
-                    marginBottom: "0.5rem",
-                  }}
-                >
-                  💡 DID YOU KNOW?
-                </div>
                 <p
                   style={{
-                    fontSize: "0.78rem",
-                    color: "#374151",
-                    lineHeight: 1.6,
                     margin: 0,
-                    opacity: tipVisible ? 1 : 0,
-                    transition: "opacity 0.5s ease",
-                    minHeight: "3em",
-                    willChange: "opacity",
+                    fontSize: "0.6875rem",
+                    fontWeight: 700,
+                    letterSpacing: "0.14em",
+                    textTransform: "uppercase",
+                    color: "#94a3b8",
                   }}
                 >
-                  {DID_YOU_KNOW[tipIdx]}
+                  Scanning prospect
                 </p>
               </div>
+
+              {/* Tip */}
+              <p
+                style={{
+                  margin: 0,
+                  fontSize: "0.75rem",
+                  color: "#94a3b8",
+                  lineHeight: 1.65,
+                  opacity: tipVisible ? 1 : 0,
+                  transition: "opacity 0.5s ease",
+                  minHeight: "3.2em",
+                  willChange: "opacity",
+                  width: "100%",
+                }}
+              >
+                <span style={{ fontWeight: 600, color: "#64748b" }}>
+                  Tip —{" "}
+                </span>
+                {DID_YOU_KNOW[tipIdx]}
+              </p>
             </div>
           )}
 
@@ -1552,7 +1601,7 @@ ${linksHtml}
                           padding: "0.25rem 0.75rem",
                           borderRadius: "0.5rem",
                           backgroundColor: "rgba(68,121,218,0.08)",
-                          border: "1px solid rgba(68,121,218,0.2)",
+                          border: "1px solid rgba(29, 65, 133, 0.2)",
                           color: "#4479DA",
                           fontSize: "0.8125rem",
                           fontWeight: 500,
@@ -1724,89 +1773,98 @@ ${linksHtml}
                     return (
                       <div
                         key={item.url}
-                        style={{
-                          display: "flex",
-                          borderRadius: "0.75rem",
-                          overflow: "hidden",
-                          border: `1px solid ${risk.border}`,
-                          background: `linear-gradient(135deg, ${risk.bg} 0%, rgba(255,255,255,0) 60%)`,
-                          boxShadow: `inset 0 0 0 0.5px ${risk.border}, 0 1px 4px rgba(0,0,0,0.06)`,
-                          cursor: "pointer",
-                        }}
                         onClick={() =>
                           setExpandedLinkIndex(isExpanded ? null : String(i))
                         }
+                        style={{
+                          display: "flex",
+                          borderRadius: "0.5rem",
+                          overflow: "hidden",
+                          background: "#fff",
+                          border: "1px solid #f1f5f9",
+                          cursor: "pointer",
+                          transition: "box-shadow 0.15s ease",
+                        }}
+                        onMouseEnter={(e) =>
+                          (e.currentTarget.style.boxShadow =
+                            "0 2px 8px rgba(0,0,0,0.07)")
+                        }
+                        onMouseLeave={(e) =>
+                          (e.currentTarget.style.boxShadow = "none")
+                        }
                       >
+                        {/* Left accent */}
                         <div
                           style={{
-                            width: "2px",
+                            width: 4,
                             flexShrink: 0,
-                            background: `linear-gradient(180deg, ${risk.color} 0%, transparent 100%)`,
+                            backgroundColor: risk.color,
                           }}
                         />
+
+                        {/* Content */}
                         <div
                           style={{
                             flex: 1,
-                            padding: "0.9rem 1rem 0.85rem",
+                            padding: "0.75rem 0.875rem",
                             minWidth: 0,
                           }}
                         >
+                          {/* Title row */}
                           <div
                             style={{
                               display: "flex",
-                              alignItems: "center",
+                              alignItems: "flex-start",
                               justifyContent: "space-between",
-                              gap: "0.4rem",
-                              marginBottom: "0.45rem",
-                              flexWrap: "wrap",
-                              rowGap: "0.3rem",
+                              gap: "0.75rem",
                             }}
                           >
-                            <span
+                            <p
                               style={{
-                                fontFamily: "ui-monospace,'SF Mono',monospace",
-                                fontSize: "0.65rem",
+                                margin: 0,
+                                fontSize: "0.875rem",
                                 fontWeight: 600,
-                                color: "var(--color-muted)",
-                                background: "rgba(0,0,0,0.04)",
-                                padding: "0.1rem 0.45rem",
-                                borderRadius: "4px",
-                                border: "1px solid var(--color-border)",
-                                overflow: "hidden",
-                                textOverflow: "ellipsis",
-                                whiteSpace: "nowrap",
-                                minWidth: 0,
-                                maxWidth: "60%",
+                                color: "#1e293b",
+                                lineHeight: 1.4,
+                                letterSpacing: "-0.01em",
                               }}
                             >
-                              {domain}
-                            </span>
+                              {item.title}
+                            </p>
                             <div
                               style={{
                                 display: "flex",
                                 alignItems: "center",
-                                gap: "0.4rem",
+                                gap: "0.5rem",
                                 flexShrink: 0,
                               }}
                             >
-                              <span
+                              <a
+                                href={item.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                onClick={(e) => e.stopPropagation()}
                                 style={{
-                                  fontFamily:
-                                    "ui-monospace,'SF Mono',monospace",
-                                  fontSize: "0.6rem",
-                                  fontWeight: 800,
-                                  letterSpacing: "0.1em",
-                                  textTransform: "uppercase",
-                                  padding: "0.2rem 0.55rem",
-                                  borderRadius: "4px",
-                                  backgroundColor: risk.bg,
-                                  color: risk.color,
-                                  border: `1px solid ${risk.border}`,
-                                  whiteSpace: "nowrap",
+                                  color: "#94a3b8",
+                                  display: "flex",
+                                  lineHeight: 1,
                                 }}
                               >
-                                ▲ {uiRisk}
-                              </span>
+                                <svg
+                                  width="12"
+                                  height="12"
+                                  viewBox="0 0 24 24"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  strokeWidth="2.5"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                >
+                                  <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                                  <polyline points="15 3 21 3 21 9" />
+                                  <line x1="10" y1="14" x2="21" y2="3" />
+                                </svg>
+                              </a>
                               <svg
                                 width="12"
                                 height="12"
@@ -1817,85 +1875,87 @@ ${linksHtml}
                                 strokeLinecap="round"
                                 strokeLinejoin="round"
                                 style={{
-                                  color: "var(--color-muted)",
+                                  color: "#cbd5e1",
                                   transform: isExpanded
                                     ? "rotate(180deg)"
                                     : "rotate(0deg)",
                                   transition: "transform 0.2s ease",
-                                  flexShrink: 0,
                                 }}
                               >
                                 <path d="M6 9l6 6 6-6" />
                               </svg>
                             </div>
                           </div>
+
+                          {/* Meta row */}
                           <div
                             style={{
                               display: "flex",
-                              alignItems: "flex-start",
+                              alignItems: "center",
                               justifyContent: "space-between",
                               gap: "0.5rem",
+                              marginTop: "0.375rem",
                             }}
                           >
+                            <div
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: "0.5rem",
+                              }}
+                            >
+                              <span
+                                style={{
+                                  fontSize: "0.6875rem",
+                                  color: "#94a3b8",
+                                }}
+                              >
+                                {domain}
+                              </span>
+                              <span
+                                style={{
+                                  fontSize: "0.6875rem",
+                                  color: "#cbd5e1",
+                                }}
+                              >
+                                ·
+                              </span>
+                              <span
+                                style={{
+                                  fontSize: "0.6875rem",
+                                  fontWeight: 600,
+                                  color: risk.color,
+                                }}
+                              >
+                                {uiRisk}
+                              </span>
+                            </div>
+                            {item.date && (
+                              <span
+                                style={{
+                                  fontSize: "0.6875rem",
+                                  color: "#94a3b8",
+                                }}
+                              >
+                                {item.date}
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Snippet */}
+                          {isExpanded && (
                             <p
                               style={{
-                                fontSize: "0.875rem",
-                                fontWeight: 700,
-                                color: "var(--color-foreground)",
-                                lineHeight: 1.35,
-                                margin: 0,
-                                letterSpacing: "-0.01em",
+                                margin: "0.625rem 0 0",
+                                fontSize: "0.775rem",
+                                color: "#64748b",
+                                lineHeight: 1.6,
+                                borderTop: "1px solid #f1f5f9",
+                                paddingTop: "0.625rem",
                               }}
                             >
-                              {item.title}
+                              {item.snippet}
                             </p>
-                            <a
-                              href={item.url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              onClick={(e) => e.stopPropagation()}
-                              style={{
-                                flexShrink: 0,
-                                color: "var(--color-muted)",
-                                marginTop: "0.1rem",
-                              }}
-                            >
-                              <svg
-                                width="11"
-                                height="11"
-                                viewBox="0 0 24 24"
-                                fill="none"
-                                stroke="currentColor"
-                                strokeWidth="2.5"
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                              >
-                                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
-                                <polyline points="15 3 21 3 21 9" />
-                                <line x1="10" y1="14" x2="21" y2="3" />
-                              </svg>
-                            </a>
-                          </div>
-                          {isExpanded && (
-                            <>
-                              <div
-                                style={{
-                                  height: "1px",
-                                  background: `linear-gradient(90deg, ${risk.border} 0%, transparent 80%)`,
-                                  margin: "0.5rem 0 0.4rem",
-                                }}
-                              />
-                              <p
-                                style={{
-                                  fontSize: "0.775rem",
-                                  color: "var(--color-muted)",
-                                  lineHeight: 1.6,
-                                  margin: 0,
-                                }}
-                              >
-                                {item.snippet}
-                              </p>
-                            </>
                           )}
                         </div>
                       </div>
@@ -1907,7 +1967,13 @@ ${linksHtml}
           )}
 
           {scanComplete && (
-            <div style={{ marginTop: "1.25rem", display: "flex", justifyContent: "flex-end" }}>
+            <div
+              style={{
+                marginTop: "1.25rem",
+                display: "flex",
+                justifyContent: "flex-end",
+              }}
+            >
               <button
                 type="button"
                 onClick={handleExportSummaryPdf}

@@ -493,6 +493,7 @@ export interface WebLink {
   risk: "high" | "medium" | "low" | "none";
   source: string;
   type: string;
+  date?: string;
 }
 
 export interface FullLead {

@@ -62,7 +62,10 @@ export default function LoginPage() {
       setToken(res.access_token);
       try {
         localStorage.setItem("reput_user", JSON.stringify(res.employee));
-        localStorage.setItem("reput_name", res.employee.name || res.employee.email);
+        localStorage.setItem(
+          "reput_name",
+          res.employee.name || res.employee.email,
+        );
       } catch {}
       window.dispatchEvent(new Event("reput-auth-change"));
       router.push("/dashboard");
@@ -126,7 +129,7 @@ export default function LoginPage() {
             fontSize: "0.875rem",
           }}
         >
-          Lead intelligence & reputation platform
+          Global Identity Network Architecture
         </p>
 
         <form
