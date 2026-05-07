@@ -21,12 +21,12 @@ async def get_stats(
         except Exception:
             return 0
 
-    users = await count("SELECT COUNT(*)::int FROM users")
+    employees = await count("SELECT COUNT(*)::int FROM employees")
     scans = await count("SELECT COUNT(*)::int FROM reputation_scans")
     leads = await count("SELECT COUNT(*)::int FROM lead_generated")
     contracts = await count("SELECT COUNT(*)::int FROM contracts")
 
-    return {"users": users, "scans": scans, "leads": leads, "contracts": contracts}
+    return {"employees": employees, "scans": scans, "leads": leads, "contracts": contracts}
 
 
 @router.get("/charts")
@@ -46,14 +46,14 @@ async def get_charts(
 
     users_data = await monthly("""
         SELECT DATE_TRUNC('month', created_at)::text AS month, COUNT(*)::int AS count
-        FROM users
+        FROM employees
         WHERE created_at >= DATE_TRUNC('year', NOW())
         GROUP BY 1 ORDER BY 1
     """)
     scans_data = await monthly("""
-        SELECT DATE_TRUNC('month', scanned_at)::text AS month, COUNT(*)::int AS count
-        FROM reputation_scans
-        WHERE scanned_at >= DATE_TRUNC('year', NOW())
+        SELECT DATE_TRUNC('month', researched_at)::text AS month, COUNT(*)::int AS count
+        FROM lead_generated
+        WHERE researched_at >= DATE_TRUNC('year', NOW())
         GROUP BY 1 ORDER BY 1
     """)
     contracts_data = await monthly("""
@@ -63,4 +63,4 @@ async def get_charts(
         GROUP BY 1 ORDER BY 1
     """)
 
-    return {"users": users_data, "scans": scans_data, "contracts": contracts_data}
+    return {"employees": users_data, "leads": scans_data, "contracts": contracts_data}

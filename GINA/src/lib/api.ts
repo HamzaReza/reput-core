@@ -414,7 +414,7 @@ export const contracts = {
 // ── Dashboard types & endpoints ───────────────────────────────────────────────
 
 export interface DashboardStats {
-  users: number;
+  employees: number;
   scans: number;
   leads: number;
   contracts: number;
@@ -426,10 +426,21 @@ export interface MonthPoint {
 }
 
 export interface DashboardCharts {
-  users: MonthPoint[];
-  scans: MonthPoint[];
+  employees: MonthPoint[];
+  leads: MonthPoint[];
   contracts: MonthPoint[];
 }
+
+export interface Employee {
+  id: string;
+  name: string;
+  email: string;
+  created_at: string | null;
+}
+
+export const employeesApi = {
+  list: () => request<Employee[]>("/employees/", {}, true),
+};
 
 export const dashboard = {
   stats: () => request<DashboardStats>("/dashboard/stats", {}, true),
