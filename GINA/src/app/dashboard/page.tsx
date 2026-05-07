@@ -51,16 +51,25 @@ const ContractsChartCard = dynamic(
   },
 );
 
+const ClientsChartCard = dynamic(
+  () => import("./_components/ClientsChartCard"),
+  {
+    ssr: false,
+    loading: () => <ChartPlaceholder />,
+  },
+);
+
 const EMPTY_STATS: DashboardStats = {
   employees: 0,
   scans: 0,
   leads: 0,
   contracts: 0,
+  clients: 0,
 };
 const EMPTY_CHARTS = {
   employees: [] as MonthPoint[],
-  leads: [] as MonthPoint[],
   contracts: [] as MonthPoint[],
+  clients: [] as MonthPoint[],
 };
 
 export default function DashboardHome() {
@@ -105,15 +114,18 @@ export default function DashboardHome() {
 
       <StatsRow data={statsData} loading={loading} />
 
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns:
-            "repeat(auto-fill, minmax(min(100%, 320px), 1fr))",
-          gap: "1.25rem",
-          marginBottom: "1.25rem",
-        }}
-      >
+      <style>{`
+        .charts-grid {
+          display: grid;
+          grid-template-columns: repeat(2, 1fr);
+          gap: 1.25rem;
+          margin-bottom: 1.25rem;
+        }
+        @media (max-width: 1080px) {
+          .charts-grid { grid-template-columns: 1fr; }
+        }
+      `}</style>
+      <div className="charts-grid">
         {loading ? (
           <>
             <ChartPlaceholder />
@@ -122,11 +134,8 @@ export default function DashboardHome() {
           </>
         ) : (
           <>
-            <LineChartCard
-              title="Employee Growth"
-              data={chartsData.employees}
-            />
-            <BarChartCard title="Leads by Month" data={chartsData.leads} />
+            <LineChartCard title="Employee Growth" data={chartsData.employees} />
+            <ClientsChartCard title="Clients by Month" data={chartsData.clients} />
             <ContractsChartCard title="Contracts" data={chartsData.contracts} />
           </>
         )}

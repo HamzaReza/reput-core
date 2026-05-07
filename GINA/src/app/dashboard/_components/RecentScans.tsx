@@ -1,7 +1,9 @@
 "use client";
 
 import { leads, RecentLead } from "@/lib/api";
+import Link from "next/link";
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 
 const RISK_COLORS: Record<string, string> = {
   Good: "#22c55e",
@@ -82,13 +84,19 @@ function SkeletonRow() {
 }
 
 export default function RecentScans() {
+  const router = useRouter();
   const [scans, setScans] = useState<RecentLead[]>([]);
   const [loading, setLoading] = useState(true);
 
+  const [hasMore, setHasMore] = useState(false);
+
   useEffect(() => {
     leads
-      .list(5)
-      .then(setScans)
+      .list(6)
+      .then((data) => {
+        setHasMore(data.length > 5);
+        setScans(data.slice(0, 5));
+      })
       .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
@@ -120,12 +128,14 @@ export default function RecentScans() {
         >
           Recent Leads
         </p>
-        {/* <Link
-          href="/dashboard/ealuminate"
-          style={{ fontSize: "0.8125rem", fontWeight: 600, color: "#4479da", textDecoration: "none" }}
-        >
-          View All
-        </Link> */}
+        {hasMore && (
+          <Link
+            href="/dashboard/leads"
+            style={{ fontSize: "0.8125rem", fontWeight: 600, color: "#4479da", textDecoration: "none" }}
+          >
+            View All
+          </Link>
+        )}
       </div>
 
       <div>
@@ -153,11 +163,11 @@ export default function RecentScans() {
             return (
               <div
                 key={scan.id}
+                onClick={() => router.push(`/dashboard/ealuminate?lead=${scan.id}`)}
                 style={{
                   padding: "0.875rem 0",
-                  borderBottom: isLast
-                    ? "none"
-                    : "1px solid var(--color-border, #e2e8f0)",
+                  borderBottom: isLast ? "none" : "1px solid var(--color-border, #e2e8f0)",
+                  cursor: "pointer",
                 }}
               >
                 <div

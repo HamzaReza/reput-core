@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
 from app.database import engine, Base
-from app.routers import auth, users, reputation, quotes, contracts, meetings, feedback, dashboard, leads, employees
+from app.routers import auth, users, reputation, quotes, contracts, meetings, feedback, dashboard, leads, employees, clients
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
@@ -104,6 +104,7 @@ app.include_router(feedback.router, prefix=API_PREFIX)
 app.include_router(dashboard.router, prefix=API_PREFIX)
 app.include_router(leads.router, prefix=API_PREFIX)
 app.include_router(employees.router, prefix=API_PREFIX)
+app.include_router(clients.router, prefix=API_PREFIX)
 
 
 @app.get("/health", tags=["health"])
