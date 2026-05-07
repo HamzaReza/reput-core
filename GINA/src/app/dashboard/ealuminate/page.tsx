@@ -5,6 +5,14 @@ import { COUNTRY_NAMES } from "@/lib/countries";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useRef, useState } from "react";
 
+interface PreAnalysisProfile {
+  identity: string;
+  background: string;
+  negative_findings: string;
+  positive_presence: string;
+  reputation_notes: string;
+}
+
 interface MeetingSummary {
   headline: string;
   issues: string[];
@@ -562,14 +570,16 @@ function EaluminatePageInner() {
 
   const [scanComplete, setScanComplete] = useState(false);
 
-  const [employeeName, setEmployeeName] = useState("");
-  const [employeeEmail, setEmployeeEmail] = useState("");
+  const [operatorName, setOperatorName] = useState("");
+  const [operatorEmail, setOperatorEmail] = useState("");
   const [leadId, setLeadId] = useState<string | null>(null);
   const [clientId, setClientId] = useState<string | null>(null);
 
   const [preAnalysisLoading, setPreAnalysisLoading] = useState(false);
   const [preAnalysisDone, setPreAnalysisDone] = useState(false);
   const [preAnalysisSummary, setPreAnalysisSummary] = useState("");
+  const [preAnalysisProfile, setPreAnalysisProfile] =
+    useState<PreAnalysisProfile | null>(null);
 
   const [loading, setLoading] = useState(false);
   const [statusIdx, setStatusIdx] = useState(0);
@@ -623,8 +633,8 @@ function EaluminatePageInner() {
       const raw = localStorage.getItem("reput_user");
       if (raw) {
         const u = JSON.parse(raw);
-        setEmployeeName(u.name || u.email || "");
-        setEmployeeEmail(u.email || "");
+        setOperatorName(u.name || u.email || "");
+        setOperatorEmail(u.email || "");
       }
     } catch {}
   }, []);
@@ -658,7 +668,14 @@ function EaluminatePageInner() {
 
         if (lead.keywords_suggested.length > 0 || lead.pre_analysis_summary) {
           setEditableKeywords(lead.keywords_suggested);
-          setPreAnalysisSummary(lead.pre_analysis_summary ?? "");
+          const raw = lead.pre_analysis_summary ?? "";
+          setPreAnalysisSummary(raw);
+          try {
+            const p = JSON.parse(raw) as PreAnalysisProfile;
+            if (p?.identity) setPreAnalysisProfile(p);
+          } catch {
+            /* legacy plain-text summary — profile stays null */
+          }
           setKeywordsReady(lead.keywords_suggested.length > 0);
           setPreAnalysisDone(true);
         }
@@ -709,9 +726,16 @@ function EaluminatePageInner() {
         .replaceAll('"', "&quot;")
         .replaceAll("'", "&#39;");
 
-    const researchSummaryText =
-      preAnalysisSummary?.trim() ||
-      "No research summary was generated for this lead.";
+    const researchSummaryText = preAnalysisProfile
+      ? [
+          `Identity: ${preAnalysisProfile.identity}`,
+          `Background: ${preAnalysisProfile.background}`,
+          `Negative findings: ${preAnalysisProfile.negative_findings}`,
+          `Positive presence: ${preAnalysisProfile.positive_presence}`,
+          `Reputation notes: ${preAnalysisProfile.reputation_notes}`,
+        ].join("\n\n")
+      : preAnalysisSummary?.trim() ||
+        "No research summary was generated for this lead.";
     const keywordsHtml =
       editableKeywords.length > 0
         ? `<ul>${editableKeywords
@@ -836,7 +860,9 @@ ${linksHtml}
         setError(data.error ?? "Research failed. Please try again.");
         return;
       }
-      setPreAnalysisSummary(data.summary ?? "");
+      const profile = data.profile as PreAnalysisProfile | undefined;
+      setPreAnalysisProfile(profile ?? null);
+      setPreAnalysisSummary(profile ? JSON.stringify(profile) : "");
       setEditableKeywords(data.keywords ?? []);
       setKeywordsReady(true);
       setPreAnalysisDone(true);
@@ -848,7 +874,7 @@ ${linksHtml}
           company: company.trim() || undefined,
           country,
           background: description.trim(),
-          pre_analysis_summary: data.summary || undefined,
+          pre_analysis_summary: profile ? JSON.stringify(profile) : undefined,
           keywords_suggested: data.keywords ?? [],
         });
         if (ld.id) setLeadId(ld.id);
@@ -859,7 +885,7 @@ ${linksHtml}
           company: company.trim() || undefined,
           event_type: "research",
           event_data: {
-            summary: data.summary ?? "",
+            profile: profile ?? {},
             keywords: data.keywords ?? [],
             background: description.trim(),
             lead_id: ld.id,
@@ -1024,7 +1050,7 @@ ${linksHtml}
               color: "var(--color-foreground, #1e293b)",
             }}
           >
-            Reputation Scan
+            EALUMINATE
           </h1>
           <p
             style={{
@@ -1274,16 +1300,39 @@ ${linksHtml}
                     Research Summary
                   </p>
                 </div>
-                <p
-                  style={{
-                    fontSize: "0.8125rem",
-                    color: "var(--color-muted, #64748b)",
-                    lineHeight: 1.65,
-                    margin: 0,
-                  }}
-                >
-                  {preAnalysisSummary}
-                </p>
+                {preAnalysisProfile ? (
+                  <div style={{ display: "flex", flexDirection: "column", gap: "0.625rem" }}>
+                    {(
+                      [
+                        ["Identity", preAnalysisProfile.identity],
+                        ["Background", preAnalysisProfile.background],
+                        ["Negative Findings", preAnalysisProfile.negative_findings],
+                        ["Positive Presence", preAnalysisProfile.positive_presence],
+                        ["Reputation Notes", preAnalysisProfile.reputation_notes],
+                      ] as [string, string][]
+                    ).map(([label, text]) => (
+                      <div key={label}>
+                        <p style={{ fontSize: "0.75rem", fontWeight: 600, margin: "0 0 0.125rem", color: "var(--color-foreground, #1e293b)" }}>
+                          {label}
+                        </p>
+                        <p style={{ fontSize: "0.8125rem", color: "var(--color-muted, #64748b)", lineHeight: 1.65, margin: 0 }}>
+                          {text}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p
+                    style={{
+                      fontSize: "0.8125rem",
+                      color: "var(--color-muted, #64748b)",
+                      lineHeight: 1.65,
+                      margin: 0,
+                    }}
+                  >
+                    {preAnalysisSummary}
+                  </p>
+                )}
               </div>
             )}
 

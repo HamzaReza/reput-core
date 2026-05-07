@@ -21,17 +21,17 @@ except ImportError:
             return e.code, body
 
 ENVIRONMENTS = {
-    "local":      "http://localhost:8000/api/v1/auth/register-employee",
-    "develop":    "https://ealixir-reput-develop.up.railway.app/api/v1/auth/register-employee",
-    "production": "https://ealixir-reput-production.up.railway.app/api/v1/auth/register-employee",
+    "local":      "http://localhost:8000/api/v1/auth/register-operator",
+    "develop":    "https://ealixir-reput-develop.up.railway.app/api/v1/auth/register-operator",
+    "production": "https://ealixir-reput-production.up.railway.app/api/v1/auth/register-operator",
 }
 
-EMPLOYEES = [
-    {"name": "Employee 1", "email": "Employee1@test.com", "password": "Employee12345"},
-    {"name": "Employee 2", "email": "Employee2@test.com", "password": "Employee12345"},
-    {"name": "Employee 3", "email": "Employee3@test.com", "password": "Employee12345"},
-    {"name": "Employee 4", "email": "Employee4@test.com", "password": "Employee12345"},
-    {"name": "Employee 5", "email": "Employee5@test.com", "password": "Employee12345"},
+OPERATORS = [
+    {"name": "Operator 1", "email": "Operator1@test.com", "password": "Operator12345"},
+    {"name": "Operator 2", "email": "Operator2@test.com", "password": "Operator12345"},
+    {"name": "Operator 3", "email": "Operator3@test.com", "password": "Operator12345"},
+    {"name": "Operator 4", "email": "Operator4@test.com", "password": "Operator12345"},
+    {"name": "Operator 5", "email": "Operator5@test.com", "password": "Operator12345"},
 ]
 
 def register_all(env_name, api_url):
@@ -39,20 +39,20 @@ def register_all(env_name, api_url):
     print(f"  {env_name.upper()}: {api_url}")
     print(f"{'='*60}")
     success, failed = 0, 0
-    for i, emp in enumerate(EMPLOYEES, 1):
-        status, body = post(api_url, emp)
+    for i, op in enumerate(OPERATORS, 1):
+        status, body = post(api_url, op)
         if status == 201:
-            print(f"[{i}/{len(EMPLOYEES)}] OK      {emp['email']}")
+            print(f"[{i}/{len(OPERATORS)}] OK      {op['email']}")
             success += 1
         elif status == 409:
-            print(f"[{i}/{len(EMPLOYEES)}] EXISTS  {emp['email']} — already registered")
+            print(f"[{i}/{len(OPERATORS)}] EXISTS  {op['email']} — already registered")
             failed += 1
         else:
-            print(f"[{i}/{len(EMPLOYEES)}] ERROR   {emp['email']} — HTTP {status}: {body.get('detail', body)}")
+            print(f"[{i}/{len(OPERATORS)}] ERROR   {op['email']} — HTTP {status}: {body.get('detail', body)}")
             failed += 1
-        if i < len(EMPLOYEES):
+        if i < len(OPERATORS):
             time.sleep(0.3)
-    print(f"\n  Result: {success} created, {failed} skipped/failed out of {len(EMPLOYEES)} employees.")
+    print(f"\n  Result: {success} created, {failed} skipped/failed out of {len(OPERATORS)} operators.")
 
 def main():
     for env_name, api_url in ENVIRONMENTS.items():

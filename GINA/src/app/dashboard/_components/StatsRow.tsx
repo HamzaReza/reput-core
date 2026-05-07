@@ -4,8 +4,8 @@ import { DashboardStats } from "@/lib/api";
 
 const CARDS = [
   {
-    key: "employees" as const,
-    label: "Total Employees",
+    key: "operators" as const,
+    label: "Total Operators",
     iconBg: "#eff6ff",
     icon: (
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#4479da" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
