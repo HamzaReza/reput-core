@@ -6,12 +6,12 @@ from sqlalchemy.orm import selectinload
 
 from app.database import get_db
 from app.models.user import User, UserProfile
-from app.models.lead import Employee
+from app.models.lead import Operator
 from app.schemas.user import UserCreate, UserOut, UserWithToken
 from app.utils.auth import create_access_token, hash_password, verify_password, get_current_user
 from pydantic import BaseModel as _BaseModel
 
-class EmployeeLoginPayload(_BaseModel):
+class OperatorLoginPayload(_BaseModel):
     email: str
     password: str
 
@@ -54,38 +54,39 @@ async def register(payload: UserCreate, db: AsyncSession = Depends(get_db)):
     return UserWithToken(user=UserOut.model_validate(user_with_profile), access_token=token)
 
 
-@router.post("/register-employee", status_code=status.HTTP_201_CREATED)
-async def register_employee(payload: UserCreate, db: AsyncSession = Depends(get_db)):
-    existing = await db.execute(select(Employee).where(Employee.email == payload.email))
+@router.post("/register-operator", status_code=status.HTTP_201_CREATED)
+async def register_operator(payload: UserCreate, db: AsyncSession = Depends(get_db)):
+    email = payload.email.lower()
+    existing = await db.execute(select(Operator).where(Operator.email == email))
     if existing.scalar_one_or_none():
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="An employee with this email already exists.",
+            detail="An operator with this email already exists.",
         )
-    emp = Employee(
-        name=payload.name or payload.email,
-        email=payload.email,
+    op = Operator(
+        name=payload.name or email,
+        email=email,
         password_hash=hash_password(payload.password),
     )
-    db.add(emp)
+    db.add(op)
     await db.flush()
-    await db.refresh(emp)
-    return {"id": str(emp.id), "email": emp.email}
+    await db.refresh(op)
+    return {"id": str(op.id), "email": op.email}
 
 
-@router.post("/login-employee")
-async def login_employee(payload: EmployeeLoginPayload, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(Employee).where(Employee.email == payload.email))
-    emp = result.scalar_one_or_none()
-    if not emp or not verify_password(payload.password, emp.password_hash):
+@router.post("/login-operator")
+async def login_operator(payload: OperatorLoginPayload, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(Operator).where(Operator.email == payload.email.lower()))
+    op = result.scalar_one_or_none()
+    if not op or not verify_password(payload.password, op.password_hash):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password.",
         )
-    token = create_access_token(str(emp.id))
+    token = create_access_token(str(op.id))
     return {
         "access_token": token,
-        "employee": {"id": str(emp.id), "name": emp.name, "email": emp.email},
+        "operator": {"id": str(op.id), "name": op.name, "email": op.email},
     }
 
 

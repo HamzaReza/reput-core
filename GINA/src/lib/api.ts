@@ -224,8 +224,8 @@ export const auth = {
     });
   },
 
-  loginEmployee: async (email: string, password: string) => {
-    return fetchWithHelp(`${BASE_URL}/auth/login-employee`, {
+  loginOperator: async (email: string, password: string) => {
+    return fetchWithHelp(`${BASE_URL}/auth/login-operator`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email, password }),
@@ -235,7 +235,7 @@ export const auth = {
         const msg = parseFastApiDetail(parsed) || "Login failed.";
         throw new Error(msg);
       }
-      return res.json() as Promise<{ access_token: string; employee: { id: string; name: string; email: string } }>;
+      return res.json() as Promise<{ access_token: string; operator: { id: string; name: string; email: string } }>;
     });
   },
 
@@ -429,7 +429,7 @@ export const contracts = {
 // ── Dashboard types & endpoints ───────────────────────────────────────────────
 
 export interface DashboardStats {
-  employees: number;
+  operators: number;
   scans: number;
   leads: number;
   contracts: number;
@@ -442,24 +442,24 @@ export interface MonthPoint {
 }
 
 export interface DashboardCharts {
-  employees: MonthPoint[];
+  operators: MonthPoint[];
   leads: MonthPoint[];
   contracts: MonthPoint[];
   clients: MonthPoint[];
 }
 
-export interface Employee {
+export interface Operator {
   id: string;
   name: string;
   email: string;
   created_at: string | null;
 }
 
-export const employeesApi = {
-  list: () => request<Employee[]>("/employees/", {}, true),
-  me: () => request<Employee>("/employees/me", {}, true),
+export const operatorsApi = {
+  list: () => request<Operator[]>("/operators/", {}, true),
+  me: () => request<Operator>("/operators/me", {}, true),
   updateMe: (data: { name: string }) =>
-    request<{ ok: boolean }>("/employees/me", { method: "PATCH", body: JSON.stringify(data) }, true),
+    request<{ ok: boolean }>("/operators/me", { method: "PATCH", body: JSON.stringify(data) }, true),
 };
 
 export const dashboard = {

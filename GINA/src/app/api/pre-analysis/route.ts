@@ -136,9 +136,24 @@ async function searchSerper(
   return data.organic ?? [];
 }
 
+interface PreAnalysisProfile {
+  identity: string;
+  background: string;
+  negative_findings: string;
+  positive_presence: string;
+  reputation_notes: string;
+}
+
+const FALLBACK_PROFILE: PreAnalysisProfile = {
+  identity: "No public information found for this subject.",
+  background: "Either no public information found or the context provided is not enough to generate a profile.",
+  negative_findings: "No negative findings in available sources.",
+  positive_presence: "No positive coverage found in available sources.",
+  reputation_notes: "Insufficient data to assess reputation.",
+};
+
 const FALLBACK = {
-  summary:
-    "Either no public information found for this subject or the context provided is not enough to generate a summary.",
+  profile: FALLBACK_PROFILE,
   keywords: [],
   sources: [],
 };
@@ -223,42 +238,50 @@ ${searchContext}
 
 Respond ONLY with valid JSON in this exact shape:
 {
-  "summary": "<3-5 sentence factual summary of what is publicly known about this person>",
+  "profile": {
+    "identity": "<1-2 sentences: full name, known roles, nationality, area of operation>",
+    "background": "<2-3 sentences: professional history, companies, sector, notable activities>",
+    "negative_findings": "<2-4 sentences: legal issues, controversies, accusations, proceedings — if none found write 'No negative findings in available sources'>",
+    "positive_presence": "<2-3 sentences: positive coverage, awards, interviews, neutral public mentions>",
+    "reputation_notes": "<1-2 sentences: overall reputational assessment based solely on what was found>"
+  },
   "keywords": ["<keyword1>", "<keyword2>", ...]
 }
 
 Rules:
-- summary: factual, neutral, 20 sentences, based only on the search results
-- keywords: exactly ${cap} items, 1—2 words each, reputation-relevant search terms, do NOT include the person's name`;
+- Every field in profile must be populated — never return null or empty string
+- Base every statement strictly on the search results provided — do not invent facts
+- negative_findings: if operator description mentions specific issues, prioritise those
+- keywords: exactly ${cap} items, 1-2 words each, reputation-relevant search terms, do NOT include the person's name`;
 
-    let summary = FALLBACK.summary;
+    let profile: PreAnalysisProfile = FALLBACK_PROFILE;
     let keywords: string[] = [];
 
     try {
       const msg = await anthropic.messages.create({
         model: "claude-sonnet-4-6",
-        max_tokens: 512,
+        max_tokens: 1024,
         system:
-          "You are a research analyst. Analyse web search results about a person and respond with a JSON object containing a factual summary and suggested search keywords. Output only valid JSON, no markdown fences.",
+          "You are a research analyst. Analyse web search results about a person and produce a structured reputation profile. Output only valid JSON, no markdown fences, no extra keys.",
         messages: [{ role: "user", content: userPrompt }],
       });
 
       const text =
         msg.content[0].type === "text" ? msg.content[0].text.trim() : "";
       const parsed = JSON.parse(text) as {
-        summary: string;
+        profile: PreAnalysisProfile;
         keywords: string[];
       };
-      summary = parsed.summary ?? summary;
+      profile = parsed.profile ?? profile;
       keywords = Array.isArray(parsed.keywords)
         ? parsed.keywords.slice(0, cap)
         : [];
     } catch {
-      // Claude failed — return sources without summary/keywords
+      // Claude failed — return fallback profile without keywords
     }
 
     return NextResponse.json({
-      summary,
+      profile,
       keywords,
       sources: organic.slice(0, 5),
     });

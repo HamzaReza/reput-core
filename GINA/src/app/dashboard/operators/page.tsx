@@ -1,6 +1,6 @@
 "use client";
 
-import { Employee, employeesApi } from "@/lib/api";
+import { Operator, operatorsApi } from "@/lib/api";
 import { useEffect, useState } from "react";
 
 function getInitials(name: string, email: string) {
@@ -22,17 +22,17 @@ function formatDate(iso: string | null) {
   });
 }
 
-export default function EmployeesPage() {
-  const [list, setList] = useState<Employee[]>([]);
+export default function OperatorsPage() {
+  const [list, setList] = useState<Operator[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   useEffect(() => {
-    employeesApi
+    operatorsApi
       .list()
       .then(setList)
       .catch((e) =>
-        setError(e instanceof Error ? e.message : "Failed to load employees."),
+        setError(e instanceof Error ? e.message : "Failed to load operators."),
       )
       .finally(() => setLoading(false));
   }, []);
@@ -54,7 +54,7 @@ export default function EmployeesPage() {
           margin: "0 0 1.25rem",
         }}
       >
-        Employees
+        Operators
       </h1>
 
       <div
@@ -91,7 +91,7 @@ export default function EmployeesPage() {
           {loading && (
             <div style={{ padding: "2rem 1.25rem", textAlign: "center" }}>
               <p style={{ fontSize: "0.875rem", color: "var(--color-muted, #64748b)", margin: 0 }}>
-                Loading employees…
+                Loading operators…
               </p>
             </div>
           )}
@@ -103,7 +103,7 @@ export default function EmployeesPage() {
           {!loading && !error && list.length === 0 && (
             <div style={{ padding: "2rem 1.25rem", textAlign: "center" }}>
               <p style={{ fontSize: "0.875rem", color: "var(--color-muted, #64748b)", margin: 0 }}>
-                No employees found.
+                No operators found.
               </p>
             </div>
           )}

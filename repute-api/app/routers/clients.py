@@ -8,8 +8,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.models.client import Client, ClientEvent
-from app.models.lead import Employee
-from app.utils.auth import get_current_employee
+from app.models.lead import Operator
+from app.utils.auth import get_current_operator
 
 router = APIRouter(prefix="/clients", tags=["clients"])
 
@@ -33,7 +33,7 @@ class ClientAddEventPayload(BaseModel):
 async def upsert_client(
     payload: ClientUpsertPayload,
     db: AsyncSession = Depends(get_db),
-    current_employee: Employee = Depends(get_current_employee),
+    current_operator: Operator = Depends(get_current_operator),
 ) -> dict:
     if payload.event_type and payload.event_type not in VALID_EVENT_TYPES:
         raise HTTPException(status_code=400, detail=f"Invalid event_type: {payload.event_type}")
@@ -52,7 +52,7 @@ async def upsert_client(
             name=payload.name,
             country=payload.country,
             company=payload.company,
-            created_by_id=current_employee.id,
+            created_by_id=current_operator.id,
         )
         db.add(client)
         created = True
@@ -69,7 +69,7 @@ async def upsert_client(
             client_id=client.id,
             event_type=payload.event_type,
             data=payload.event_data,
-            created_by_id=current_employee.id,
+            created_by_id=current_operator.id,
         )
         db.add(event)
         client.updated_at = datetime.now(timezone.utc)
@@ -84,7 +84,7 @@ async def add_event(
     client_id: uuid.UUID,
     payload: ClientAddEventPayload,
     db: AsyncSession = Depends(get_db),
-    current_employee: Employee = Depends(get_current_employee),
+    current_operator: Operator = Depends(get_current_operator),
 ) -> dict:
     if payload.event_type not in VALID_EVENT_TYPES:
         raise HTTPException(status_code=400, detail=f"Invalid event_type: {payload.event_type}")
@@ -98,7 +98,7 @@ async def add_event(
         client_id=client.id,
         event_type=payload.event_type,
         data=payload.event_data,
-        created_by_id=current_employee.id,
+        created_by_id=current_operator.id,
     )
     db.add(event)
     client.updated_at = datetime.now(timezone.utc)
@@ -114,7 +114,7 @@ async def list_clients(
     limit: int = Query(default=100, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
     db: AsyncSession = Depends(get_db),
-    current_employee: Employee = Depends(get_current_employee),
+    current_operator: Operator = Depends(get_current_operator),
 ) -> list[dict]:
     rows = await db.execute(text("""
         SELECT
@@ -157,7 +157,7 @@ async def list_clients(
 async def get_client(
     client_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
-    current_employee: Employee = Depends(get_current_employee),
+    current_operator: Operator = Depends(get_current_operator),
 ) -> dict:
     client_result = await db.execute(select(Client).where(Client.id == client_id))
     client = client_result.scalar_one_or_none()

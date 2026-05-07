@@ -58,13 +58,13 @@ export default function LoginPage() {
     setError("");
     setLoading(true);
     try {
-      const res = await auth.loginEmployee(email, password);
+      const res = await auth.loginOperator(email, password);
       setToken(res.access_token);
       try {
-        localStorage.setItem("reput_user", JSON.stringify(res.employee));
+        localStorage.setItem("reput_user", JSON.stringify(res.operator));
         localStorage.setItem(
           "reput_name",
-          res.employee.name || res.employee.email,
+          res.operator.name || res.operator.email,
         );
       } catch {}
       window.dispatchEvent(new Event("reput-auth-change"));
