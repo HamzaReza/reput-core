@@ -3,8 +3,8 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.models.user import User
-from app.utils.auth import get_current_user
+from app.models.lead import Employee
+from app.utils.auth import get_current_employee
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
@@ -12,7 +12,7 @@ router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 @router.get("/stats")
 async def get_stats(
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_employee: Employee = Depends(get_current_employee),
 ) -> dict:
     async def count(sql: str) -> int:
         try:
@@ -32,7 +32,7 @@ async def get_stats(
 @router.get("/charts")
 async def get_charts(
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_employee: Employee = Depends(get_current_employee),
 ) -> dict:
     def to_rows(result) -> list[dict]:
         return [{"month": str(r[0])[:10], "count": r[1]} for r in result.fetchall()]

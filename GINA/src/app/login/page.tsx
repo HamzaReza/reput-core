@@ -58,20 +58,11 @@ export default function LoginPage() {
     setError("");
     setLoading(true);
     try {
-      const res = await auth.login(email, password);
+      const res = await auth.loginEmployee(email, password);
       setToken(res.access_token);
       try {
-        localStorage.setItem("reput_user", JSON.stringify(res.user));
-        localStorage.setItem("reput_name", res.user.name || res.user.email);
-        if (res.user.profile?.keywords?.length) {
-          localStorage.setItem(
-            "reput_keywords",
-            res.user.profile.keywords.join(","),
-          );
-        }
-        if (res.user.profile?.avatar_url) {
-          localStorage.setItem("reput_avatar", res.user.profile.avatar_url);
-        }
+        localStorage.setItem("reput_user", JSON.stringify(res.employee));
+        localStorage.setItem("reput_name", res.employee.name || res.employee.email);
       } catch {}
       window.dispatchEvent(new Event("reput-auth-change"));
       router.push("/dashboard");

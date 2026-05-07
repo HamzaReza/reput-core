@@ -224,6 +224,21 @@ export const auth = {
     });
   },
 
+  loginEmployee: async (email: string, password: string) => {
+    return fetchWithHelp(`${BASE_URL}/auth/login-employee`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password }),
+    }).then(async (res) => {
+      if (!res.ok) {
+        const parsed = await res.json().catch(() => null);
+        const msg = parseFastApiDetail(parsed) || "Login failed.";
+        throw new Error(msg);
+      }
+      return res.json() as Promise<{ access_token: string; employee: { id: string; name: string; email: string } }>;
+    });
+  },
+
   me: () => request<User>("/auth/me", {}, true),
 
   verify: () => request<void>("/auth/verify", { method: "POST" }, true),
@@ -440,6 +455,9 @@ export interface Employee {
 
 export const employeesApi = {
   list: () => request<Employee[]>("/employees/", {}, true),
+  me: () => request<Employee>("/employees/me", {}, true),
+  updateMe: (data: { name: string }) =>
+    request<{ ok: boolean }>("/employees/me", { method: "PATCH", body: JSON.stringify(data) }, true),
 };
 
 export const dashboard = {
