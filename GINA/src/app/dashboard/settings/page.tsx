@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { getCachedMe, users } from "@/lib/api";
+import { employeesApi } from "@/lib/api";
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -35,10 +35,10 @@ export default function SettingsPage() {
   const [error, setError]     = useState("");
 
   useEffect(() => {
-    getCachedMe()
-      .then((u) => {
-        setName(u.name ?? "");
-        setEmail(u.email);
+    employeesApi.me()
+      .then((e) => {
+        setName(e.name ?? "");
+        setEmail(e.email);
       })
       .catch(() => setError("Failed to load profile."))
       .finally(() => setLoading(false));
@@ -49,7 +49,15 @@ export default function SettingsPage() {
     setSaved(false);
     setError("");
     try {
-      await users.updateMe({ name });
+      await employeesApi.updateMe({ name });
+      try {
+        const stored = localStorage.getItem("reput_user");
+        if (stored) {
+          const u = JSON.parse(stored);
+          localStorage.setItem("reput_user", JSON.stringify({ ...u, name }));
+          localStorage.setItem("reput_name", name);
+        }
+      } catch {}
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
     } catch (e) {

@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import get_settings
 from app.database import get_db
 from app.models.user import User
+from app.models.lead import Employee
 
 settings = get_settings()
 
@@ -66,3 +67,28 @@ async def get_current_user(
         await db.flush()
 
     return user
+
+
+async def get_current_employee(
+    token: str = Depends(oauth2_scheme),
+    db: AsyncSession = Depends(get_db),
+) -> Employee:
+    credentials_exc = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    try:
+        payload = jwt.decode(token, settings.jwt_secret, algorithms=[settings.jwt_algorithm])
+        employee_id: str | None = payload.get("sub")
+        if employee_id is None:
+            raise credentials_exc
+    except JWTError:
+        raise credentials_exc
+
+    result = await db.execute(select(Employee).where(Employee.id == employee_id))
+    employee = result.scalar_one_or_none()
+    if employee is None:
+        raise credentials_exc
+
+    return employee
