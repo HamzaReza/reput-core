@@ -74,8 +74,8 @@ const NAV_ITEMS: NavItem[] = [
     ),
   },
   {
-    label: "Users",
-    href: "/dashboard/users",
+    label: "Employees",
+    href: "/dashboard/employees",
     icon: (
       <svg
         width="18"

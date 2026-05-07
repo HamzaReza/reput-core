@@ -4,24 +4,13 @@ import { DashboardStats } from "@/lib/api";
 
 const CARDS = [
   {
-    key: "users" as const,
-    label: "Total Users",
+    key: "employees" as const,
+    label: "Total Employees",
     iconBg: "#eff6ff",
     icon: (
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#4479da" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
         <circle cx="9" cy="7" r="4" />
-      </svg>
-    ),
-  },
-  {
-    key: "scans" as const,
-    label: "Total Scans",
-    iconBg: "#eef3ff",
-    icon: (
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#6366f1" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <circle cx="11" cy="11" r="8" />
-        <line x1="21" y1="21" x2="16.65" y2="16.65" />
       </svg>
     ),
   },
