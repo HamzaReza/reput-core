@@ -643,6 +643,7 @@ export async function POST(req: NextRequest) {
       positive,
       neutral,
       summary,
+      score: deriveScoreServer(negative.length, positive.length),
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";

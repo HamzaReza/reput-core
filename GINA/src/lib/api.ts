@@ -433,6 +433,7 @@ export interface DashboardStats {
   scans: number;
   leads: number;
   contracts: number;
+  clients: number;
 }
 
 export interface MonthPoint {
@@ -444,6 +445,7 @@ export interface DashboardCharts {
   employees: MonthPoint[];
   leads: MonthPoint[];
   contracts: MonthPoint[];
+  clients: MonthPoint[];
 }
 
 export interface Employee {
@@ -472,6 +474,7 @@ export interface LeadCreatePayload {
   company?: string;
   country?: string;
   background?: string;
+  pre_analysis_summary?: string;
   keywords_suggested?: string[];
 }
 
@@ -479,6 +482,34 @@ export interface LeadUpdatePayload {
   links?: unknown[];
   summary?: Record<string, unknown> | null;
   score?: number;
+  keywords_suggested?: string[];
+}
+
+export interface WebLink {
+  url: string;
+  title: string;
+  snippet: string;
+  sentiment: "negative" | "positive" | "neutral";
+  risk: "high" | "medium" | "low" | "none";
+  source: string;
+  type: string;
+}
+
+export interface FullLead {
+  id: string;
+  name: string | null;
+  company: string | null;
+  country: string | null;
+  background: string | null;
+  pre_analysis_summary: string | null;
+  keywords_suggested: string[];
+  links: WebLink[];
+  summary: { headline: string; issues: string[]; talkingPoints: string[] } | null;
+  score: number | null;
+  scanned_by_name: string | null;
+  scanned_by_email: string | null;
+  researched_at: string | null;
+  scanned_at: string | null;
 }
 
 export interface RecentLead {
@@ -511,4 +542,75 @@ export const leads = {
 
   list: (limit = 5) =>
     request<RecentLead[]>(`/leads/?limit=${limit}`, {}, true),
+
+  get: (id: string) =>
+    request<FullLead>(`/leads/${id}`, {}, true),
+};
+
+// ── Clients types & endpoints ─────────────────────────────────────────────────
+
+export type ClientEventType = "research" | "scan" | "quote_sent" | "quote_accepted" | "quote_rejected" | "contract_created" | "meeting_set";
+
+export interface ClientEvent {
+  id: string;
+  event_type: ClientEventType;
+  data: Record<string, unknown> | null;
+  created_at: string;
+}
+
+export interface ClientListItem {
+  id: string;
+  name: string;
+  country: string;
+  company: string | null;
+  created_at: string;
+  updated_at: string;
+  latest_event_type: ClientEventType | null;
+  latest_event_at: string | null;
+  latest_score: number | null;
+}
+
+export interface ClientDetail {
+  id: string;
+  name: string;
+  country: string;
+  company: string | null;
+  created_at: string;
+  updated_at: string;
+  events: ClientEvent[];
+}
+
+export interface ClientUpsertPayload {
+  name: string;
+  country: string;
+  company?: string;
+  event_type?: ClientEventType;
+  event_data?: Record<string, unknown>;
+}
+
+export interface ClientAddEventPayload {
+  event_type: ClientEventType;
+  event_data?: Record<string, unknown>;
+}
+
+export const clientsApi = {
+  upsert: (data: ClientUpsertPayload) =>
+    request<{ id: string; created: boolean }>(
+      "/clients/upsert",
+      { method: "POST", body: JSON.stringify(data) },
+      true,
+    ),
+
+  addEvent: (clientId: string, data: ClientAddEventPayload) =>
+    request<{ event_id: string }>(
+      `/clients/${clientId}/events`,
+      { method: "POST", body: JSON.stringify(data) },
+      true,
+    ),
+
+  list: (limit = 100, offset = 0) =>
+    request<ClientListItem[]>(`/clients/?limit=${limit}&offset=${offset}`, {}, true),
+
+  get: (id: string) =>
+    request<ClientDetail>(`/clients/${id}`, {}, true),
 };

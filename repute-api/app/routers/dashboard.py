@@ -25,8 +25,9 @@ async def get_stats(
     scans = await count("SELECT COUNT(*)::int FROM reputation_scans")
     leads = await count("SELECT COUNT(*)::int FROM lead_generated")
     contracts = await count("SELECT COUNT(*)::int FROM contracts")
+    clients = await count("SELECT COUNT(*)::int FROM clients")
 
-    return {"employees": employees, "scans": scans, "leads": leads, "contracts": contracts}
+    return {"employees": employees, "scans": scans, "leads": leads, "contracts": contracts, "clients": clients}
 
 
 @router.get("/charts")
@@ -63,4 +64,11 @@ async def get_charts(
         GROUP BY 1 ORDER BY 1
     """)
 
-    return {"employees": users_data, "leads": scans_data, "contracts": contracts_data}
+    clients_data = await monthly("""
+        SELECT DATE_TRUNC('month', created_at)::text AS month, COUNT(*)::int AS count
+        FROM clients
+        WHERE created_at >= DATE_TRUNC('year', NOW())
+        GROUP BY 1 ORDER BY 1
+    """)
+
+    return {"employees": users_data, "leads": scans_data, "contracts": contracts_data, "clients": clients_data}
