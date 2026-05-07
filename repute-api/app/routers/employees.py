@@ -5,8 +5,7 @@ from pydantic import BaseModel
 
 from app.database import get_db
 from app.models.lead import Employee
-from app.models.user import User
-from app.utils.auth import hash_password, get_current_user
+from app.utils.auth import hash_password, get_current_employee
 
 router = APIRouter(prefix="/employees", tags=["employees"])
 
@@ -39,10 +38,34 @@ async def create_employee(
     return {"id": str(emp.id)}
 
 
+@router.get("/me")
+async def get_me(
+    current_employee: Employee = Depends(get_current_employee),
+) -> dict:
+    return {
+        "id": str(current_employee.id),
+        "name": current_employee.name,
+        "email": current_employee.email,
+    }
+
+
+@router.patch("/me")
+async def update_me(
+    payload: dict,
+    db: AsyncSession = Depends(get_db),
+    current_employee: Employee = Depends(get_current_employee),
+) -> dict:
+    if "name" in payload and payload["name"]:
+        current_employee.name = payload["name"]
+        db.add(current_employee)
+        await db.flush()
+    return {"ok": True}
+
+
 @router.get("/")
 async def list_employees(
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_employee: Employee = Depends(get_current_employee),
 ) -> list[dict]:
     result = await db.execute(
         select(Employee).order_by(desc(Employee.created_at))
