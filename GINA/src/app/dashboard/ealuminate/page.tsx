@@ -1,19 +1,9 @@
 "use client";
 
-import { leads } from "@/lib/api";
+import { leads, clientsApi, WebLink } from "@/lib/api";
 import { COUNTRY_NAMES } from "@/lib/countries";
-import { useEffect, useRef, useState } from "react";
-
-// ── Types ──────────────────────────────────────────────────────────────────────
-interface WebLink {
-  url: string;
-  title: string;
-  snippet: string;
-  sentiment: "negative" | "positive" | "neutral";
-  risk: "high" | "medium" | "low" | "none";
-  source: string;
-  type: string;
-}
+import { Suspense, useEffect, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 
 interface MeetingSummary {
   headline: string;
@@ -436,13 +426,16 @@ function Spinner() {
 function KeywordsEditor({
   keywords,
   setKeywords,
+  readOnly,
 }: {
   keywords: string[];
   setKeywords: (kws: string[]) => void;
+  readOnly?: boolean;
 }) {
   const [input, setInput] = useState("");
 
   const add = (val: string) => {
+    if (readOnly) return;
     const trimmed = val.replace(/,/g, "").trim();
     if (trimmed && !keywords.includes(trimmed))
       setKeywords([...keywords, trimmed]);
@@ -459,12 +452,13 @@ function KeywordsEditor({
         padding: "0.5rem",
         borderRadius: "0.625rem",
         border: "1px solid var(--color-border, #e2e8f0)",
-        backgroundColor: "#ffffff",
+        backgroundColor: readOnly ? "#f8fafc" : "#ffffff",
         minHeight: "3rem",
         alignItems: "center",
-        cursor: "text",
+        cursor: readOnly ? "default" : "text",
       }}
       onClick={() =>
+        !readOnly &&
         (
           document.getElementById("lead-kw-input") as HTMLInputElement | null
         )?.focus()
@@ -479,7 +473,7 @@ function KeywordsEditor({
             gap: "0.375rem",
             padding: "0.25rem 0.75rem",
             borderRadius: "0.5rem",
-            backgroundColor: "#4479DA",
+            backgroundColor: readOnly ? "#94a3b8" : "#4479DA",
             color: "#fff",
             fontSize: "0.8125rem",
             fontWeight: 500,
@@ -487,67 +481,73 @@ function KeywordsEditor({
           }}
         >
           {kw}
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              remove(kw);
-            }}
-            style={{
-              background: "none",
-              border: "none",
-              cursor: "pointer",
-              padding: 0,
-              lineHeight: 1,
-              color: "rgba(255,255,255,0.8)",
-              fontSize: "1rem",
-              display: "flex",
-              alignItems: "center",
-            }}
-            aria-label={`Remove ${kw}`}
-          >
-            ×
-          </button>
+          {!readOnly && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                remove(kw);
+              }}
+              style={{
+                background: "none",
+                border: "none",
+                cursor: "pointer",
+                padding: 0,
+                lineHeight: 1,
+                color: "rgba(255,255,255,0.8)",
+                fontSize: "1rem",
+                display: "flex",
+                alignItems: "center",
+              }}
+              aria-label={`Remove ${kw}`}
+            >
+              ×
+            </button>
+          )}
         </span>
       ))}
-      <input
-        id="lead-kw-input"
-        type="text"
-        value={input}
-        onChange={(e) => setInput(e.target.value)}
-        onKeyDown={(e) => {
-          if (
-            (e.key === "Enter" || e.key === "," || e.key === "Tab") &&
-            input.trim()
-          ) {
-            e.preventDefault();
-            add(input);
-          } else if (e.key === "Backspace" && !input && keywords.length)
-            setKeywords(keywords.slice(0, -1));
-        }}
-        onBlur={() => {
-          if (input.trim()) add(input);
-        }}
-        placeholder={
-          keywords.length === 0 ? "Type a keyword and press Enter…" : ""
-        }
-        style={{
-          flex: 1,
-          minWidth: "10rem",
-          border: "none",
-          outline: "none",
-          backgroundColor: "transparent",
-          fontSize: "0.9375rem",
-          color: "#1e293b",
-          padding: "0.25rem 0.5rem",
-        }}
-      />
+      {!readOnly && (
+        <input
+          id="lead-kw-input"
+          type="text"
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={(e) => {
+            if (
+              (e.key === "Enter" || e.key === "," || e.key === "Tab") &&
+              input.trim()
+            ) {
+              e.preventDefault();
+              add(input);
+            } else if (e.key === "Backspace" && !input && keywords.length)
+              setKeywords(keywords.slice(0, -1));
+          }}
+          onBlur={() => {
+            if (input.trim()) add(input);
+          }}
+          placeholder={
+            keywords.length === 0 ? "Type a keyword and press Enter…" : ""
+          }
+          style={{
+            flex: 1,
+            minWidth: "10rem",
+            border: "none",
+            outline: "none",
+            backgroundColor: "transparent",
+            fontSize: "0.9375rem",
+            color: "#1e293b",
+            padding: "0.25rem 0.5rem",
+          }}
+        />
+      )}
     </div>
   );
 }
 
 // ── Main Page ──────────────────────────────────────────────────────────────────
-export default function LeadPage() {
+function EaluminatePageInner() {
+  const searchParams = useSearchParams();
+
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [company, setCompany] = useState("");
@@ -560,9 +560,12 @@ export default function LeadPage() {
   const [keywordsReady, setKeywordsReady] = useState(false);
   const [usedKeywords, setUsedKeywords] = useState<string[]>([]);
 
+  const [scanComplete, setScanComplete] = useState(false);
+
   const [employeeName, setEmployeeName] = useState("");
   const [employeeEmail, setEmployeeEmail] = useState("");
   const [leadId, setLeadId] = useState<string | null>(null);
+  const [clientId, setClientId] = useState<string | null>(null);
 
   const [preAnalysisLoading, setPreAnalysisLoading] = useState(false);
   const [preAnalysisDone, setPreAnalysisDone] = useState(false);
@@ -626,20 +629,125 @@ export default function LeadPage() {
     } catch {}
   }, []);
 
+  useEffect(() => {
+    const id = searchParams.get("lead");
+    if (!id) return;
+    leads.get(id).then(async (lead) => {
+      const parts = (lead.name ?? "").trim().split(/\s+/);
+      setFirstName(parts[0] ?? "");
+      setLastName(parts.slice(1).join(" "));
+      setCompany(lead.company ?? "");
+      setCountry(lead.country ?? "");
+      setDescription(lead.background ?? "");
+      setLeadId(lead.id);
+
+      // Resolve the corresponding client so scan events can be appended
+      try {
+        const clients = await clientsApi.list(200);
+        const match = clients.find(
+          (c) => c.name === (lead.name ?? "").trim() && c.country === (lead.country ?? ""),
+        );
+        if (match) setClientId(match.id);
+      } catch { /* non-fatal */ }
+
+      if (lead.keywords_suggested.length > 0 || lead.pre_analysis_summary) {
+        setEditableKeywords(lead.keywords_suggested);
+        setPreAnalysisSummary(lead.pre_analysis_summary ?? "");
+        setKeywordsReady(lead.keywords_suggested.length > 0);
+        setPreAnalysisDone(true);
+      }
+
+      if (lead.links && lead.links.length > 0) {
+        const links = lead.links as WebLink[];
+        const negative = links.filter(
+          (l) => l.sentiment === "negative" || l.risk === "high" || l.risk === "medium",
+        );
+        const positive = links.filter(
+          (l) => l.sentiment === "positive" || l.risk === "low" || l.risk === "none",
+        );
+        const neutral = links.filter((l) => l.sentiment === "neutral");
+        setResult({
+          links,
+          negative,
+          positive,
+          neutral,
+          summary: lead.summary ?? undefined,
+        });
+        setUsedKeywords(lead.keywords_suggested);
+      }
+
+      if (lead.score !== null) {
+        setScore(lead.score);
+        setScanComplete(true);
+      }
+    }).catch(() => {});
+  }, [searchParams]);
+
   const fullName = `${firstName.trim()} ${lastName.trim()}`.trim();
 
   const handleExportSummaryPdf = () => {
     const win = window.open("", "_blank");
     if (!win) return;
-    const sourcesHtml = "";
+    const escapeHtml = (value: string) =>
+      value
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#39;");
+
+    const researchSummaryText =
+      preAnalysisSummary?.trim() ||
+      "No research summary was generated for this lead.";
+    const keywordsHtml =
+      editableKeywords.length > 0
+        ? `<ul>${editableKeywords
+            .map((kw) => `<li>${escapeHtml(kw)}</li>`)
+            .join("")}</ul>`
+        : `<p>No keywords were generated.</p>`;
+
+    const meetingBriefHtml = result?.summary
+      ? `
+        <p><strong>Headline:</strong> ${escapeHtml(result.summary.headline)}</p>
+        ${
+          result.summary.issues.length > 0
+            ? `<h3>Issues</h3><ul>${result.summary.issues
+                .map((issue) => `<li>${escapeHtml(issue)}</li>`)
+                .join("")}</ul>`
+            : ""
+        }
+        ${
+          result.summary.talkingPoints.length > 0
+            ? `<h3>Talking Points</h3><ul>${result.summary.talkingPoints
+                .map((point) => `<li>${escapeHtml(point)}</li>`)
+                .join("")}</ul>`
+            : ""
+        }
+      `
+      : `<p>No meeting brief available yet. Run scan to generate it.</p>`;
+
+    const linksHtml =
+      result?.links && result.links.length > 0
+        ? `<ul>${result.links
+            .map(
+              (link) =>
+                `<li>
+                  <a href="${escapeHtml(link.url)}" target="_blank" rel="noreferrer">${escapeHtml(link.title || link.url)}</a>
+                  <div class="url">${escapeHtml(link.url)}</div>
+                </li>`,
+            )
+            .join("")}</ul>`
+        : `<p>No links available yet. Run scan to fetch sources.</p>`;
+
     win.document.write(`<!DOCTYPE html><html><head>
 <meta charset="utf-8"/>
-<title>Research Summary — ${fullName}</title>
+<title>Research Export — ${fullName}</title>
 <style>
   body { font-family: Georgia, serif; max-width: 720px; margin: 40px auto; color: #1e293b; line-height: 1.7; }
   h1 { font-size: 1.5rem; margin-bottom: 0.25rem; }
   .meta { color: #64748b; font-size: 0.9rem; margin-bottom: 2rem; }
   h2 { font-size: 1rem; font-weight: 700; margin: 2rem 0 0.5rem; color: #334155; border-bottom: 1px solid #e2e8f0; padding-bottom: 0.25rem; }
+  h3 { font-size: 0.9rem; font-weight: 700; margin: 1rem 0 0.35rem; color: #475569; }
   p { margin: 0 0 1rem; font-size: 0.975rem; }
   ul { padding-left: 1.25rem; margin: 0; }
   li { margin-bottom: 0.75rem; font-size: 0.9rem; }
@@ -649,11 +757,16 @@ export default function LeadPage() {
   @media print { body { margin: 20px; } }
 </style>
 </head><body>
-<h1>Research Summary</h1>
-<p class="meta">${fullName}${company ? ` · ${company}` : ""}${country ? ` · ${country}` : ""}</p>
-<h2>Summary</h2>
-<p>${preAnalysisSummary}</p>
-${sourcesHtml}
+<h1>Research Export</h1>
+<p class="meta">${escapeHtml(fullName)}${company ? ` · ${escapeHtml(company)}` : ""}${country ? ` · ${escapeHtml(country)}` : ""}</p>
+<h2>Research Summary</h2>
+<p>${escapeHtml(researchSummaryText)}</p>
+<h2>Keywords</h2>
+${keywordsHtml}
+<h2>Meeting Brief</h2>
+${meetingBriefHtml}
+<h2>Links</h2>
+${linksHtml}
 <div class="footer">Generated by Ealuminate · ${new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })}</div>
 </body></html>`);
     win.document.close();
@@ -722,9 +835,24 @@ ${sourcesHtml}
           company: company.trim() || undefined,
           country,
           background: description.trim(),
+          pre_analysis_summary: data.summary || undefined,
           keywords_suggested: data.keywords ?? [],
         });
         if (ld.id) setLeadId(ld.id);
+
+        const cl = await clientsApi.upsert({
+          name: fullName,
+          country,
+          company: company.trim() || undefined,
+          event_type: "research",
+          event_data: {
+            summary: data.summary ?? "",
+            keywords: data.keywords ?? [],
+            background: description.trim(),
+            lead_id: ld.id,
+          },
+        });
+        if (cl.id) setClientId(cl.id);
       } catch {
         /* non-fatal */
       }
@@ -769,23 +897,13 @@ ${sourcesHtml}
       }
 
       const scanResult = data as ScanResult;
-      const allLinks = scanResult.links;
-      const negCount = allLinks.filter(
-        (l) =>
-          l.sentiment === "negative" ||
-          l.risk === "high" ||
-          l.risk === "medium",
-      ).length;
-      const posCount = allLinks.filter(
-        (l) =>
-          l.sentiment === "positive" ||
-          l.sentiment === "neutral" ||
-          l.risk === "low" ||
-          l.risk === "none",
-      ).length;
-      const finalScore = deriveScore(negCount, posCount);
+      const finalScore = typeof data.score === "number" ? data.score : deriveScore(
+        scanResult.links.filter((l) => l.sentiment === "negative" || l.risk === "high" || l.risk === "medium").length,
+        scanResult.links.filter((l) => l.sentiment === "positive" || l.sentiment === "neutral" || l.risk === "low" || l.risk === "none").length,
+      );
       setScore(finalScore);
       setResult(scanResult);
+      setScanComplete(true);
 
       // Append scan results to the lead entry
       if (leadId) {
@@ -796,6 +914,25 @@ ${sourcesHtml}
               ? ({ ...scanResult.summary } as Record<string, unknown>)
               : undefined,
             score: finalScore,
+            keywords_suggested: editableKeywords,
+          });
+        } catch {
+          /* non-fatal */
+        }
+      }
+
+      // Append scan event to the client timeline
+      if (clientId) {
+        try {
+          await clientsApi.addEvent(clientId, {
+            event_type: "scan",
+            event_data: {
+              score: finalScore,
+              summary: scanResult.summary ?? null,
+              links_count: scanResult.links.length,
+              negative_count: scanResult.negative.length,
+              keywords: editableKeywords,
+            },
           });
         } catch {
           /* non-fatal */
@@ -868,13 +1005,35 @@ ${sourcesHtml}
           </h1>
           <p
             style={{
-              margin: "0 0 1.75rem",
+              margin: "0 0 1.25rem",
               fontSize: "0.9375rem",
               color: "var(--color-muted, #64748b)",
             }}
           >
             Enter the prospect&apos;s details to generate a reputation report.
           </p>
+
+          {scanComplete && (
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "0.625rem",
+                padding: "0.75rem 1rem",
+                borderRadius: "0.625rem",
+                backgroundColor: "rgba(72,212,184,0.1)",
+                border: "1px solid rgba(72,212,184,0.35)",
+                marginBottom: "1.25rem",
+              }}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#48D4B8" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="20 6 9 17 4 12" />
+              </svg>
+              <p style={{ margin: 0, fontSize: "0.875rem", fontWeight: 600, color: "#48D4B8" }}>
+                Scan Complete — this lead has already been scanned. Fields are read-only.
+              </p>
+            </div>
+          )}
 
           <div
             style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}
@@ -886,10 +1045,11 @@ ${sourcesHtml}
                 <input
                   type="text"
                   value={firstName}
-                  onChange={(e) => setFirstName(e.target.value)}
+                  onChange={(e) => !scanComplete && setFirstName(e.target.value)}
                   placeholder="e.g. John"
                   required
-                  style={inputStyle}
+                  readOnly={scanComplete}
+                  style={{ ...inputStyle, backgroundColor: scanComplete ? "#f8fafc" : "#ffffff" }}
                 />
               </div>
               <div>
@@ -897,10 +1057,11 @@ ${sourcesHtml}
                 <input
                   type="text"
                   value={lastName}
-                  onChange={(e) => setLastName(e.target.value)}
+                  onChange={(e) => !scanComplete && setLastName(e.target.value)}
                   placeholder="e.g. Smith"
                   required
-                  style={inputStyle}
+                  readOnly={scanComplete}
+                  style={{ ...inputStyle, backgroundColor: scanComplete ? "#f8fafc" : "#ffffff" }}
                 />
               </div>
             </div>
@@ -911,16 +1072,26 @@ ${sourcesHtml}
               <input
                 type="text"
                 value={company}
-                onChange={(e) => setCompany(e.target.value)}
+                onChange={(e) => !scanComplete && setCompany(e.target.value)}
                 placeholder="e.g. Acme Corp (optional)"
-                style={inputStyle}
+                readOnly={scanComplete}
+                style={{ ...inputStyle, backgroundColor: scanComplete ? "#f8fafc" : "#ffffff" }}
               />
             </div>
 
             {/* Country */}
             <div>
               <label style={labelStyle}>Country *</label>
-              <CountryPicker value={country} onChange={setCountry} required />
+              {scanComplete ? (
+                <input
+                  type="text"
+                  value={country}
+                  readOnly
+                  style={{ ...inputStyle, backgroundColor: "#f8fafc" }}
+                />
+              ) : (
+                <CountryPicker value={country} onChange={setCountry} required />
+              )}
             </div>
 
             {/* Description */}
@@ -928,15 +1099,17 @@ ${sourcesHtml}
               <label style={labelStyle}>Background &amp; Context *</label>
               <textarea
                 value={description}
-                onChange={(e) => handleDescriptionChange(e.target.value)}
+                onChange={(e) => !scanComplete && handleDescriptionChange(e.target.value)}
                 placeholder="Describe the subject's background, industry, role, known controversies, associations, or any context that may be relevant to the scan…"
                 rows={4}
                 required
+                readOnly={scanComplete}
                 style={{
                   ...inputStyle,
-                  resize: "vertical",
+                  resize: scanComplete ? "none" : "vertical",
                   lineHeight: 1.6,
                   minHeight: "6rem",
+                  backgroundColor: scanComplete ? "#f8fafc" : "#ffffff",
                 }}
               />
             </div>
@@ -949,13 +1122,14 @@ ${sourcesHtml}
                   <button
                     key={n}
                     type="button"
+                    disabled={scanComplete}
                     onClick={() => setKeywordsCap(n)}
                     style={{
                       padding: "0.4rem 1rem",
                       borderRadius: "0.5rem",
                       fontSize: "0.875rem",
                       fontWeight: 500,
-                      cursor: "pointer",
+                      cursor: scanComplete ? "default" : "pointer",
                       transition: "all 0.15s",
                       border: "1.5px solid",
                       borderColor:
@@ -968,6 +1142,7 @@ ${sourcesHtml}
                         keywordsCap === n
                           ? "#4479DA"
                           : "var(--color-muted, #64748b)",
+                      opacity: scanComplete ? 0.6 : 1,
                     }}
                   >
                     {n}
@@ -994,7 +1169,7 @@ ${sourcesHtml}
             {/* Research button */}
             <button
               type="button"
-              disabled={preAnalysisLoading}
+              disabled={preAnalysisLoading || scanComplete}
               onClick={handleResearch}
               className="glow-button"
               style={{
@@ -1002,7 +1177,8 @@ ${sourcesHtml}
                 padding: "0.75rem",
                 fontWeight: 700,
                 borderRadius: "0.625rem",
-                opacity: preAnalysisLoading ? 0.8 : 1,
+                opacity: preAnalysisLoading || scanComplete ? 0.5 : 1,
+                cursor: scanComplete ? "default" : "pointer",
               }}
             >
               {preAnalysisLoading ? (
@@ -1044,41 +1220,6 @@ ${sourcesHtml}
                   >
                     Research Summary
                   </p>
-                  {preAnalysisSummary !==
-                    "Either no public information found for this subject or the context provided is not enough to generate a summary." && (
-                    <button
-                      type="button"
-                      onClick={handleExportSummaryPdf}
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "0.35rem",
-                        fontSize: "0.75rem",
-                        fontWeight: 600,
-                        color: "#48D4B8",
-                        background: "none",
-                        border: "none",
-                        cursor: "pointer",
-                        padding: 0,
-                      }}
-                    >
-                      <svg
-                        width="14"
-                        height="14"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2.5"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      >
-                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                        <polyline points="7 10 12 15 17 10" />
-                        <line x1="12" y1="15" x2="12" y2="3" />
-                      </svg>
-                      Export PDF
-                    </button>
-                  )}
                 </div>
                 <p
                   style={{
@@ -1103,6 +1244,7 @@ ${sourcesHtml}
                   <KeywordsEditor
                     keywords={editableKeywords}
                     setKeywords={setEditableKeywords}
+                    readOnly={scanComplete}
                   />
                 </div>
 
@@ -1115,13 +1257,14 @@ ${sourcesHtml}
                       <button
                         key={cap}
                         type="button"
+                        disabled={scanComplete}
                         onClick={() => setResultsCap(cap)}
                         style={{
                           padding: "0.4rem 1rem",
                           borderRadius: "0.5rem",
                           fontSize: "0.875rem",
                           fontWeight: 500,
-                          cursor: "pointer",
+                          cursor: scanComplete ? "default" : "pointer",
                           transition: "all 0.15s",
                           border: "1.5px solid",
                           borderColor:
@@ -1134,6 +1277,7 @@ ${sourcesHtml}
                             resultsCap === cap
                               ? "#4479DA"
                               : "var(--color-muted, #64748b)",
+                          opacity: scanComplete ? 0.6 : 1,
                         }}
                       >
                         {cap}
@@ -1153,7 +1297,7 @@ ${sourcesHtml}
 
                 <button
                   type="button"
-                  disabled={loading || editableKeywords.length === 0}
+                  disabled={loading || editableKeywords.length === 0 || scanComplete}
                   onClick={handleRunScan}
                   className="glow-button"
                   style={{
@@ -1161,7 +1305,8 @@ ${sourcesHtml}
                     padding: "0.75rem",
                     fontWeight: 700,
                     borderRadius: "0.625rem",
-                    opacity: loading || editableKeywords.length === 0 ? 0.8 : 1,
+                    opacity: loading || editableKeywords.length === 0 || scanComplete ? 0.5 : 1,
+                    cursor: scanComplete ? "default" : "pointer",
                   }}
                 >
                   {loading ? (
@@ -1760,8 +1905,51 @@ ${sourcesHtml}
               )}
             </div>
           )}
+
+          {scanComplete && (
+            <div style={{ marginTop: "1.25rem", display: "flex", justifyContent: "flex-end" }}>
+              <button
+                type="button"
+                onClick={handleExportSummaryPdf}
+                className="glow-button"
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "0.4rem",
+                  padding: "0.625rem 0.95rem",
+                  borderRadius: "0.625rem",
+                  fontSize: "0.8125rem",
+                  fontWeight: 700,
+                }}
+              >
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                  <polyline points="7 10 12 15 17 10" />
+                  <line x1="12" y1="15" x2="12" y2="3" />
+                </svg>
+                Export PDF
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </div>
+  );
+}
+
+export default function LeadPage() {
+  return (
+    <Suspense>
+      <EaluminatePageInner />
+    </Suspense>
   );
 }

@@ -57,6 +57,7 @@ export default function SettingsPage() {
           localStorage.setItem("reput_user", JSON.stringify({ ...u, name }));
           localStorage.setItem("reput_name", name);
         }
+        window.dispatchEvent(new Event("reput-auth-change"));
       } catch {}
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
