@@ -31,6 +31,29 @@ interface ScanResult {
 const RESULTS_CAP_OPTIONS = [10, 20, 30, 40, 50];
 const KEYWORDS_CAP_OPTIONS = [3, 4, 5, 6, 7, 8];
 
+const PIPELINE_STEPS = [
+  {
+    n: "01",
+    title: "Profile research",
+    desc: "Identity, background, and context discovery",
+  },
+  {
+    n: "02",
+    title: "Keyword preparation",
+    desc: "Search intent and query terms finalized",
+  },
+  {
+    n: "03",
+    title: "Scan and classification",
+    desc: "Sources fetched and reputation signals scored",
+  },
+  {
+    n: "04",
+    title: "Brief ready",
+    desc: "Meeting summary and talking points generated",
+  },
+] as const;
+
 type RiskLevel = "Negative" | "Poor" | "Mediocre" | "Good";
 
 const RISK_COLORS: Record<
@@ -111,8 +134,8 @@ function deriveScore(negCount: number, posCount: number): number {
 const inputStyle: React.CSSProperties = {
   width: "100%",
   padding: "0.625rem 1rem",
-  borderRadius: "0.625rem",
-  border: "1px solid var(--color-border, #e2e8f0)",
+  borderRadius: "0.25rem",
+  border: "1px solid #d1d9e0",
   backgroundColor: "#ffffff",
   color: "#1e293b",
   outline: "none",
@@ -122,9 +145,11 @@ const inputStyle: React.CSSProperties = {
 
 const labelStyle: React.CSSProperties = {
   display: "block",
-  fontSize: "0.8125rem",
-  fontWeight: 500,
-  color: "var(--color-muted, #64748b)",
+  fontSize: "0.6875rem",
+  fontWeight: 700,
+  letterSpacing: "0.12em",
+  textTransform: "uppercase",
+  color: "#64748b",
   marginBottom: "0.5rem",
 };
 
@@ -357,7 +382,7 @@ function CountryPicker({
             right: 0,
             backgroundColor: "#ffffff",
             border: "1px solid var(--color-border, #e2e8f0)",
-            borderRadius: "0.625rem",
+            borderRadius: "0.25rem",
             boxShadow: "0 8px 24px rgba(0,0,0,0.12)",
             maxHeight: "min(14rem, 40vh)",
             overflowY: "auto",
@@ -458,7 +483,7 @@ function KeywordsEditor({
         flexWrap: "wrap",
         gap: "0.5rem",
         padding: "0.5rem",
-        borderRadius: "0.625rem",
+        borderRadius: "0.25rem",
         border: "1px solid var(--color-border, #e2e8f0)",
         backgroundColor: readOnly ? "#f8fafc" : "#ffffff",
         minHeight: "3rem",
@@ -480,7 +505,7 @@ function KeywordsEditor({
             alignItems: "center",
             gap: "0.375rem",
             padding: "0.25rem 0.75rem",
-            borderRadius: "0.5rem",
+            borderRadius: "0.25rem",
             backgroundColor: readOnly ? "#94a3b8" : "#4479DA",
             color: "#fff",
             fontSize: "0.8125rem",
@@ -1001,11 +1026,23 @@ ${linksHtml}
 
   const allLinks = result?.links ?? [];
 
+  // 0=idle, 1=researching, 2=research done, 3=scan running, 4=scan complete
+  const pipelineStep = result
+    ? 4
+    : loading
+      ? 3
+      : keywordsReady
+        ? 2
+        : preAnalysisLoading
+          ? 1
+          : 0;
+
   return (
     <div
+      className="eal-page"
       style={{
         width: "100%",
-        padding: "clamp(1rem, 4vw, 2rem)",
+        padding: "clamp(0.5rem, 1.5vw, 1rem)",
         boxSizing: "border-box",
       }}
     >
@@ -1027,40 +1064,75 @@ ${linksHtml}
           grid-template-columns: 1fr 1fr;
           gap: 1rem;
         }
+        .eal-card-body {
+          display: flex;
+          gap: 2rem;
+          align-items: flex-start;
+        }
+        .eal-page .glow-button {
+          border-radius: 0.25rem !important;
+        }
+        .eal-pipeline {
+          width: 18.5rem;
+          flex-shrink: 0;
+        }
         @media (max-width: 480px) {
           .lead-name-grid { grid-template-columns: 1fr; }
         }
+        @media (max-width: 768px) {
+          .eal-card-body { flex-direction: column; }
+          .eal-pipeline { width: 100% !important; }
+        }
       `}</style>
 
-      <div style={{ maxWidth: "52rem", margin: "0 auto" }}>
+      <div style={{ maxWidth: "100rem", margin: "0 auto" }}>
         {/* ── Form card ── */}
         <div
-          className="glass glow-border"
           style={{
-            borderRadius: "0.875rem",
+            borderRadius: "0.375rem",
+            border: "1px solid #d1d9e0",
+            backgroundColor: "#ffffff",
             padding: "clamp(1.25rem, 4vw, 2rem)",
             marginBottom: "2rem",
           }}
         >
-          <h1
-            style={{
-              margin: "0 0 0.375rem",
-              fontSize: "1.375rem",
-              fontWeight: 700,
-              color: "var(--color-foreground, #1e293b)",
-            }}
-          >
-            EALUMINATE
-          </h1>
-          <p
-            style={{
-              margin: "0 0 1.25rem",
-              fontSize: "0.9375rem",
-              color: "var(--color-muted, #64748b)",
-            }}
-          >
-            Enter the prospect&apos;s details to generate a reputation report.
-          </p>
+          {/* Card header with status indicator */}
+          <div style={{ position: "relative", marginBottom: "1.25rem" }}>
+            <h1
+              style={{
+                margin: "0 0 0.375rem",
+                fontSize: "1.375rem",
+                fontWeight: 700,
+                color: "var(--color-foreground, #1e293b)",
+              }}
+            >
+              EALUMINATE
+            </h1>
+            <p
+              style={{
+                margin: 0,
+                fontSize: "0.9375rem",
+                color: "var(--color-muted, #64748b)",
+              }}
+            >
+              Enter the prospect&apos;s details to generate a reputation report.
+            </p>
+            <div
+              style={{
+                position: "absolute",
+                top: 0,
+                right: 0,
+                width: 8,
+                height: 8,
+                borderRadius: "50%",
+                backgroundColor: scanComplete
+                  ? "#4CAF50"
+                  : preAnalysisDone
+                    ? "#48D4B8"
+                    : "#f59e0b",
+              }}
+            />
+          </div>
 
           {scanComplete && (
             <div
@@ -1069,7 +1141,7 @@ ${linksHtml}
                 alignItems: "center",
                 gap: "0.625rem",
                 padding: "0.75rem 1rem",
-                borderRadius: "0.625rem",
+                borderRadius: "0.25rem",
                 backgroundColor: "rgba(72,212,184,0.1)",
                 border: "1px solid rgba(72,212,184,0.35)",
                 marginBottom: "1.25rem",
@@ -1101,340 +1173,514 @@ ${linksHtml}
             </div>
           )}
 
-          <div
-            style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}
-          >
-            {/* First / Last Name */}
-            <div className="lead-name-grid">
-              <div>
-                <label style={labelStyle}>First Name *</label>
-                <input
-                  type="text"
-                  value={firstName}
-                  onChange={(e) =>
-                    !scanComplete && setFirstName(e.target.value)
-                  }
-                  placeholder="e.g. John"
-                  required
-                  readOnly={scanComplete}
-                  style={{
-                    ...inputStyle,
-                    backgroundColor: scanComplete ? "#f8fafc" : "#ffffff",
-                  }}
-                />
-              </div>
-              <div>
-                <label style={labelStyle}>Last Name *</label>
-                <input
-                  type="text"
-                  value={lastName}
-                  onChange={(e) => !scanComplete && setLastName(e.target.value)}
-                  placeholder="e.g. Smith"
-                  required
-                  readOnly={scanComplete}
-                  style={{
-                    ...inputStyle,
-                    backgroundColor: scanComplete ? "#f8fafc" : "#ffffff",
-                  }}
-                />
-              </div>
-            </div>
-
-            {/* Company */}
-            <div>
-              <label style={labelStyle}>Company</label>
-              <input
-                type="text"
-                value={company}
-                onChange={(e) => !scanComplete && setCompany(e.target.value)}
-                placeholder="e.g. Acme Corp (optional)"
-                readOnly={scanComplete}
-                style={{
-                  ...inputStyle,
-                  backgroundColor: scanComplete ? "#f8fafc" : "#ffffff",
-                }}
-              />
-            </div>
-
-            {/* Country */}
-            <div>
-              <label style={labelStyle}>Country *</label>
-              {scanComplete ? (
-                <input
-                  type="text"
-                  value={country}
-                  readOnly
-                  style={{ ...inputStyle, backgroundColor: "#f8fafc" }}
-                />
-              ) : (
-                <CountryPicker value={country} onChange={setCountry} required />
-              )}
-            </div>
-
-            {/* Description */}
-            <div>
-              <label style={labelStyle}>Background &amp; Context *</label>
-              <textarea
-                value={description}
-                onChange={(e) =>
-                  !scanComplete && handleDescriptionChange(e.target.value)
-                }
-                placeholder="Describe the subject's background, industry, role, known controversies, associations, or any context that may be relevant to the scan…"
-                rows={4}
-                required
-                readOnly={scanComplete}
-                style={{
-                  ...inputStyle,
-                  resize: scanComplete ? "none" : "vertical",
-                  lineHeight: 1.6,
-                  minHeight: "6rem",
-                  backgroundColor: scanComplete ? "#f8fafc" : "#ffffff",
-                }}
-              />
-            </div>
-
-            {/* Number of Keywords */}
-            <div>
-              <label style={labelStyle}>Number of Keywords</label>
-              <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-                {KEYWORDS_CAP_OPTIONS.map((n) => (
-                  <button
-                    key={n}
-                    type="button"
-                    disabled={scanComplete}
-                    onClick={() => setKeywordsCap(n)}
-                    style={{
-                      padding: "0.4rem 1rem",
-                      borderRadius: "0.5rem",
-                      fontSize: "0.875rem",
-                      fontWeight: 500,
-                      cursor: scanComplete ? "default" : "pointer",
-                      transition: "all 0.15s",
-                      border: "1.5px solid",
-                      borderColor:
-                        keywordsCap === n
-                          ? "#4479DA"
-                          : "var(--color-border, #e2e8f0)",
-                      backgroundColor:
-                        keywordsCap === n ? "#eef3ff" : "#ffffff",
-                      color:
-                        keywordsCap === n
-                          ? "#4479DA"
-                          : "var(--color-muted, #64748b)",
-                      opacity: scanComplete ? 0.6 : 1,
-                    }}
-                  >
-                    {n}
-                  </button>
-                ))}
-              </div>
-              <p
-                style={{
-                  margin: "0.375rem 0 0",
-                  fontSize: "0.75rem",
-                  color: "#94a3b8",
-                }}
-              >
-                Number of keywords EALUMINATE generates from the description
-              </p>
-            </div>
-
-            {error && (
-              <p style={{ margin: 0, fontSize: "0.875rem", color: "#ef4444" }}>
-                {error}
-              </p>
-            )}
-
-            {/* Research button */}
-            <button
-              type="button"
-              disabled={preAnalysisLoading || scanComplete}
-              onClick={handleResearch}
-              className="glow-button"
+          {/* ── Two-column body ── */}
+          <div className="eal-card-body">
+            {/* Left: form fields */}
+            <div
               style={{
-                width: "100%",
-                padding: "0.75rem",
-                fontWeight: 700,
-                borderRadius: "0.625rem",
-                opacity: preAnalysisLoading || scanComplete ? 0.5 : 1,
-                cursor: scanComplete ? "default" : "pointer",
+                flex: 1,
+                minWidth: 0,
+                display: "flex",
+                flexDirection: "column",
+                gap: "1.25rem",
               }}
             >
-              {preAnalysisLoading ? (
-                <>
-                  <Spinner />
-                  Researching…
-                </>
-              ) : preAnalysisDone ? (
-                "Re-Research"
-              ) : (
-                "Research"
-              )}
-            </button>
-
-            {/* Pre-analysis summary card */}
-            {preAnalysisDone && (
-              <div
-                className="glass glow-border"
-                style={{
-                  borderRadius: "0.875rem",
-                  padding: "1.25rem",
-                }}
-              >
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    marginBottom: "0.625rem",
-                  }}
-                >
-                  <p
-                    style={{
-                      fontSize: "0.875rem",
-                      fontWeight: 700,
-                      margin: 0,
-                      color: "var(--color-foreground, #1e293b)",
-                    }}
-                  >
-                    Research Summary
-                  </p>
-                </div>
-                {preAnalysisProfile ? (
-                  <div style={{ display: "flex", flexDirection: "column", gap: "0.625rem" }}>
-                    {(
-                      [
-                        ["Identity", preAnalysisProfile.identity],
-                        ["Background", preAnalysisProfile.background],
-                        ["Negative Findings", preAnalysisProfile.negative_findings],
-                        ["Positive Presence", preAnalysisProfile.positive_presence],
-                        ["Reputation Notes", preAnalysisProfile.reputation_notes],
-                      ] as [string, string][]
-                    ).map(([label, text]) => (
-                      <div key={label}>
-                        <p style={{ fontSize: "0.75rem", fontWeight: 600, margin: "0 0 0.125rem", color: "var(--color-foreground, #1e293b)" }}>
-                          {label}
-                        </p>
-                        <p style={{ fontSize: "0.8125rem", color: "var(--color-muted, #64748b)", lineHeight: 1.65, margin: 0 }}>
-                          {text}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p
-                    style={{
-                      fontSize: "0.8125rem",
-                      color: "var(--color-muted, #64748b)",
-                      lineHeight: 1.65,
-                      margin: 0,
-                    }}
-                  >
-                    {preAnalysisSummary}
-                  </p>
-                )}
-              </div>
-            )}
-
-            {/* Keyword editor + Results Cap + Run Scan */}
-            {keywordsReady && (
-              <>
+              {/* First / Last Name */}
+              <div className="lead-name-grid">
                 <div>
-                  <label style={labelStyle}>
-                    Keywords — edit or add your own
-                  </label>
-                  <KeywordsEditor
-                    keywords={editableKeywords}
-                    setKeywords={setEditableKeywords}
+                  <label style={labelStyle}>First Name *</label>
+                  <input
+                    type="text"
+                    value={firstName}
+                    onChange={(e) =>
+                      !scanComplete && setFirstName(e.target.value)
+                    }
+                    placeholder="e.g. John"
+                    required
                     readOnly={scanComplete}
+                    style={{
+                      ...inputStyle,
+                      backgroundColor: scanComplete ? "#f8fafc" : "#ffffff",
+                    }}
                   />
                 </div>
-
                 <div>
-                  <label style={labelStyle}>Results Cap</label>
-                  <div
-                    style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}
-                  >
-                    {RESULTS_CAP_OPTIONS.map((cap) => (
-                      <button
-                        key={cap}
-                        type="button"
-                        disabled={scanComplete}
-                        onClick={() => setResultsCap(cap)}
-                        style={{
-                          padding: "0.4rem 1rem",
-                          borderRadius: "0.5rem",
-                          fontSize: "0.875rem",
-                          fontWeight: 500,
-                          cursor: scanComplete ? "default" : "pointer",
-                          transition: "all 0.15s",
-                          border: "1.5px solid",
-                          borderColor:
-                            resultsCap === cap
-                              ? "#4479DA"
-                              : "var(--color-border, #e2e8f0)",
-                          backgroundColor:
-                            resultsCap === cap ? "#eef3ff" : "#ffffff",
-                          color:
-                            resultsCap === cap
-                              ? "#4479DA"
-                              : "var(--color-muted, #64748b)",
-                          opacity: scanComplete ? 0.6 : 1,
-                        }}
-                      >
-                        {cap}
-                      </button>
-                    ))}
-                  </div>
-                  <p
+                  <label style={labelStyle}>Last Name *</label>
+                  <input
+                    type="text"
+                    value={lastName}
+                    onChange={(e) =>
+                      !scanComplete && setLastName(e.target.value)
+                    }
+                    placeholder="e.g. Smith"
+                    required
+                    readOnly={scanComplete}
                     style={{
-                      margin: "0.375rem 0 0",
-                      fontSize: "0.75rem",
-                      color: "#94a3b8",
+                      ...inputStyle,
+                      backgroundColor: scanComplete ? "#f8fafc" : "#ffffff",
                     }}
-                  >
-                    Results fetched and analysed per keyword
-                  </p>
+                  />
                 </div>
+              </div>
 
-                <button
-                  type="button"
-                  disabled={
-                    loading || editableKeywords.length === 0 || scanComplete
-                  }
-                  onClick={handleRunScan}
-                  className="glow-button"
+              {/* Company */}
+              <div>
+                <label style={labelStyle}>Company</label>
+                <input
+                  type="text"
+                  value={company}
+                  onChange={(e) => !scanComplete && setCompany(e.target.value)}
+                  placeholder="e.g. Acme Corp (optional)"
+                  readOnly={scanComplete}
                   style={{
-                    width: "100%",
-                    padding: "0.75rem",
-                    fontWeight: 700,
-                    borderRadius: "0.625rem",
-                    opacity:
-                      loading || editableKeywords.length === 0 || scanComplete
-                        ? 0.5
-                        : 1,
-                    cursor: scanComplete ? "default" : "pointer",
+                    ...inputStyle,
+                    backgroundColor: scanComplete ? "#f8fafc" : "#ffffff",
+                  }}
+                />
+              </div>
+
+              {/* Country */}
+              <div>
+                <label style={labelStyle}>Country *</label>
+                {scanComplete ? (
+                  <input
+                    type="text"
+                    value={country}
+                    readOnly
+                    style={{ ...inputStyle, backgroundColor: "#f8fafc" }}
+                  />
+                ) : (
+                  <CountryPicker
+                    value={country}
+                    onChange={setCountry}
+                    required
+                  />
+                )}
+              </div>
+
+              {/* Description */}
+              <div>
+                <label style={labelStyle}>Background &amp; Context *</label>
+                <textarea
+                  value={description}
+                  onChange={(e) =>
+                    !scanComplete && handleDescriptionChange(e.target.value)
+                  }
+                  placeholder="Describe the subject's background, industry, role, known controversies, associations, or any context that may be relevant to the scan…"
+                  rows={4}
+                  required
+                  readOnly={scanComplete}
+                  style={{
+                    ...inputStyle,
+                    resize: scanComplete ? "none" : "vertical",
+                    lineHeight: 1.6,
+                    minHeight: "6rem",
+                    backgroundColor: scanComplete ? "#f8fafc" : "#ffffff",
+                  }}
+                />
+              </div>
+
+              {/* Number of Keywords */}
+              <div>
+                <label style={labelStyle}>Number of Keywords</label>
+                <div
+                  style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}
+                >
+                  {KEYWORDS_CAP_OPTIONS.map((n) => (
+                    <button
+                      key={n}
+                      type="button"
+                      disabled={scanComplete}
+                      onClick={() => setKeywordsCap(n)}
+                      style={{
+                        padding: "0.4rem 1rem",
+                        borderRadius: "0.25rem",
+                        fontSize: "0.875rem",
+                        fontWeight: 500,
+                        cursor: scanComplete ? "default" : "pointer",
+                        transition: "all 0.15s",
+                        border: "1.5px solid",
+                        borderColor:
+                          keywordsCap === n
+                            ? "#4479DA"
+                            : "var(--color-border, #e2e8f0)",
+                        backgroundColor:
+                          keywordsCap === n ? "#eef3ff" : "#ffffff",
+                        color:
+                          keywordsCap === n
+                            ? "#4479DA"
+                            : "var(--color-muted, #64748b)",
+                        opacity: scanComplete ? 0.6 : 1,
+                      }}
+                    >
+                      {n}
+                    </button>
+                  ))}
+                </div>
+                <p
+                  style={{
+                    margin: "0.375rem 0 0",
+                    fontSize: "0.75rem",
+                    color: "#94a3b8",
                   }}
                 >
-                  {loading ? (
-                    <>
-                      <Spinner />
-                      Scanning…
-                    </>
+                  Number of keywords EALUMINATE generates from the description
+                </p>
+              </div>
+
+              {error && (
+                <p
+                  style={{ margin: 0, fontSize: "0.875rem", color: "#ef4444" }}
+                >
+                  {error}
+                </p>
+              )}
+
+              {/* Research button */}
+              <button
+                type="button"
+                disabled={preAnalysisLoading || scanComplete}
+                onClick={handleResearch}
+                className="glow-button"
+                style={{
+                  width: "100%",
+                  padding: "0.75rem",
+                  fontWeight: 700,
+                  borderRadius: "0.25rem",
+                  opacity: preAnalysisLoading || scanComplete ? 0.5 : 1,
+                  cursor: scanComplete ? "default" : "pointer",
+                }}
+              >
+                {preAnalysisLoading ? (
+                  <>
+                    <Spinner />
+                    Researching…
+                  </>
+                ) : preAnalysisDone ? (
+                  "Re-Research"
+                ) : (
+                  "Research"
+                )}
+              </button>
+
+              {/* Pre-analysis summary card */}
+              {preAnalysisDone && (
+                <div
+                  style={{
+                    borderRadius: "0.375rem",
+                    border: "1px solid #d1d9e0",
+                    backgroundColor: "#f8fafc",
+                    padding: "1.25rem",
+                  }}
+                >
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      marginBottom: "0.625rem",
+                    }}
+                  >
+                    <p
+                      style={{
+                        fontSize: "0.875rem",
+                        fontWeight: 700,
+                        margin: 0,
+                        color: "var(--color-foreground, #1e293b)",
+                      }}
+                    >
+                      Research Summary
+                    </p>
+                  </div>
+                  {preAnalysisProfile ? (
+                    <div
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: "0.625rem",
+                      }}
+                    >
+                      {(
+                        [
+                          ["Identity", preAnalysisProfile.identity],
+                          ["Background", preAnalysisProfile.background],
+                          [
+                            "Negative Findings",
+                            preAnalysisProfile.negative_findings,
+                          ],
+                          [
+                            "Positive Presence",
+                            preAnalysisProfile.positive_presence,
+                          ],
+                          [
+                            "Reputation Notes",
+                            preAnalysisProfile.reputation_notes,
+                          ],
+                        ] as [string, string][]
+                      ).map(([label, text]) => (
+                        <div key={label}>
+                          <p
+                            style={{
+                              fontSize: "0.75rem",
+                              fontWeight: 600,
+                              margin: "0 0 0.125rem",
+                              color: "var(--color-foreground, #1e293b)",
+                            }}
+                          >
+                            {label}
+                          </p>
+                          <p
+                            style={{
+                              fontSize: "0.8125rem",
+                              color: "var(--color-muted, #64748b)",
+                              lineHeight: 1.65,
+                              margin: 0,
+                            }}
+                          >
+                            {text}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
                   ) : (
-                    "Run Scan"
+                    <p
+                      style={{
+                        fontSize: "0.8125rem",
+                        color: "var(--color-muted, #64748b)",
+                        lineHeight: 1.65,
+                        margin: 0,
+                      }}
+                    >
+                      {preAnalysisSummary}
+                    </p>
                   )}
-                </button>
-              </>
-            )}
+                </div>
+              )}
+
+              {/* Keyword editor + Results Cap + Run Scan */}
+              {keywordsReady && (
+                <>
+                  <div>
+                    <label style={labelStyle}>
+                      Keywords — edit or add your own
+                    </label>
+                    <KeywordsEditor
+                      keywords={editableKeywords}
+                      setKeywords={setEditableKeywords}
+                      readOnly={scanComplete}
+                    />
+                  </div>
+
+                  <div>
+                    <label style={labelStyle}>Results Cap</label>
+                    <div
+                      style={{
+                        display: "flex",
+                        gap: "0.5rem",
+                        flexWrap: "wrap",
+                      }}
+                    >
+                      {RESULTS_CAP_OPTIONS.map((cap) => (
+                        <button
+                          key={cap}
+                          type="button"
+                          disabled={scanComplete}
+                          onClick={() => setResultsCap(cap)}
+                          style={{
+                            padding: "0.4rem 1rem",
+                            borderRadius: "0.25rem",
+                            fontSize: "0.875rem",
+                            fontWeight: 500,
+                            cursor: scanComplete ? "default" : "pointer",
+                            transition: "all 0.15s",
+                            border: "1.5px solid",
+                            borderColor:
+                              resultsCap === cap
+                                ? "#4479DA"
+                                : "var(--color-border, #e2e8f0)",
+                            backgroundColor:
+                              resultsCap === cap ? "#eef3ff" : "#ffffff",
+                            color:
+                              resultsCap === cap
+                                ? "#4479DA"
+                                : "var(--color-muted, #64748b)",
+                            opacity: scanComplete ? 0.6 : 1,
+                          }}
+                        >
+                          {cap}
+                        </button>
+                      ))}
+                    </div>
+                    <p
+                      style={{
+                        margin: "0.375rem 0 0",
+                        fontSize: "0.75rem",
+                        color: "#94a3b8",
+                      }}
+                    >
+                      Results fetched and analysed per keyword
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    disabled={
+                      loading || editableKeywords.length === 0 || scanComplete
+                    }
+                    onClick={handleRunScan}
+                    className="glow-button"
+                    style={{
+                      width: "100%",
+                      padding: "0.75rem",
+                      fontWeight: 700,
+                      borderRadius: "0.25rem",
+                      opacity:
+                        loading || editableKeywords.length === 0 || scanComplete
+                          ? 0.5
+                          : 1,
+                      cursor: scanComplete ? "default" : "pointer",
+                    }}
+                  >
+                    {loading ? (
+                      <>
+                        <Spinner />
+                        Scanning…
+                      </>
+                    ) : (
+                      "Run Scan"
+                    )}
+                  </button>
+                </>
+              )}
+            </div>
+
+            {/* Right: Scan pipeline */}
+            <div
+              className="eal-pipeline"
+              style={{
+                border: "1px solid rgba(255, 255, 255, 0.35)",
+                borderRadius: "0.625rem",
+                background:
+                  "linear-gradient(160deg, #4479DA 0%, #48D4B8 100%)",
+                boxShadow: "0 10px 24px rgba(68, 121, 218, 0.2)",
+                padding: "1rem",
+                position: "sticky",
+                top: "1rem",
+              }}
+            >
+              <p
+                style={{
+                  fontSize: "0.75rem",
+                  fontWeight: 700,
+                  letterSpacing: "0.1em",
+                  textTransform: "uppercase",
+                  color: "rgba(255, 255, 255, 0.95)",
+                  margin: "0 0 0.875rem",
+                }}
+              >
+                Scan pipeline
+              </p>
+              {PIPELINE_STEPS.map((step, i) => {
+                const stepNum = i + 1;
+                const isCompleted = pipelineStep > stepNum;
+                const isActive = pipelineStep === stepNum;
+                return (
+                  <div
+                    key={step.n}
+                    style={{
+                      marginBottom: i < 3 ? "0.75rem" : 0,
+                      padding: "0.65rem 0.625rem",
+                      borderRadius: "0.5rem",
+                      backgroundColor: isActive
+                        ? "rgba(255, 255, 255, 0.28)"
+                        : isCompleted
+                          ? "rgba(255, 255, 255, 0.22)"
+                          : "rgba(255, 255, 255, 0.14)",
+                      border: isActive
+                        ? "1px solid rgba(255, 255, 255, 0.65)"
+                        : isCompleted
+                          ? "1px solid rgba(255, 255, 255, 0.5)"
+                          : "1px solid rgba(255, 255, 255, 0.35)",
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "0.5rem",
+                        marginBottom: "0.25rem",
+                      }}
+                    >
+                      <span
+                        style={{
+                          fontSize: "0.625rem",
+                          fontWeight: 700,
+                          letterSpacing: "0.1em",
+                          backgroundColor: isCompleted
+                            ? "rgba(68, 121, 218, 0.45)"
+                            : isActive
+                              ? "rgba(72, 212, 184, 0.45)"
+                              : "rgba(255, 255, 255, 0.2)",
+                          border: isCompleted
+                            ? "1px solid rgba(255, 255, 255, 0.4)"
+                            : isActive
+                              ? "1px solid rgba(255, 255, 255, 0.45)"
+                              : "1px solid rgba(255, 255, 255, 0.35)",
+                          borderRadius: "999px",
+                          padding: "0.2rem 0.42rem",
+                          color: isCompleted
+                            ? "#ffffff"
+                            : isActive
+                              ? "#ffffff"
+                              : "rgba(255, 255, 255, 0.9)",
+                          flexShrink: 0,
+                        }}
+                      >
+                        {step.n}
+                      </span>
+                      <span
+                        style={{
+                          fontSize: "1rem",
+                          fontWeight: isActive || isCompleted ? 700 : 600,
+                          color: isActive
+                            ? "#ffffff"
+                            : isCompleted
+                              ? "rgba(255, 255, 255, 0.96)"
+                              : "rgba(255, 255, 255, 0.9)",
+                          lineHeight: 1.3,
+                        }}
+                      >
+                        {step.title}
+                      </span>
+                    </div>
+                    <p
+                      style={{
+                        margin: "0 0 0 1.7rem",
+                        fontSize: "0.875rem",
+                        color: isActive
+                          ? "rgba(255, 255, 255, 0.92)"
+                          : isCompleted
+                            ? "rgba(255, 255, 255, 0.86)"
+                            : "rgba(255, 255, 255, 0.78)",
+                        lineHeight: 1.45,
+                      }}
+                    >
+                      {step.desc}
+                    </p>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         </div>
 
         {/* ── Results ── */}
         <div
-          className={`animate-scale-in${loading || result ? " glass glow-border" : ""}`}
+          className="animate-scale-in"
           style={{
-            borderRadius: "0.875rem",
+            borderRadius: "0.375rem",
+            border: loading || result ? "1px solid #d1d9e0" : "none",
+            backgroundColor: loading || result ? "#ffffff" : "transparent",
             padding: "2.5rem 2rem",
             textAlign: "center",
             minHeight: loading || result ? "24rem" : 0,
@@ -1597,7 +1843,7 @@ ${linksHtml}
                   position: "relative",
                   zIndex: 1,
                   padding: "0.625rem 2rem",
-                  borderRadius: "0.625rem",
+                  borderRadius: "0.25rem",
                   backgroundColor: "var(--color-surface, #fff)",
                   border: "1px solid var(--color-border)",
                 }}
@@ -1648,7 +1894,7 @@ ${linksHtml}
                         key={kw}
                         style={{
                           padding: "0.25rem 0.75rem",
-                          borderRadius: "0.5rem",
+                          borderRadius: "0.25rem",
                           backgroundColor: "rgba(68,121,218,0.08)",
                           border: "1px solid rgba(29, 65, 133, 0.2)",
                           color: "#4479DA",
@@ -1667,8 +1913,8 @@ ${linksHtml}
                 <div
                   style={{
                     marginTop: "1.25rem",
-                    borderRadius: "0.75rem",
-                    border: "1px solid #e2e8f0",
+                    borderRadius: "0.375rem",
+                    border: "1px solid #d1d9e0",
                     backgroundColor: "#f8fafc",
                     textAlign: "left",
                     overflow: "hidden",
@@ -1788,7 +2034,7 @@ ${linksHtml}
                   style={{
                     marginTop: "1.5rem",
                     padding: "1.5rem",
-                    borderRadius: "0.75rem",
+                    borderRadius: "0.375rem",
                     border: "1px solid var(--color-border)",
                     textAlign: "center",
                     color: "var(--color-muted)",
@@ -1827,19 +2073,18 @@ ${linksHtml}
                         }
                         style={{
                           display: "flex",
-                          borderRadius: "0.5rem",
+                          borderRadius: "0.25rem",
                           overflow: "hidden",
                           background: "#fff",
-                          border: "1px solid #f1f5f9",
+                          border: "1px solid #e2e8f0",
                           cursor: "pointer",
-                          transition: "box-shadow 0.15s ease",
+                          transition: "border-color 0.15s ease",
                         }}
                         onMouseEnter={(e) =>
-                          (e.currentTarget.style.boxShadow =
-                            "0 2px 8px rgba(0,0,0,0.07)")
+                          (e.currentTarget.style.borderColor = "#b6c4d4")
                         }
                         onMouseLeave={(e) =>
-                          (e.currentTarget.style.boxShadow = "none")
+                          (e.currentTarget.style.borderColor = "#e2e8f0")
                         }
                       >
                         {/* Left accent */}
@@ -2032,7 +2277,7 @@ ${linksHtml}
                   alignItems: "center",
                   gap: "0.4rem",
                   padding: "0.625rem 0.95rem",
-                  borderRadius: "0.625rem",
+                  borderRadius: "0.25rem",
                   fontSize: "0.8125rem",
                   fontWeight: 700,
                 }}
