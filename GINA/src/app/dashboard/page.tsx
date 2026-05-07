@@ -1,11 +1,11 @@
 "use client";
 
+import { dashboard, DashboardStats, MonthPoint } from "@/lib/api";
 import dynamic from "next/dynamic";
 import { useEffect, useState } from "react";
-import TopBar from "./_components/TopBar";
-import StatsRow from "./_components/StatsRow";
 import RecentScans from "./_components/RecentScans";
-import { dashboard, DashboardStats, MonthPoint } from "@/lib/api";
+import StatsRow from "./_components/StatsRow";
+import TopBar from "./_components/TopBar";
 
 function ChartPlaceholder() {
   return (
@@ -51,8 +51,17 @@ const ContractsChartCard = dynamic(
   },
 );
 
-const EMPTY_STATS: DashboardStats = { users: 0, scans: 0, leads: 0, contracts: 0 };
-const EMPTY_CHARTS = { users: [] as MonthPoint[], scans: [] as MonthPoint[], contracts: [] as MonthPoint[] };
+const EMPTY_STATS: DashboardStats = {
+  employees: 0,
+  scans: 0,
+  leads: 0,
+  contracts: 0,
+};
+const EMPTY_CHARTS = {
+  employees: [] as MonthPoint[],
+  leads: [] as MonthPoint[],
+  contracts: [] as MonthPoint[],
+};
 
 export default function DashboardHome() {
   const [userName, setUserName] = useState("User");
@@ -72,8 +81,14 @@ export default function DashboardHome() {
 
   useEffect(() => {
     Promise.all([
-      dashboard.stats().then(setStatsData).catch(() => {}),
-      dashboard.charts().then(setChartsData).catch(() => {}),
+      dashboard
+        .stats()
+        .then(setStatsData)
+        .catch(() => {}),
+      dashboard
+        .charts()
+        .then(setChartsData)
+        .catch(() => {}),
     ]).finally(() => setLoading(false));
   }, []);
 
@@ -93,7 +108,8 @@ export default function DashboardHome() {
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 320px), 1fr))",
+          gridTemplateColumns:
+            "repeat(auto-fill, minmax(min(100%, 320px), 1fr))",
           gap: "1.25rem",
           marginBottom: "1.25rem",
         }}
@@ -106,8 +122,11 @@ export default function DashboardHome() {
           </>
         ) : (
           <>
-            <BarChartCard title="Scans by Month" data={chartsData.scans} />
-            <LineChartCard title="User Growth" data={chartsData.users} />
+            <LineChartCard
+              title="Employee Growth"
+              data={chartsData.employees}
+            />
+            <BarChartCard title="Leads by Month" data={chartsData.leads} />
             <ContractsChartCard title="Contracts" data={chartsData.contracts} />
           </>
         )}

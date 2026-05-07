@@ -118,7 +118,7 @@ export default function RecentScans() {
             margin: 0,
           }}
         >
-          Recent Scans
+          Recent Leads
         </p>
         {/* <Link
           href="/dashboard/ealuminate"

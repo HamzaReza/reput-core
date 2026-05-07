@@ -6,6 +6,7 @@ from sqlalchemy.orm import selectinload
 
 from app.database import get_db
 from app.models.user import User, UserProfile
+from app.models.lead import Employee
 from app.schemas.user import UserCreate, UserOut, UserWithToken
 from app.utils.auth import create_access_token, hash_password, verify_password, get_current_user
 
@@ -46,6 +47,25 @@ async def register(payload: UserCreate, db: AsyncSession = Depends(get_db)):
 
     token = create_access_token(str(user.id))
     return UserWithToken(user=UserOut.model_validate(user_with_profile), access_token=token)
+
+
+@router.post("/register-employee", status_code=status.HTTP_201_CREATED)
+async def register_employee(payload: UserCreate, db: AsyncSession = Depends(get_db)):
+    existing = await db.execute(select(Employee).where(Employee.email == payload.email))
+    if existing.scalar_one_or_none():
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="An employee with this email already exists.",
+        )
+    emp = Employee(
+        name=payload.name or payload.email,
+        email=payload.email,
+        password_hash=hash_password(payload.password),
+    )
+    db.add(emp)
+    await db.flush()
+    await db.refresh(emp)
+    return {"id": str(emp.id), "email": emp.email}
 
 
 @router.post("/login", response_model=UserWithToken)
