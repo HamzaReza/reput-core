@@ -146,7 +146,8 @@ interface PreAnalysisProfile {
 
 const FALLBACK_PROFILE: PreAnalysisProfile = {
   identity: "No public information found for this subject.",
-  background: "Either no public information found or the context provided is not enough to generate a profile.",
+  background:
+    "Either no public information found or the context provided is not enough to generate a profile.",
   negative_findings: "No negative findings in available sources.",
   positive_presence: "No positive coverage found in available sources.",
   reputation_notes: "Insufficient data to assess reputation.",
@@ -168,6 +169,7 @@ export async function POST(req: NextRequest) {
       country,
       description,
       keywordsCap = 5,
+      keywordFocus = "all",
     } = body as {
       firstName: string;
       lastName: string;
@@ -175,6 +177,7 @@ export async function POST(req: NextRequest) {
       country: string;
       description: string;
       keywordsCap?: number;
+      keywordFocus?: string;
     };
 
     if (!firstName || !lastName || !country) {
@@ -252,7 +255,15 @@ Rules:
 - Every field in profile must be populated — never return null or empty string
 - Base every statement strictly on the search results provided — do not invent facts
 - negative_findings: if operator description mentions specific issues, prioritise those
-- keywords: exactly ${cap} items, 1-2 words each, reputation-relevant search terms, do NOT include the person's name`;
+- ${
+      {
+        negative: `keywords: exactly ${cap} items — ADVERSE reputation search terms only: legal disputes, fraud, misconduct, scandal, complaints, litigation. Surface negative coverage. Do NOT include the person's name.`,
+        positive: `keywords: exactly ${cap} items — POSITIVE reputation search terms only: achievements, awards, leadership, philanthropy, recognition. Surface positive coverage. Do NOT include the person's name.`,
+        neutral: `keywords: exactly ${cap} items — NEUTRAL factual search terms only: role, organisation, sector, projects. Objective, no sentiment bias. Do NOT include the person's name.`,
+        all: `keywords: exactly ${cap} items, 1-2 words each, balanced mix across positive, negative and neutral reputation angles. Do NOT include the person's name.`,
+      }[keywordFocus] ??
+      `keywords: exactly ${cap} items, reputation-relevant, do NOT include the person's name.`
+    }`;
 
     let profile: PreAnalysisProfile = FALLBACK_PROFILE;
     let keywords: string[] = [];
