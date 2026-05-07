@@ -10,6 +10,7 @@ export interface WebLink {
   risk: "high" | "medium" | "low" | "none";
   source: string;
   type: string;
+  date?: string;
 }
 
 interface SerperResult {
@@ -17,6 +18,7 @@ interface SerperResult {
   link: string;
   snippet: string;
   position: number;
+  date?: string;
 }
 
 interface SerperResponse {
@@ -587,6 +589,7 @@ export async function POST(req: NextRequest) {
     // ── Phase 2: Deduplicate URLs, scrape with Firecrawl in parallel ──────────
     const seenUrls = new Set<string>();
     const articles: ArticleForClassification[] = [];
+    const dateMap = new Map<string, string>();
 
     for (const results of allResults) {
       for (const r of results) {
@@ -598,6 +601,7 @@ export async function POST(req: NextRequest) {
             snippet: r.snippet,
             content: r.snippet,
           });
+          if (r.date) dateMap.set(r.link, r.date);
         }
       }
     }
@@ -624,7 +628,10 @@ export async function POST(req: NextRequest) {
       sanitizedDescription,
     );
 
-    const deduped = dedupeLinks(classified);
+    const deduped = dedupeLinks(classified).map((link) => ({
+      ...link,
+      date: dateMap.get(link.url),
+    }));
     const negative = deduped.filter((l) => l.sentiment === "negative");
     const positive = deduped.filter((l) => l.sentiment === "positive");
     const neutral = deduped.filter((l) => l.sentiment === "neutral");

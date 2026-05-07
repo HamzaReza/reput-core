@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { employeesApi } from "@/lib/api";
+import { operatorsApi } from "@/lib/api";
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -35,7 +35,7 @@ export default function SettingsPage() {
   const [error, setError]     = useState("");
 
   useEffect(() => {
-    employeesApi.me()
+    operatorsApi.me()
       .then((e) => {
         setName(e.name ?? "");
         setEmail(e.email);
@@ -49,7 +49,7 @@ export default function SettingsPage() {
     setSaved(false);
     setError("");
     try {
-      await employeesApi.updateMe({ name });
+      await operatorsApi.updateMe({ name });
       try {
         const stored = localStorage.getItem("reput_user");
         if (stored) {

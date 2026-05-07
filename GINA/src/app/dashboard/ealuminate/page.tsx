@@ -1,29 +1,66 @@
 "use client";
 
-import { leads, clientsApi, WebLink } from "@/lib/api";
+import { clientsApi, leads, WebLink } from "@/lib/api";
 import { COUNTRY_NAMES } from "@/lib/countries";
-import { Suspense, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useRef, useState } from "react";
+import { EaluminateFormPanel } from "./_components/EaluminateFormPanel";
+import { EaluminatePipelinePanel } from "./_components/EaluminatePipelinePanel";
+import { EaluminateResultsPanel } from "./_components/EaluminateResultsPanel";
+import type { KeywordFocus, PreAnalysisProfile, RiskLevel, ScanResult } from "./_components/types";
+import { exportReportMasterPdf, exportSummaryPdf } from "./_utils/pdfExports";
 
-interface MeetingSummary {
-  headline: string;
-  issues: string[];
-  talkingPoints: string[];
-}
-
-interface ScanResult {
-  links: WebLink[];
-  negative: WebLink[];
-  positive: WebLink[];
-  neutral: WebLink[];
-  summary?: MeetingSummary;
+declare global {
+  interface Window {
+    __EALU_DEBUG__?: {
+      setLoading: (value: boolean) => void;
+      setResult: (value: ScanResult | null) => void;
+      setScore: (value: number) => void;
+      setScanComplete: (value: boolean) => void;
+      setKeywordsReady: (value: boolean) => void;
+      setPreAnalysisDone: (value: boolean) => void;
+      setPreAnalysisSummary: (value: string) => void;
+      setEditableKeywords: (value: string[]) => void;
+      setError: (value: string) => void;
+      seedMockScan: () => void;
+      resetUi: () => void;
+    };
+  }
 }
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 const RESULTS_CAP_OPTIONS = [10, 20, 30, 40, 50];
 const KEYWORDS_CAP_OPTIONS = [3, 4, 5, 6, 7, 8];
 
-type RiskLevel = "Negative" | "Poor" | "Mediocre" | "Good";
+const KEYWORD_FOCUS_OPTIONS = [
+  { value: "all",      label: "All Coverage" },
+  { value: "negative", label: "Negative" },
+  { value: "neutral",  label: "Neutral" },
+  { value: "positive", label: "Positive" },
+] as const;
+
+const PIPELINE_STEPS = [
+  {
+    n: "01",
+    title: "Profile research",
+    desc: "Identity, background, and context discovery",
+  },
+  {
+    n: "02",
+    title: "Keyword preparation",
+    desc: "Search intent and query terms finalized",
+  },
+  {
+    n: "03",
+    title: "Scan and classification",
+    desc: "Sources fetched and reputation signals scored",
+  },
+  {
+    n: "04",
+    title: "Brief ready",
+    desc: "Meeting summary and talking points generated",
+  },
+] as const;
 
 const RISK_COLORS: Record<
   RiskLevel,
@@ -52,18 +89,18 @@ const RISK_COLORS: Record<
 };
 
 const STATUS_MESSAGES = [
-  "Scanning the web for mentions…",
-  "Analyzing tone and context across sources…",
-  "Weighing the impact of each result…",
-  "Almost done — building the ReputScore…",
+  "Gathering intelligence on this prospect…",
+  "Scanning public records and web presence…",
+  "Assessing reputation signals across sources…",
+  "Compiling the prospect report for your review…",
 ];
 
 const DID_YOU_KNOW = [
-  "Your online reputation influences hiring decisions, business partnerships, and financial opportunities.",
-  "83% of people search someone's name online before a first meeting.",
-  "A single negative article on page one of Google can cost you clients, deals, and trust.",
-  "Most people have no idea what the internet says about them.",
-  "ReputScore is calculated across hundreds of sources — news, blogs, public records, and more.",
+  "Researching a prospect before a pitch significantly increases your conversion rate.",
+  "Understanding a prospect's public reputation helps you anticipate objections before the meeting.",
+  "A thorough background scan lets you tailor your approach to the right angle.",
+  "EALUMINATE scans hundreds of public sources to build a complete prospect profile.",
+  "Knowing a prospect's risk profile helps you decide how to position your offering.",
 ];
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -103,8 +140,8 @@ function deriveScore(negCount: number, posCount: number): number {
 const inputStyle: React.CSSProperties = {
   width: "100%",
   padding: "0.625rem 1rem",
-  borderRadius: "0.625rem",
-  border: "1px solid var(--color-border, #e2e8f0)",
+  borderRadius: "0.25rem",
+  border: "1px solid #d1d9e0",
   backgroundColor: "#ffffff",
   color: "#1e293b",
   outline: "none",
@@ -114,9 +151,11 @@ const inputStyle: React.CSSProperties = {
 
 const labelStyle: React.CSSProperties = {
   display: "block",
-  fontSize: "0.8125rem",
-  fontWeight: 500,
-  color: "var(--color-muted, #64748b)",
+  fontSize: "0.6875rem",
+  fontWeight: 700,
+  letterSpacing: "0.12em",
+  textTransform: "uppercase",
+  color: "#64748b",
   marginBottom: "0.5rem",
 };
 
@@ -349,7 +388,7 @@ function CountryPicker({
             right: 0,
             backgroundColor: "#ffffff",
             border: "1px solid var(--color-border, #e2e8f0)",
-            borderRadius: "0.625rem",
+            borderRadius: "0.25rem",
             boxShadow: "0 8px 24px rgba(0,0,0,0.12)",
             maxHeight: "min(14rem, 40vh)",
             overflowY: "auto",
@@ -450,7 +489,7 @@ function KeywordsEditor({
         flexWrap: "wrap",
         gap: "0.5rem",
         padding: "0.5rem",
-        borderRadius: "0.625rem",
+        borderRadius: "0.25rem",
         border: "1px solid var(--color-border, #e2e8f0)",
         backgroundColor: readOnly ? "#f8fafc" : "#ffffff",
         minHeight: "3rem",
@@ -472,7 +511,7 @@ function KeywordsEditor({
             alignItems: "center",
             gap: "0.375rem",
             padding: "0.25rem 0.75rem",
-            borderRadius: "0.5rem",
+            borderRadius: "0.25rem",
             backgroundColor: readOnly ? "#94a3b8" : "#4479DA",
             color: "#fff",
             fontSize: "0.8125rem",
@@ -555,6 +594,7 @@ function EaluminatePageInner() {
   const [description, setDescription] = useState("");
   const [resultsCap, setResultsCap] = useState(20);
   const [keywordsCap, setKeywordsCap] = useState(5);
+  const [keywordFocus, setKeywordFocus] = useState<KeywordFocus>("all");
 
   const [editableKeywords, setEditableKeywords] = useState<string[]>([]);
   const [keywordsReady, setKeywordsReady] = useState(false);
@@ -562,14 +602,16 @@ function EaluminatePageInner() {
 
   const [scanComplete, setScanComplete] = useState(false);
 
-  const [employeeName, setEmployeeName] = useState("");
-  const [employeeEmail, setEmployeeEmail] = useState("");
+  const [operatorName, setOperatorName] = useState("");
+  const [operatorEmail, setOperatorEmail] = useState("");
   const [leadId, setLeadId] = useState<string | null>(null);
   const [clientId, setClientId] = useState<string | null>(null);
 
   const [preAnalysisLoading, setPreAnalysisLoading] = useState(false);
   const [preAnalysisDone, setPreAnalysisDone] = useState(false);
   const [preAnalysisSummary, setPreAnalysisSummary] = useState("");
+  const [preAnalysisProfile, setPreAnalysisProfile] =
+    useState<PreAnalysisProfile | null>(null);
 
   const [loading, setLoading] = useState(false);
   const [statusIdx, setStatusIdx] = useState(0);
@@ -619,12 +661,119 @@ function EaluminatePageInner() {
   };
 
   useEffect(() => {
+    if (process.env.NODE_ENV === "production") return;
+
+    window.__EALU_DEBUG__ = {
+      setLoading,
+      setResult,
+      setScore,
+      setScanComplete,
+      setKeywordsReady,
+      setPreAnalysisDone,
+      setPreAnalysisSummary,
+      setEditableKeywords,
+      setError,
+      seedMockScan: () => {
+        const mockLinks: WebLink[] = [
+          {
+            url: "https://example.com/news/john-doe-profile",
+            title: "Public profile and industry mentions",
+            snippet:
+              "Overview of public mentions and reputation-related context.",
+            sentiment: "neutral",
+            risk: "low",
+            source: "Example News",
+            type: "news",
+          },
+          {
+            url: "https://example.com/blog/interview",
+            title: "Interview coverage",
+            snippet:
+              "Interview article with generally positive coverage and quotes.",
+            sentiment: "positive",
+            risk: "none",
+            source: "Example Blog",
+            type: "blog",
+          },
+          {
+            url: "https://example.com/forum/thread",
+            title: "Forum thread discussion",
+            snippet:
+              "A thread containing mixed and partially critical opinions.",
+            sentiment: "negative",
+            risk: "medium",
+            source: "Example Forum",
+            type: "forum",
+          },
+        ];
+
+        const negative = mockLinks.filter(
+          (l) =>
+            l.sentiment === "negative" ||
+            l.risk === "high" ||
+            l.risk === "medium",
+        );
+        const positive = mockLinks.filter(
+          (l) =>
+            l.sentiment === "positive" ||
+            l.sentiment === "neutral" ||
+            l.risk === "low" ||
+            l.risk === "none",
+        );
+        const neutral = mockLinks.filter((l) => l.sentiment === "neutral");
+        const seededResult: ScanResult = {
+          links: mockLinks,
+          negative,
+          positive,
+          neutral,
+          summary: {
+            headline: "Mixed public footprint with manageable risk indicators.",
+            issues: [
+              "Negative forum discussion around a prior business decision.",
+            ],
+            talkingPoints: [
+              "Emphasize documented wins and transparent communication.",
+            ],
+          },
+        };
+
+        setLoading(false);
+        setError("");
+        setPreAnalysisDone(true);
+        setPreAnalysisSummary(
+          "Seeded dev summary for UI testing without API requests.",
+        );
+        setEditableKeywords(["reputation", "news coverage", "public profile"]);
+        setKeywordsReady(true);
+        setResult(seededResult);
+        setScore(deriveScore(negative.length, positive.length));
+        setScanComplete(true);
+      },
+      resetUi: () => {
+        setLoading(false);
+        setError("");
+        setResult(null);
+        setScore(0);
+        setScanComplete(false);
+        setKeywordsReady(false);
+        setPreAnalysisDone(false);
+        setPreAnalysisSummary("");
+        setEditableKeywords([]);
+      },
+    };
+
+    return () => {
+      delete window.__EALU_DEBUG__;
+    };
+  }, []);
+
+  useEffect(() => {
     try {
       const raw = localStorage.getItem("reput_user");
       if (raw) {
         const u = JSON.parse(raw);
-        setEmployeeName(u.name || u.email || "");
-        setEmployeeEmail(u.email || "");
+        setOperatorName(u.name || u.email || "");
+        setOperatorEmail(u.email || "");
       }
     } catch {}
   }, []);
@@ -632,150 +781,115 @@ function EaluminatePageInner() {
   useEffect(() => {
     const id = searchParams.get("lead");
     if (!id) return;
-    leads.get(id).then(async (lead) => {
-      const parts = (lead.name ?? "").trim().split(/\s+/);
-      setFirstName(parts[0] ?? "");
-      setLastName(parts.slice(1).join(" "));
-      setCompany(lead.company ?? "");
-      setCountry(lead.country ?? "");
-      setDescription(lead.background ?? "");
-      setLeadId(lead.id);
+    leads
+      .get(id)
+      .then(async (lead) => {
+        const parts = (lead.name ?? "").trim().split(/\s+/);
+        setFirstName(parts[0] ?? "");
+        setLastName(parts.slice(1).join(" "));
+        setCompany(lead.company ?? "");
+        setCountry(lead.country ?? "");
+        setDescription(lead.background ?? "");
+        setLeadId(lead.id);
 
-      // Resolve the corresponding client so scan events can be appended
-      try {
-        const clients = await clientsApi.list(200);
-        const match = clients.find(
-          (c) => c.name === (lead.name ?? "").trim() && c.country === (lead.country ?? ""),
-        );
-        if (match) setClientId(match.id);
-      } catch { /* non-fatal */ }
+        // Resolve the corresponding client so scan events can be appended
+        try {
+          const clients = await clientsApi.list(200);
+          const match = clients.find(
+            (c) =>
+              c.name === (lead.name ?? "").trim() &&
+              c.country === (lead.country ?? ""),
+          );
+          if (match) setClientId(match.id);
+        } catch {
+          /* non-fatal */
+        }
 
-      if (lead.keywords_suggested.length > 0 || lead.pre_analysis_summary) {
-        setEditableKeywords(lead.keywords_suggested);
-        setPreAnalysisSummary(lead.pre_analysis_summary ?? "");
-        setKeywordsReady(lead.keywords_suggested.length > 0);
-        setPreAnalysisDone(true);
-      }
+        if (lead.keywords_suggested.length > 0 || lead.pre_analysis_summary) {
+          setEditableKeywords(lead.keywords_suggested);
+          const raw = lead.pre_analysis_summary ?? "";
+          setPreAnalysisSummary(raw);
+          try {
+            const p = JSON.parse(raw) as PreAnalysisProfile;
+            if (p?.identity) setPreAnalysisProfile(p);
+          } catch {
+            /* legacy plain-text summary — profile stays null */
+          }
+          setKeywordsReady(lead.keywords_suggested.length > 0);
+          setPreAnalysisDone(true);
+        }
 
-      if (lead.links && lead.links.length > 0) {
-        const links = lead.links as WebLink[];
-        const negative = links.filter(
-          (l) => l.sentiment === "negative" || l.risk === "high" || l.risk === "medium",
-        );
-        const positive = links.filter(
-          (l) => l.sentiment === "positive" || l.risk === "low" || l.risk === "none",
-        );
-        const neutral = links.filter((l) => l.sentiment === "neutral");
-        setResult({
-          links,
-          negative,
-          positive,
-          neutral,
-          summary: lead.summary ?? undefined,
-        });
-        setUsedKeywords(lead.keywords_suggested);
-      }
+        if (lead.links && lead.links.length > 0) {
+          const links = lead.links as WebLink[];
+          const negative = links.filter(
+            (l) =>
+              l.sentiment === "negative" ||
+              l.risk === "high" ||
+              l.risk === "medium",
+          );
+          const positive = links.filter(
+            (l) =>
+              l.sentiment === "positive" ||
+              l.risk === "low" ||
+              l.risk === "none",
+          );
+          const neutral = links.filter((l) => l.sentiment === "neutral");
+          setResult({
+            links,
+            negative,
+            positive,
+            neutral,
+            summary: lead.summary ?? undefined,
+          });
+          setUsedKeywords(lead.keywords_suggested);
+        }
 
-      if (lead.score !== null) {
-        setScore(lead.score);
-        setScanComplete(true);
-      }
-    }).catch(() => {});
+        if (lead.score !== null) {
+          setScore(lead.score);
+          setScanComplete(true);
+        }
+      })
+      .catch(() => {});
   }, [searchParams]);
 
   const fullName = `${firstName.trim()} ${lastName.trim()}`.trim();
 
   const handleExportSummaryPdf = () => {
-    const win = window.open("", "_blank");
-    if (!win) return;
-    const escapeHtml = (value: string) =>
-      value
-        .replaceAll("&", "&amp;")
-        .replaceAll("<", "&lt;")
-        .replaceAll(">", "&gt;")
-        .replaceAll('"', "&quot;")
-        .replaceAll("'", "&#39;");
+    exportSummaryPdf({
+      fullName,
+      company,
+      country,
+      operatorName,
+      score,
+      result,
+    });
+  };
 
-    const researchSummaryText =
-      preAnalysisSummary?.trim() ||
-      "No research summary was generated for this lead.";
-    const keywordsHtml =
-      editableKeywords.length > 0
-        ? `<ul>${editableKeywords
-            .map((kw) => `<li>${escapeHtml(kw)}</li>`)
-            .join("")}</ul>`
-        : `<p>No keywords were generated.</p>`;
-
-    const meetingBriefHtml = result?.summary
-      ? `
-        <p><strong>Headline:</strong> ${escapeHtml(result.summary.headline)}</p>
-        ${
-          result.summary.issues.length > 0
-            ? `<h3>Issues</h3><ul>${result.summary.issues
-                .map((issue) => `<li>${escapeHtml(issue)}</li>`)
-                .join("")}</ul>`
-            : ""
-        }
-        ${
-          result.summary.talkingPoints.length > 0
-            ? `<h3>Talking Points</h3><ul>${result.summary.talkingPoints
-                .map((point) => `<li>${escapeHtml(point)}</li>`)
-                .join("")}</ul>`
-            : ""
-        }
-      `
-      : `<p>No meeting brief available yet. Run scan to generate it.</p>`;
-
-    const linksHtml =
-      result?.links && result.links.length > 0
-        ? `<ul>${result.links
-            .map(
-              (link) =>
-                `<li>
-                  <a href="${escapeHtml(link.url)}" target="_blank" rel="noreferrer">${escapeHtml(link.title || link.url)}</a>
-                  <div class="url">${escapeHtml(link.url)}</div>
-                </li>`,
-            )
-            .join("")}</ul>`
-        : `<p>No links available yet. Run scan to fetch sources.</p>`;
-
-    win.document.write(`<!DOCTYPE html><html><head>
-<meta charset="utf-8"/>
-<title>Research Export — ${fullName}</title>
-<style>
-  body { font-family: Georgia, serif; max-width: 720px; margin: 40px auto; color: #1e293b; line-height: 1.7; }
-  h1 { font-size: 1.5rem; margin-bottom: 0.25rem; }
-  .meta { color: #64748b; font-size: 0.9rem; margin-bottom: 2rem; }
-  h2 { font-size: 1rem; font-weight: 700; margin: 2rem 0 0.5rem; color: #334155; border-bottom: 1px solid #e2e8f0; padding-bottom: 0.25rem; }
-  h3 { font-size: 0.9rem; font-weight: 700; margin: 1rem 0 0.35rem; color: #475569; }
-  p { margin: 0 0 1rem; font-size: 0.975rem; }
-  ul { padding-left: 1.25rem; margin: 0; }
-  li { margin-bottom: 0.75rem; font-size: 0.9rem; }
-  a { color: #4479da; text-decoration: none; }
-  .url { color: #94a3b8; font-size: 0.8rem; }
-  .footer { margin-top: 3rem; font-size: 0.75rem; color: #94a3b8; border-top: 1px solid #e2e8f0; padding-top: 0.75rem; }
-  @media print { body { margin: 20px; } }
-</style>
-</head><body>
-<h1>Research Export</h1>
-<p class="meta">${escapeHtml(fullName)}${company ? ` · ${escapeHtml(company)}` : ""}${country ? ` · ${escapeHtml(country)}` : ""}</p>
-<h2>Research Summary</h2>
-<p>${escapeHtml(researchSummaryText)}</p>
-<h2>Keywords</h2>
-${keywordsHtml}
-<h2>Meeting Brief</h2>
-${meetingBriefHtml}
-<h2>Links</h2>
-${linksHtml}
-<div class="footer">Generated by Ealuminate · ${new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })}</div>
-</body></html>`);
-    win.document.close();
-    win.focus();
-    setTimeout(() => win.print(), 400);
+  const handleExportReportMaster = () => {
+    exportReportMasterPdf({
+      fullName,
+      company,
+      country,
+      operatorName,
+      preAnalysisProfile,
+      preAnalysisSummary,
+      editableKeywords,
+    });
   };
 
   const handleDescriptionChange = (val: string) => {
     setDescription(val);
+    if (keywordsReady || preAnalysisDone) {
+      setKeywordsReady(false);
+      setEditableKeywords([]);
+      setPreAnalysisDone(false);
+      setPreAnalysisSummary("");
+      setLeadId(null);
+    }
+  };
+
+  const handleFocusChange = (f: KeywordFocus) => {
+    setKeywordFocus(f);
     if (keywordsReady || preAnalysisDone) {
       setKeywordsReady(false);
       setEditableKeywords([]);
@@ -816,6 +930,7 @@ ${linksHtml}
           country,
           description: description.trim(),
           keywordsCap,
+          keywordFocus,
         }),
       });
       const data = await res.json();
@@ -823,7 +938,9 @@ ${linksHtml}
         setError(data.error ?? "Research failed. Please try again.");
         return;
       }
-      setPreAnalysisSummary(data.summary ?? "");
+      const profile = data.profile as PreAnalysisProfile | undefined;
+      setPreAnalysisProfile(profile ?? null);
+      setPreAnalysisSummary(profile ? JSON.stringify(profile) : "");
       setEditableKeywords(data.keywords ?? []);
       setKeywordsReady(true);
       setPreAnalysisDone(true);
@@ -835,7 +952,7 @@ ${linksHtml}
           company: company.trim() || undefined,
           country,
           background: description.trim(),
-          pre_analysis_summary: data.summary || undefined,
+          pre_analysis_summary: profile ? JSON.stringify(profile) : undefined,
           keywords_suggested: data.keywords ?? [],
         });
         if (ld.id) setLeadId(ld.id);
@@ -846,7 +963,7 @@ ${linksHtml}
           company: company.trim() || undefined,
           event_type: "research",
           event_data: {
-            summary: data.summary ?? "",
+            profile: profile ?? {},
             keywords: data.keywords ?? [],
             background: description.trim(),
             lead_id: ld.id,
@@ -897,10 +1014,24 @@ ${linksHtml}
       }
 
       const scanResult = data as ScanResult;
-      const finalScore = typeof data.score === "number" ? data.score : deriveScore(
-        scanResult.links.filter((l) => l.sentiment === "negative" || l.risk === "high" || l.risk === "medium").length,
-        scanResult.links.filter((l) => l.sentiment === "positive" || l.sentiment === "neutral" || l.risk === "low" || l.risk === "none").length,
-      );
+      const finalScore =
+        typeof data.score === "number"
+          ? data.score
+          : deriveScore(
+              scanResult.links.filter(
+                (l) =>
+                  l.sentiment === "negative" ||
+                  l.risk === "high" ||
+                  l.risk === "medium",
+              ).length,
+              scanResult.links.filter(
+                (l) =>
+                  l.sentiment === "positive" ||
+                  l.sentiment === "neutral" ||
+                  l.risk === "low" ||
+                  l.risk === "none",
+              ).length,
+            );
       setScore(finalScore);
       setResult(scanResult);
       setScanComplete(true);
@@ -948,26 +1079,34 @@ ${linksHtml}
 
   const allLinks = result?.links ?? [];
 
+  // 0=idle, 1=researching, 2=research done, 3=scan running, 4=scan complete
+  const pipelineStep = result
+    ? 4
+    : loading
+      ? 3
+      : keywordsReady
+        ? 2
+        : preAnalysisLoading
+          ? 1
+          : 0;
+
   return (
     <div
+      className="eal-page"
       style={{
         width: "100%",
-        padding: "clamp(1rem, 4vw, 2rem)",
+        padding: "clamp(0.5rem, 1.5vw, 1rem)",
         boxSizing: "border-box",
       }}
     >
       <style>{`
-        @keyframes repu-blob-morph {
-          0%   { border-radius: 44% 56% 53% 47% / 50% 46% 54% 50%; transform: rotate(0deg); }
-          20%  { border-radius: 57% 43% 44% 56% / 55% 53% 47% 45%; transform: rotate(72deg); }
-          40%  { border-radius: 46% 54% 60% 40% / 42% 58% 46% 54%; transform: rotate(144deg); }
-          60%  { border-radius: 60% 40% 46% 54% / 54% 44% 56% 46%; transform: rotate(216deg); }
-          80%  { border-radius: 50% 50% 55% 45% / 48% 52% 44% 56%; transform: rotate(288deg); }
-          100% { border-radius: 44% 56% 53% 47% / 50% 46% 54% 50%; transform: rotate(360deg); }
+        @keyframes repu-logo-spin {
+          from { transform: rotate(0deg); }
+          to   { transform: rotate(360deg); }
         }
-        @keyframes reput-aura-breathe {
-          0%, 100% { opacity: 0.55; transform: scale(1); }
-          50%      { opacity: 0.85; transform: scale(1.12); }
+        @keyframes repu-ring-pulse {
+          0%   { transform: scale(1);    opacity: 0.6; }
+          100% { transform: scale(2.8);  opacity: 0; }
         }
         @keyframes reput-label-breathe {
           0%, 100% { opacity: 0.4; }
@@ -978,969 +1117,92 @@ ${linksHtml}
           grid-template-columns: 1fr 1fr;
           gap: 1rem;
         }
+        .eal-card-body {
+          display: flex;
+          gap: 2rem;
+          align-items: flex-start;
+        }
+        .eal-page .glow-button {
+          border-radius: 0.25rem !important;
+        }
+        .eal-pipeline {
+          width: 18.5rem;
+          flex-shrink: 0;
+        }
         @media (max-width: 480px) {
           .lead-name-grid { grid-template-columns: 1fr; }
         }
+        @media (max-width: 768px) {
+          .eal-card-body { flex-direction: column; }
+          .eal-pipeline { width: 100% !important; }
+        }
       `}</style>
 
-      <div style={{ maxWidth: "52rem", margin: "0 auto" }}>
-        {/* ── Form card ── */}
-        <div
-          className="glass glow-border"
-          style={{
-            borderRadius: "0.875rem",
-            padding: "clamp(1.25rem, 4vw, 2rem)",
-            marginBottom: "2rem",
-          }}
-        >
-          <h1
-            style={{
-              margin: "0 0 0.375rem",
-              fontSize: "1.375rem",
-              fontWeight: 700,
-              color: "var(--color-foreground, #1e293b)",
-            }}
-          >
-            Reputation Scan
-          </h1>
-          <p
-            style={{
-              margin: "0 0 1.25rem",
-              fontSize: "0.9375rem",
-              color: "var(--color-muted, #64748b)",
-            }}
-          >
-            Enter the prospect&apos;s details to generate a reputation report.
-          </p>
+      <div style={{ maxWidth: "100rem", margin: "0 auto" }}>
+        <EaluminateFormPanel
+          scanComplete={scanComplete}
+          preAnalysisDone={preAnalysisDone}
+          preAnalysisLoading={preAnalysisLoading}
+          error={error}
+          firstName={firstName}
+          setFirstName={setFirstName}
+          lastName={lastName}
+          setLastName={setLastName}
+          company={company}
+          setCompany={setCompany}
+          country={country}
+          setCountry={setCountry}
+          description={description}
+          keywordsCap={keywordsCap}
+          setKeywordsCap={setKeywordsCap}
+          keywordFocus={keywordFocus}
+          handleDescriptionChange={handleDescriptionChange}
+          handleFocusChange={handleFocusChange}
+          handleResearch={handleResearch}
+          preAnalysisProfile={preAnalysisProfile}
+          preAnalysisSummary={preAnalysisSummary}
+          onExportReportMaster={handleExportReportMaster}
+          keywordsReady={keywordsReady}
+          editableKeywords={editableKeywords}
+          setEditableKeywords={setEditableKeywords}
+          resultsCap={resultsCap}
+          setResultsCap={setResultsCap}
+          handleRunScan={handleRunScan}
+          loading={loading}
+          CountryPicker={CountryPicker}
+          KeywordsEditor={KeywordsEditor}
+          Spinner={Spinner}
+          inputStyle={inputStyle}
+          labelStyle={labelStyle}
+          keywordsCapOptions={KEYWORDS_CAP_OPTIONS}
+          keywordFocusOptions={KEYWORD_FOCUS_OPTIONS}
+          resultsCapOptions={RESULTS_CAP_OPTIONS}
+          pipeline={
+            <EaluminatePipelinePanel
+              pipelineStep={pipelineStep}
+              steps={PIPELINE_STEPS}
+            />
+          }
+        />
 
-          {scanComplete && (
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "0.625rem",
-                padding: "0.75rem 1rem",
-                borderRadius: "0.625rem",
-                backgroundColor: "rgba(72,212,184,0.1)",
-                border: "1px solid rgba(72,212,184,0.35)",
-                marginBottom: "1.25rem",
-              }}
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#48D4B8" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <polyline points="20 6 9 17 4 12" />
-              </svg>
-              <p style={{ margin: 0, fontSize: "0.875rem", fontWeight: 600, color: "#48D4B8" }}>
-                Scan Complete — this lead has already been scanned. Fields are read-only.
-              </p>
-            </div>
-          )}
-
-          <div
-            style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}
-          >
-            {/* First / Last Name */}
-            <div className="lead-name-grid">
-              <div>
-                <label style={labelStyle}>First Name *</label>
-                <input
-                  type="text"
-                  value={firstName}
-                  onChange={(e) => !scanComplete && setFirstName(e.target.value)}
-                  placeholder="e.g. John"
-                  required
-                  readOnly={scanComplete}
-                  style={{ ...inputStyle, backgroundColor: scanComplete ? "#f8fafc" : "#ffffff" }}
-                />
-              </div>
-              <div>
-                <label style={labelStyle}>Last Name *</label>
-                <input
-                  type="text"
-                  value={lastName}
-                  onChange={(e) => !scanComplete && setLastName(e.target.value)}
-                  placeholder="e.g. Smith"
-                  required
-                  readOnly={scanComplete}
-                  style={{ ...inputStyle, backgroundColor: scanComplete ? "#f8fafc" : "#ffffff" }}
-                />
-              </div>
-            </div>
-
-            {/* Company */}
-            <div>
-              <label style={labelStyle}>Company</label>
-              <input
-                type="text"
-                value={company}
-                onChange={(e) => !scanComplete && setCompany(e.target.value)}
-                placeholder="e.g. Acme Corp (optional)"
-                readOnly={scanComplete}
-                style={{ ...inputStyle, backgroundColor: scanComplete ? "#f8fafc" : "#ffffff" }}
-              />
-            </div>
-
-            {/* Country */}
-            <div>
-              <label style={labelStyle}>Country *</label>
-              {scanComplete ? (
-                <input
-                  type="text"
-                  value={country}
-                  readOnly
-                  style={{ ...inputStyle, backgroundColor: "#f8fafc" }}
-                />
-              ) : (
-                <CountryPicker value={country} onChange={setCountry} required />
-              )}
-            </div>
-
-            {/* Description */}
-            <div>
-              <label style={labelStyle}>Background &amp; Context *</label>
-              <textarea
-                value={description}
-                onChange={(e) => !scanComplete && handleDescriptionChange(e.target.value)}
-                placeholder="Describe the subject's background, industry, role, known controversies, associations, or any context that may be relevant to the scan…"
-                rows={4}
-                required
-                readOnly={scanComplete}
-                style={{
-                  ...inputStyle,
-                  resize: scanComplete ? "none" : "vertical",
-                  lineHeight: 1.6,
-                  minHeight: "6rem",
-                  backgroundColor: scanComplete ? "#f8fafc" : "#ffffff",
-                }}
-              />
-            </div>
-
-            {/* Number of Keywords */}
-            <div>
-              <label style={labelStyle}>Number of Keywords</label>
-              <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-                {KEYWORDS_CAP_OPTIONS.map((n) => (
-                  <button
-                    key={n}
-                    type="button"
-                    disabled={scanComplete}
-                    onClick={() => setKeywordsCap(n)}
-                    style={{
-                      padding: "0.4rem 1rem",
-                      borderRadius: "0.5rem",
-                      fontSize: "0.875rem",
-                      fontWeight: 500,
-                      cursor: scanComplete ? "default" : "pointer",
-                      transition: "all 0.15s",
-                      border: "1.5px solid",
-                      borderColor:
-                        keywordsCap === n
-                          ? "#4479DA"
-                          : "var(--color-border, #e2e8f0)",
-                      backgroundColor:
-                        keywordsCap === n ? "#eef3ff" : "#ffffff",
-                      color:
-                        keywordsCap === n
-                          ? "#4479DA"
-                          : "var(--color-muted, #64748b)",
-                      opacity: scanComplete ? 0.6 : 1,
-                    }}
-                  >
-                    {n}
-                  </button>
-                ))}
-              </div>
-              <p
-                style={{
-                  margin: "0.375rem 0 0",
-                  fontSize: "0.75rem",
-                  color: "#94a3b8",
-                }}
-              >
-                Number of keywords EALUMINATE generates from the description
-              </p>
-            </div>
-
-            {error && (
-              <p style={{ margin: 0, fontSize: "0.875rem", color: "#ef4444" }}>
-                {error}
-              </p>
-            )}
-
-            {/* Research button */}
-            <button
-              type="button"
-              disabled={preAnalysisLoading || scanComplete}
-              onClick={handleResearch}
-              className="glow-button"
-              style={{
-                width: "100%",
-                padding: "0.75rem",
-                fontWeight: 700,
-                borderRadius: "0.625rem",
-                opacity: preAnalysisLoading || scanComplete ? 0.5 : 1,
-                cursor: scanComplete ? "default" : "pointer",
-              }}
-            >
-              {preAnalysisLoading ? (
-                <>
-                  <Spinner />
-                  Researching…
-                </>
-              ) : preAnalysisDone ? (
-                "Re-Research"
-              ) : (
-                "Research"
-              )}
-            </button>
-
-            {/* Pre-analysis summary card */}
-            {preAnalysisDone && (
-              <div
-                className="glass glow-border"
-                style={{
-                  borderRadius: "0.875rem",
-                  padding: "1.25rem",
-                }}
-              >
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    marginBottom: "0.625rem",
-                  }}
-                >
-                  <p
-                    style={{
-                      fontSize: "0.875rem",
-                      fontWeight: 700,
-                      margin: 0,
-                      color: "var(--color-foreground, #1e293b)",
-                    }}
-                  >
-                    Research Summary
-                  </p>
-                </div>
-                <p
-                  style={{
-                    fontSize: "0.8125rem",
-                    color: "var(--color-muted, #64748b)",
-                    lineHeight: 1.65,
-                    margin: 0,
-                  }}
-                >
-                  {preAnalysisSummary}
-                </p>
-              </div>
-            )}
-
-            {/* Keyword editor + Results Cap + Run Scan */}
-            {keywordsReady && (
-              <>
-                <div>
-                  <label style={labelStyle}>
-                    Keywords — edit or add your own
-                  </label>
-                  <KeywordsEditor
-                    keywords={editableKeywords}
-                    setKeywords={setEditableKeywords}
-                    readOnly={scanComplete}
-                  />
-                </div>
-
-                <div>
-                  <label style={labelStyle}>Results Cap</label>
-                  <div
-                    style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}
-                  >
-                    {RESULTS_CAP_OPTIONS.map((cap) => (
-                      <button
-                        key={cap}
-                        type="button"
-                        disabled={scanComplete}
-                        onClick={() => setResultsCap(cap)}
-                        style={{
-                          padding: "0.4rem 1rem",
-                          borderRadius: "0.5rem",
-                          fontSize: "0.875rem",
-                          fontWeight: 500,
-                          cursor: scanComplete ? "default" : "pointer",
-                          transition: "all 0.15s",
-                          border: "1.5px solid",
-                          borderColor:
-                            resultsCap === cap
-                              ? "#4479DA"
-                              : "var(--color-border, #e2e8f0)",
-                          backgroundColor:
-                            resultsCap === cap ? "#eef3ff" : "#ffffff",
-                          color:
-                            resultsCap === cap
-                              ? "#4479DA"
-                              : "var(--color-muted, #64748b)",
-                          opacity: scanComplete ? 0.6 : 1,
-                        }}
-                      >
-                        {cap}
-                      </button>
-                    ))}
-                  </div>
-                  <p
-                    style={{
-                      margin: "0.375rem 0 0",
-                      fontSize: "0.75rem",
-                      color: "#94a3b8",
-                    }}
-                  >
-                    Results fetched and analysed per keyword
-                  </p>
-                </div>
-
-                <button
-                  type="button"
-                  disabled={loading || editableKeywords.length === 0 || scanComplete}
-                  onClick={handleRunScan}
-                  className="glow-button"
-                  style={{
-                    width: "100%",
-                    padding: "0.75rem",
-                    fontWeight: 700,
-                    borderRadius: "0.625rem",
-                    opacity: loading || editableKeywords.length === 0 || scanComplete ? 0.5 : 1,
-                    cursor: scanComplete ? "default" : "pointer",
-                  }}
-                >
-                  {loading ? (
-                    <>
-                      <Spinner />
-                      Scanning…
-                    </>
-                  ) : (
-                    "Run Scan"
-                  )}
-                </button>
-              </>
-            )}
-          </div>
-        </div>
-
-        {/* ── Results ── */}
-        <div
-          className={`animate-scale-in${loading || result ? " glass glow-border" : ""}`}
-          style={{
-            borderRadius: "0.875rem",
-            padding: "2.5rem 2rem",
-            textAlign: "center",
-            minHeight: loading || result ? "24rem" : 0,
-            display: loading || result ? "flex" : "none",
-            flexDirection: "column",
-            alignItems: "center",
-            justifyContent: "flex-start",
-          }}
-        >
-          {/* Loading */}
-          {loading && (
-            <div
-              className="animate-fade-in"
-              style={{
-                display: "flex",
-                flexDirection: "column",
-                alignItems: "center",
-                gap: "2rem",
-                width: "100%",
-                maxWidth: "22rem",
-              }}
-            >
-              <div
-                style={{
-                  position: "relative",
-                  width: "160px",
-                  height: "160px",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                }}
-              >
-                <div
-                  style={{
-                    position: "absolute",
-                    width: "160px",
-                    height: "160px",
-                    borderRadius: "50%",
-                    background:
-                      "radial-gradient(ellipse at center, rgba(68,121,218,0.28) 0%, rgba(72,212,184,0.14) 45%, transparent 70%)",
-                    filter: "blur(22px)",
-                    animation: "reput-aura-breathe 3.5s ease-in-out infinite",
-                  }}
-                />
-                <div
-                  style={{
-                    width: "100px",
-                    height: "100px",
-                    borderRadius: "44% 56% 53% 47% / 50% 46% 54% 50%",
-                    background:
-                      "linear-gradient(135deg, #48D4B8 0%, #4479DA 100%)",
-                    boxShadow:
-                      "0 0 40px rgba(68,121,218,0.5), 0 0 80px rgba(72,212,184,0.25), inset 0 0 30px rgba(72,212,184,0.2)",
-                    animation: "repu-blob-morph 3s linear infinite",
-                    position: "relative",
-                    zIndex: 1,
-                  }}
-                >
-                  <div
-                    style={{
-                      position: "absolute",
-                      top: "14%",
-                      left: "18%",
-                      width: "32%",
-                      height: "22%",
-                      borderRadius: "50%",
-                      background: "rgba(255,255,255,0.18)",
-                      filter: "blur(5px)",
-                    }}
-                  />
-                </div>
-              </div>
-
-              <p
-                style={{
-                  fontSize: "0.7rem",
-                  fontWeight: 500,
-                  color: "var(--color-muted)",
-                  letterSpacing: "0.14em",
-                  textTransform: "uppercase",
-                  animation: "reput-label-breathe 3s ease-in-out infinite",
-                }}
-              >
-                We&apos;re calculating the ReputScore
-              </p>
-
-              <p
-                style={{
-                  fontSize: "0.65rem",
-                  fontWeight: 400,
-                  color: "#9ca3af",
-                  letterSpacing: "0.12em",
-                  textTransform: "uppercase",
-                  opacity: statusVisible ? 1 : 0,
-                  transition: "opacity 0.5s ease",
-                  minHeight: "1.2em",
-                  textAlign: "center",
-                  margin: 0,
-                  willChange: "opacity",
-                }}
-              >
-                {STATUS_MESSAGES[statusIdx]}
-              </p>
-
-              <div
-                style={{
-                  background: "#fff",
-                  border: "1px solid #e5e7eb",
-                  borderRadius: "0.75rem",
-                  padding: "1rem 1.25rem",
-                  width: "100%",
-                  textAlign: "left",
-                }}
-              >
-                <div
-                  style={{
-                    fontSize: "0.6rem",
-                    fontWeight: 700,
-                    letterSpacing: "0.12em",
-                    color: "#6b7280",
-                    marginBottom: "0.5rem",
-                  }}
-                >
-                  💡 DID YOU KNOW?
-                </div>
-                <p
-                  style={{
-                    fontSize: "0.78rem",
-                    color: "#374151",
-                    lineHeight: 1.6,
-                    margin: 0,
-                    opacity: tipVisible ? 1 : 0,
-                    transition: "opacity 0.5s ease",
-                    minHeight: "3em",
-                    willChange: "opacity",
-                  }}
-                >
-                  {DID_YOU_KNOW[tipIdx]}
-                </p>
-              </div>
-            </div>
-          )}
-
-          {/* Loaded */}
-          {!loading && result && (
-            <div
-              className="animate-fade-up"
-              style={{ width: "100%", textAlign: "center" }}
-            >
-              <h2
-                style={{
-                  fontSize: "1.5rem",
-                  fontWeight: 800,
-                  color: "var(--color-foreground)",
-                  letterSpacing: "0.08em",
-                  marginBottom: "2rem",
-                  textTransform: "uppercase",
-                }}
-              >
-                {fullName}
-              </h2>
-
-              <RepuGauge score={score} />
-
-              <div
-                style={{
-                  display: "inline-block",
-                  marginTop: "-3.25rem",
-                  position: "relative",
-                  zIndex: 1,
-                  padding: "0.625rem 2rem",
-                  borderRadius: "0.625rem",
-                  backgroundColor: "var(--color-surface, #fff)",
-                  border: "1px solid var(--color-border)",
-                }}
-              >
-                <p
-                  style={{
-                    fontSize: "2.5rem",
-                    fontWeight: 800,
-                    color: scoreLabel(score).color,
-                    lineHeight: 1,
-                    marginBottom: "0.25rem",
-                  }}
-                >
-                  {score}
-                </p>
-                <p
-                  style={{
-                    fontSize: "0.75rem",
-                    fontWeight: 700,
-                    letterSpacing: "0.12em",
-                    color: scoreLabel(score).color,
-                    textTransform: "uppercase",
-                  }}
-                >
-                  {scoreLabel(score).label}
-                </p>
-              </div>
-
-              {usedKeywords.length > 0 && (
-                <div style={{ marginTop: "1.25rem", textAlign: "left" }}>
-                  <p
-                    style={{
-                      fontSize: "0.6875rem",
-                      fontWeight: 700,
-                      letterSpacing: "0.1em",
-                      textTransform: "uppercase",
-                      color: "#94a3b8",
-                      marginBottom: "0.5rem",
-                    }}
-                  >
-                    Keywords Used
-                  </p>
-                  <div
-                    style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}
-                  >
-                    {usedKeywords.map((kw) => (
-                      <span
-                        key={kw}
-                        style={{
-                          padding: "0.25rem 0.75rem",
-                          borderRadius: "0.5rem",
-                          backgroundColor: "rgba(68,121,218,0.08)",
-                          border: "1px solid rgba(68,121,218,0.2)",
-                          color: "#4479DA",
-                          fontSize: "0.8125rem",
-                          fontWeight: 500,
-                        }}
-                      >
-                        {kw}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {result.summary && (
-                <div
-                  style={{
-                    marginTop: "1.25rem",
-                    borderRadius: "0.75rem",
-                    border: "1px solid #e2e8f0",
-                    backgroundColor: "#f8fafc",
-                    textAlign: "left",
-                    overflow: "hidden",
-                  }}
-                >
-                  <div
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "0.5rem",
-                      padding: "0.75rem 1rem",
-                      borderBottom: "1px solid #e2e8f0",
-                      backgroundColor: "#f1f5f9",
-                    }}
-                  >
-                    <span
-                      style={{
-                        fontSize: "0.625rem",
-                        fontWeight: 700,
-                        letterSpacing: "0.1em",
-                        textTransform: "uppercase",
-                        color: "#64748b",
-                      }}
-                    >
-                      Internal · Meeting Brief
-                    </span>
-                  </div>
-                  <div style={{ padding: "1rem" }}>
-                    <p
-                      style={{
-                        fontSize: "0.9375rem",
-                        fontWeight: 700,
-                        color: "#1e293b",
-                        margin: "0 0 0.875rem",
-                      }}
-                    >
-                      {result.summary.headline}
-                    </p>
-                    <div style={{ marginBottom: "0.875rem" }}>
-                      <p
-                        style={{
-                          fontSize: "0.6875rem",
-                          fontWeight: 700,
-                          letterSpacing: "0.1em",
-                          textTransform: "uppercase",
-                          color: "#94a3b8",
-                          marginBottom: "0.375rem",
-                        }}
-                      >
-                        Key Points
-                      </p>
-                      <ul
-                        style={{
-                          margin: 0,
-                          paddingLeft: "1.1rem",
-                          display: "flex",
-                          flexDirection: "column",
-                          gap: "0.25rem",
-                        }}
-                      >
-                        {result.summary.issues.map((issue, i) => (
-                          <li
-                            key={i}
-                            style={{
-                              fontSize: "0.8125rem",
-                              color: "#475569",
-                              lineHeight: 1.5,
-                            }}
-                          >
-                            {issue}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                    <div>
-                      <p
-                        style={{
-                          fontSize: "0.6875rem",
-                          fontWeight: 700,
-                          letterSpacing: "0.1em",
-                          textTransform: "uppercase",
-                          color: "#94a3b8",
-                          marginBottom: "0.375rem",
-                        }}
-                      >
-                        Meeting Angles
-                      </p>
-                      <ol
-                        style={{
-                          margin: 0,
-                          paddingLeft: "1.1rem",
-                          display: "flex",
-                          flexDirection: "column",
-                          gap: "0.25rem",
-                        }}
-                      >
-                        {result.summary.talkingPoints.map((point, i) => (
-                          <li
-                            key={i}
-                            style={{
-                              fontSize: "0.8125rem",
-                              color: "#475569",
-                              lineHeight: 1.5,
-                            }}
-                          >
-                            {point}
-                          </li>
-                        ))}
-                      </ol>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {allLinks.length === 0 && (
-                <div
-                  style={{
-                    marginTop: "1.5rem",
-                    padding: "1.5rem",
-                    borderRadius: "0.75rem",
-                    border: "1px solid var(--color-border)",
-                    textAlign: "center",
-                    color: "var(--color-muted)",
-                  }}
-                >
-                  No results found.
-                </div>
-              )}
-
-              {allLinks.length > 0 && (
-                <div
-                  style={{
-                    marginTop: "1.5rem",
-                    textAlign: "left",
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: "0.75rem",
-                  }}
-                >
-                  {allLinks.map((item, i) => {
-                    const uiRisk = apiRiskToUi(item.risk);
-                    const risk = RISK_COLORS[uiRisk];
-                    const domain = (() => {
-                      try {
-                        return new URL(item.url).hostname.replace("www.", "");
-                      } catch {
-                        return item.source ?? "";
-                      }
-                    })();
-                    const isExpanded = expandedLinkIndex === String(i);
-                    return (
-                      <div
-                        key={item.url}
-                        style={{
-                          display: "flex",
-                          borderRadius: "0.75rem",
-                          overflow: "hidden",
-                          border: `1px solid ${risk.border}`,
-                          background: `linear-gradient(135deg, ${risk.bg} 0%, rgba(255,255,255,0) 60%)`,
-                          boxShadow: `inset 0 0 0 0.5px ${risk.border}, 0 1px 4px rgba(0,0,0,0.06)`,
-                          cursor: "pointer",
-                        }}
-                        onClick={() =>
-                          setExpandedLinkIndex(isExpanded ? null : String(i))
-                        }
-                      >
-                        <div
-                          style={{
-                            width: "2px",
-                            flexShrink: 0,
-                            background: `linear-gradient(180deg, ${risk.color} 0%, transparent 100%)`,
-                          }}
-                        />
-                        <div
-                          style={{
-                            flex: 1,
-                            padding: "0.9rem 1rem 0.85rem",
-                            minWidth: 0,
-                          }}
-                        >
-                          <div
-                            style={{
-                              display: "flex",
-                              alignItems: "center",
-                              justifyContent: "space-between",
-                              gap: "0.4rem",
-                              marginBottom: "0.45rem",
-                              flexWrap: "wrap",
-                              rowGap: "0.3rem",
-                            }}
-                          >
-                            <span
-                              style={{
-                                fontFamily: "ui-monospace,'SF Mono',monospace",
-                                fontSize: "0.65rem",
-                                fontWeight: 600,
-                                color: "var(--color-muted)",
-                                background: "rgba(0,0,0,0.04)",
-                                padding: "0.1rem 0.45rem",
-                                borderRadius: "4px",
-                                border: "1px solid var(--color-border)",
-                                overflow: "hidden",
-                                textOverflow: "ellipsis",
-                                whiteSpace: "nowrap",
-                                minWidth: 0,
-                                maxWidth: "60%",
-                              }}
-                            >
-                              {domain}
-                            </span>
-                            <div
-                              style={{
-                                display: "flex",
-                                alignItems: "center",
-                                gap: "0.4rem",
-                                flexShrink: 0,
-                              }}
-                            >
-                              <span
-                                style={{
-                                  fontFamily:
-                                    "ui-monospace,'SF Mono',monospace",
-                                  fontSize: "0.6rem",
-                                  fontWeight: 800,
-                                  letterSpacing: "0.1em",
-                                  textTransform: "uppercase",
-                                  padding: "0.2rem 0.55rem",
-                                  borderRadius: "4px",
-                                  backgroundColor: risk.bg,
-                                  color: risk.color,
-                                  border: `1px solid ${risk.border}`,
-                                  whiteSpace: "nowrap",
-                                }}
-                              >
-                                ▲ {uiRisk}
-                              </span>
-                              <svg
-                                width="12"
-                                height="12"
-                                viewBox="0 0 24 24"
-                                fill="none"
-                                stroke="currentColor"
-                                strokeWidth="2.5"
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                style={{
-                                  color: "var(--color-muted)",
-                                  transform: isExpanded
-                                    ? "rotate(180deg)"
-                                    : "rotate(0deg)",
-                                  transition: "transform 0.2s ease",
-                                  flexShrink: 0,
-                                }}
-                              >
-                                <path d="M6 9l6 6 6-6" />
-                              </svg>
-                            </div>
-                          </div>
-                          <div
-                            style={{
-                              display: "flex",
-                              alignItems: "flex-start",
-                              justifyContent: "space-between",
-                              gap: "0.5rem",
-                            }}
-                          >
-                            <p
-                              style={{
-                                fontSize: "0.875rem",
-                                fontWeight: 700,
-                                color: "var(--color-foreground)",
-                                lineHeight: 1.35,
-                                margin: 0,
-                                letterSpacing: "-0.01em",
-                              }}
-                            >
-                              {item.title}
-                            </p>
-                            <a
-                              href={item.url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              onClick={(e) => e.stopPropagation()}
-                              style={{
-                                flexShrink: 0,
-                                color: "var(--color-muted)",
-                                marginTop: "0.1rem",
-                              }}
-                            >
-                              <svg
-                                width="11"
-                                height="11"
-                                viewBox="0 0 24 24"
-                                fill="none"
-                                stroke="currentColor"
-                                strokeWidth="2.5"
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                              >
-                                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
-                                <polyline points="15 3 21 3 21 9" />
-                                <line x1="10" y1="14" x2="21" y2="3" />
-                              </svg>
-                            </a>
-                          </div>
-                          {isExpanded && (
-                            <>
-                              <div
-                                style={{
-                                  height: "1px",
-                                  background: `linear-gradient(90deg, ${risk.border} 0%, transparent 80%)`,
-                                  margin: "0.5rem 0 0.4rem",
-                                }}
-                              />
-                              <p
-                                style={{
-                                  fontSize: "0.775rem",
-                                  color: "var(--color-muted)",
-                                  lineHeight: 1.6,
-                                  margin: 0,
-                                }}
-                              >
-                                {item.snippet}
-                              </p>
-                            </>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          )}
-
-          {scanComplete && (
-            <div style={{ marginTop: "1.25rem", display: "flex", justifyContent: "flex-end" }}>
-              <button
-                type="button"
-                onClick={handleExportSummaryPdf}
-                className="glow-button"
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "0.4rem",
-                  padding: "0.625rem 0.95rem",
-                  borderRadius: "0.625rem",
-                  fontSize: "0.8125rem",
-                  fontWeight: 700,
-                }}
-              >
-                <svg
-                  width="14"
-                  height="14"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                  <polyline points="7 10 12 15 17 10" />
-                  <line x1="12" y1="15" x2="12" y2="3" />
-                </svg>
-                Export PDF
-              </button>
-            </div>
-          )}
-        </div>
+        <EaluminateResultsPanel
+          loading={loading}
+          result={result}
+          fullName={fullName}
+          score={score}
+          scoreLabel={scoreLabel}
+          usedKeywords={usedKeywords}
+          tipVisible={tipVisible}
+          tipIdx={tipIdx}
+          tips={DID_YOU_KNOW}
+          allLinks={allLinks}
+          expandedLinkIndex={expandedLinkIndex}
+          setExpandedLinkIndex={setExpandedLinkIndex}
+          apiRiskToUi={apiRiskToUi}
+          riskColors={RISK_COLORS}
+          onExportSummary={handleExportSummaryPdf}
+          GaugeComponent={RepuGauge}
+        />
       </div>
     </div>
   );

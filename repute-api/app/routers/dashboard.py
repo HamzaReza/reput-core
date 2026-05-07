@@ -3,8 +3,8 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.models.lead import Employee
-from app.utils.auth import get_current_employee
+from app.models.lead import Operator
+from app.utils.auth import get_current_operator
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
@@ -12,7 +12,7 @@ router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 @router.get("/stats")
 async def get_stats(
     db: AsyncSession = Depends(get_db),
-    current_employee: Employee = Depends(get_current_employee),
+    current_operator: Operator = Depends(get_current_operator),
 ) -> dict:
     async def count(sql: str) -> int:
         try:
@@ -21,19 +21,19 @@ async def get_stats(
         except Exception:
             return 0
 
-    employees = await count("SELECT COUNT(*)::int FROM employees")
+    operators = await count("SELECT COUNT(*)::int FROM operators")
     scans = await count("SELECT COUNT(*)::int FROM reputation_scans")
     leads = await count("SELECT COUNT(*)::int FROM lead_generated")
     contracts = await count("SELECT COUNT(*)::int FROM contracts")
     clients = await count("SELECT COUNT(*)::int FROM clients")
 
-    return {"employees": employees, "scans": scans, "leads": leads, "contracts": contracts, "clients": clients}
+    return {"operators": operators, "scans": scans, "leads": leads, "contracts": contracts, "clients": clients}
 
 
 @router.get("/charts")
 async def get_charts(
     db: AsyncSession = Depends(get_db),
-    current_employee: Employee = Depends(get_current_employee),
+    current_operator: Operator = Depends(get_current_operator),
 ) -> dict:
     def to_rows(result) -> list[dict]:
         return [{"month": str(r[0])[:10], "count": r[1]} for r in result.fetchall()]
@@ -45,9 +45,9 @@ async def get_charts(
         except Exception:
             return []
 
-    users_data = await monthly("""
+    operators_data = await monthly("""
         SELECT DATE_TRUNC('month', created_at)::text AS month, COUNT(*)::int AS count
-        FROM employees
+        FROM operators
         WHERE created_at >= DATE_TRUNC('year', NOW())
         GROUP BY 1 ORDER BY 1
     """)
@@ -71,4 +71,4 @@ async def get_charts(
         GROUP BY 1 ORDER BY 1
     """)
 
-    return {"employees": users_data, "leads": scans_data, "contracts": contracts_data, "clients": clients_data}
+    return {"operators": operators_data, "leads": scans_data, "contracts": contracts_data, "clients": clients_data}

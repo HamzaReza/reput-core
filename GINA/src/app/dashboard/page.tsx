@@ -60,14 +60,14 @@ const ClientsChartCard = dynamic(
 );
 
 const EMPTY_STATS: DashboardStats = {
-  employees: 0,
+  operators: 0,
   scans: 0,
   leads: 0,
   contracts: 0,
   clients: 0,
 };
 const EMPTY_CHARTS = {
-  employees: [] as MonthPoint[],
+  operators: [] as MonthPoint[],
   contracts: [] as MonthPoint[],
   clients: [] as MonthPoint[],
 };
@@ -134,7 +134,7 @@ export default function DashboardHome() {
           </>
         ) : (
           <>
-            <LineChartCard title="Employee Growth" data={chartsData.employees} />
+            <LineChartCard title="Operator Growth" data={chartsData.operators} />
             <ClientsChartCard title="Clients by Month" data={chartsData.clients} />
             <ContractsChartCard title="Contracts" data={chartsData.contracts} />
           </>

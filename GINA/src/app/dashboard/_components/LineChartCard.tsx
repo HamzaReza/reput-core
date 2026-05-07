@@ -1,15 +1,15 @@
 "use client";
 
+import { MonthPoint } from "@/lib/api";
 import {
-  LineChart,
+  CartesianGrid,
   Line,
+  LineChart,
+  ResponsiveContainer,
+  Tooltip,
   XAxis,
   YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
 } from "recharts";
-import { MonthPoint } from "@/lib/api";
 
 function fmtMonth(iso: string) {
   try {
@@ -41,7 +41,11 @@ export default function LineChartCard({
   return (
     <div
       className="glass glow-border animate-fade-up"
-      style={{ borderRadius: "0.875rem", padding: "1.25rem", animationDelay: "0.22s" }}
+      style={{
+        borderRadius: "0.875rem",
+        padding: "1.25rem",
+        animationDelay: "0.22s",
+      }}
     >
       <div style={{ marginBottom: "1rem" }}>
         <p
@@ -56,10 +60,17 @@ export default function LineChartCard({
         </p>
       </div>
 
-      <div style={{ height: "240px" }}>
-        <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={chartData} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
+      <div style={{ width: "100%", height: 240, minWidth: 0, minHeight: 240 }}>
+        <ResponsiveContainer width="100%" height={240} minWidth={1} minHeight={240}>
+          <LineChart
+            data={chartData}
+            margin={{ top: 4, right: 4, left: -20, bottom: 0 }}
+          >
+            <CartesianGrid
+              strokeDasharray="3 3"
+              stroke="#e2e8f0"
+              vertical={false}
+            />
             <XAxis
               dataKey="month"
               tick={{ fontSize: 10, fill: "#64748b" }}
