@@ -103,11 +103,11 @@ const STATUS_MESSAGES = [
 ];
 
 const DID_YOU_KNOW = [
-  "Researching a prospect before a pitch significantly increases your conversion rate.",
-  "Understanding a prospect's public reputation helps you anticipate objections before the meeting.",
-  "A thorough background scan lets you tailor your approach to the right angle.",
-  "EALUMINATE scans hundreds of public sources to build a complete prospect profile.",
-  "Knowing a prospect's risk profile helps you decide how to position your offering.",
+  "Ealuminate is mapping public signals across the digital landscape.",
+  "Ealuminate is connecting sources, entities, and reputation patterns.",
+  "Ealuminate is processing online signals to identify relevant insights.",
+  "Ealuminate is scanning the open web for reputation intelligence.",
+  "Ealuminate is building a real-time view of the digital footprint.",
 ];
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -147,7 +147,7 @@ function deriveScore(negCount: number, posCount: number): number {
 const inputStyle: React.CSSProperties = {
   width: "100%",
   padding: "0.625rem 1rem",
-  borderRadius: "0.25rem",
+  borderRadius: "0.875rem",
   border: "1px solid #d1d9e0",
   backgroundColor: "#ffffff",
   color: "#1e293b",
@@ -355,7 +355,7 @@ function CountryPicker({
             ...base,
             border: state.isFocused ? "1px solid #4479DA" : "1px solid #d1d9e0",
             boxShadow: "none",
-            borderRadius: "0.25rem",
+            borderRadius: "0.875rem",
             minHeight: "42px",
             "&:hover": { borderColor: state.isFocused ? "#4479DA" : "#d1d9e0" },
           }),
@@ -450,7 +450,7 @@ function KeywordsEditor({
         flexWrap: "wrap",
         gap: "0.5rem",
         padding: "0.5rem",
-        borderRadius: "0.25rem",
+        borderRadius: "0.875rem",
         border: "1px solid var(--color-border, #e2e8f0)",
         backgroundColor: readOnly ? "#f8fafc" : "#ffffff",
         minHeight: "3rem",
@@ -472,7 +472,7 @@ function KeywordsEditor({
             alignItems: "center",
             gap: "0.375rem",
             padding: "0.25rem 0.75rem",
-            borderRadius: "0.25rem",
+            borderRadius: "999px",
             backgroundColor: readOnly ? "#94a3b8" : "#4479DA",
             color: "#fff",
             fontSize: "0.8125rem",

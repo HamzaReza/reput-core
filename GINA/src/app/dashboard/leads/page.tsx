@@ -63,7 +63,7 @@ export default function LeadsPage() {
       }}
     >
       <div style={{ marginBottom: "1.25rem" }}>
-        <h1 style={{ fontSize: "1.25rem", fontWeight: 800, color: "var(--color-foreground, #1e293b)", margin: "0 0 0.25rem" }}>
+        <h1 style={{ fontSize: "1.25rem", fontWeight: 700, color: "var(--color-foreground, #1e293b)", margin: "0 0 0.25rem" }}>
           All Leads
         </h1>
         <p style={{ fontSize: "0.875rem", color: "var(--color-muted, #64748b)", margin: 0 }}>

@@ -75,7 +75,7 @@ function summarizeEventData(eventType: ClientEventType, data: Record<string, unk
 // ── Shared styles ──────────────────────────────────────────────────────────────
 
 const inputStyle: React.CSSProperties = {
-  width: "100%", padding: "0.5rem 0.875rem", borderRadius: "0.5rem",
+  width: "100%", padding: "0.5rem 0.875rem", borderRadius: "0.875rem",
   border: "1px solid var(--color-border, #e2e8f0)", backgroundColor: "#ffffff",
   color: "#1e293b", outline: "none", boxSizing: "border-box", fontSize: "0.9rem",
 };
@@ -97,7 +97,7 @@ function ResearchDetail({ data }: { data: Record<string, unknown> }) {
       {keywords && keywords.length > 0 && (
         <div style={{ display: "flex", flexWrap: "wrap", gap: "0.375rem" }}>
           {keywords.map((kw) => (
-            <span key={kw} style={{ fontSize: "0.75rem", padding: "0.15rem 0.6rem", borderRadius: "0.375rem", backgroundColor: "rgba(68,121,218,0.08)", color: "#4479da", border: "1px solid rgba(68,121,218,0.2)" }}>
+            <span key={kw} style={{ fontSize: "0.75rem", padding: "0.15rem 0.6rem", borderRadius: "999px", backgroundColor: "rgba(68,121,218,0.08)", color: "#4479da", border: "1px solid rgba(68,121,218,0.2)" }}>
               {kw}
             </span>
           ))}
@@ -128,7 +128,7 @@ function ScanDetail({ data, router }: { data: Record<string, unknown>; router: R
     <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
       {score !== undefined && risk && (
         <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
-          <span style={{ fontSize: "1.5rem", fontWeight: 800, color, lineHeight: 1 }}>{score}</span>
+          <span style={{ fontSize: "1.5rem", fontWeight: 600, color, lineHeight: 1 }}>{score}</span>
           <span style={{ fontSize: "0.75rem", fontWeight: 700, color, backgroundColor: color + "18", padding: "0.2rem 0.6rem", borderRadius: "999px" }}>{risk}</span>
           {linksCount !== undefined && (
             <span style={{ fontSize: "0.75rem", color: "#64748b" }}>{linksCount} sources · {negCount ?? 0} flagged</span>
@@ -139,7 +139,7 @@ function ScanDetail({ data, router }: { data: Record<string, unknown>; router: R
       {keywords && keywords.length > 0 && (
         <div style={{ display: "flex", flexWrap: "wrap", gap: "0.375rem" }}>
           {keywords.map((kw) => (
-            <span key={kw} style={{ fontSize: "0.75rem", padding: "0.15rem 0.6rem", borderRadius: "0.375rem", backgroundColor: "rgba(68,121,218,0.08)", color: "#4479da", border: "1px solid rgba(68,121,218,0.2)" }}>
+            <span key={kw} style={{ fontSize: "0.75rem", padding: "0.15rem 0.6rem", borderRadius: "999px", backgroundColor: "rgba(68,121,218,0.08)", color: "#4479da", border: "1px solid rgba(68,121,218,0.2)" }}>
               {kw}
             </span>
           ))}
@@ -190,7 +190,7 @@ function ScanDetail({ data, router }: { data: Record<string, unknown>; router: R
         <button
           type="button"
           onClick={() => router.push(`/dashboard/ealuminate?lead=${leadId}`)}
-          style={{ alignSelf: "flex-start", display: "flex", alignItems: "center", gap: "0.375rem", padding: "0.35rem 0.875rem", borderRadius: "0.375rem", fontSize: "0.8125rem", fontWeight: 600, cursor: "pointer", border: "1.5px solid #4479da", backgroundColor: "transparent", color: "#4479da", marginTop: "0.25rem" }}
+          style={{ alignSelf: "flex-start", display: "flex", alignItems: "center", gap: "0.375rem", padding: "0.35rem 0.875rem", borderRadius: "999px", fontSize: "0.8125rem", fontWeight: 600, cursor: "pointer", border: "1.5px solid #4479da", backgroundColor: "transparent", color: "#4479da", marginTop: "0.25rem" }}
         >
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
             <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
@@ -351,7 +351,7 @@ function ActionPanel({
           <div style={{ display: "flex", gap: "0.625rem", flexWrap: "wrap" }}>
             <button
               disabled
-              style={{ padding: "0.5rem 1.25rem", borderRadius: "0.5rem", fontSize: "0.875rem", fontWeight: 600, border: "1.5px solid #e2e8f0", cursor: "not-allowed", opacity: 0.4, backgroundColor: "#f8fafc", color: "#94a3b8" }}
+              style={{ padding: "0.5rem 1.25rem", borderRadius: "999px", fontSize: "0.875rem", fontWeight: 600, border: "1.5px solid #e2e8f0", cursor: "not-allowed", opacity: 0.4, backgroundColor: "#f8fafc", color: "#94a3b8" }}
             >
               {lastEventType === "quote_rejected" ? "Create New Quote" : "Create Quote"}
             </button>
@@ -372,7 +372,7 @@ function ActionPanel({
                 <label style={labelStyle}>Message</label>
                 <textarea required value={message} onChange={(e) => setMessage(e.target.value)} placeholder="Any notes about this quote…" rows={3} style={{ ...inputStyle, resize: "vertical", lineHeight: 1.5 }} />
               </div>
-              <button type="submit" disabled={submitting} className="glow-button" style={{ padding: "0.6rem 1.25rem", fontWeight: 700, borderRadius: "0.5rem", opacity: submitting ? 0.7 : 1, cursor: submitting ? "default" : "pointer", alignSelf: "flex-start" }}>
+              <button type="submit" disabled={submitting} className="glow-button" style={{ padding: "0.6rem 1.25rem", fontWeight: 700, borderRadius: "999px", opacity: submitting ? 0.7 : 1, cursor: submitting ? "default" : "pointer", alignSelf: "flex-start" }}>
                 {submitting ? "Sending…" : "Send Quote"}
               </button>
             </form>
@@ -385,7 +385,7 @@ function ActionPanel({
           <div>
             <button
               onClick={() => setFormMode(formMode === "contract" ? null : "contract")}
-              style={{ padding: "0.5rem 1.25rem", borderRadius: "0.5rem", fontSize: "0.875rem", fontWeight: 600, border: "1.5px solid", cursor: "pointer", borderColor: formMode === "contract" ? "#8b5cf6" : "#e2e8f0", backgroundColor: formMode === "contract" ? "rgba(139,92,246,0.08)" : "#fff", color: formMode === "contract" ? "#8b5cf6" : "#1e293b" }}
+              style={{ padding: "0.5rem 1.25rem", borderRadius: "999px", fontSize: "0.875rem", fontWeight: 600, border: "1.5px solid", cursor: "pointer", borderColor: formMode === "contract" ? "#8b5cf6" : "#e2e8f0", backgroundColor: formMode === "contract" ? "rgba(139,92,246,0.08)" : "#fff", color: formMode === "contract" ? "#8b5cf6" : "#1e293b" }}
             >
               Create Contract
             </button>
@@ -400,7 +400,7 @@ function ActionPanel({
                 <label style={labelStyle}>Notes</label>
                 <textarea required value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Contract details, scope, terms…" rows={3} style={{ ...inputStyle, resize: "vertical", lineHeight: 1.5 }} />
               </div>
-              <button type="submit" disabled={submitting} style={{ padding: "0.6rem 1.25rem", fontWeight: 700, borderRadius: "0.5rem", fontSize: "0.875rem", border: "none", backgroundColor: "#8b5cf6", color: "#fff", cursor: submitting ? "default" : "pointer", opacity: submitting ? 0.7 : 1, alignSelf: "flex-start" }}>
+              <button type="submit" disabled={submitting} style={{ padding: "0.6rem 1.25rem", fontWeight: 700, borderRadius: "999px", fontSize: "0.875rem", border: "none", backgroundColor: "#8b5cf6", color: "#fff", cursor: submitting ? "default" : "pointer", opacity: submitting ? 0.7 : 1, alignSelf: "flex-start" }}>
                 {submitting ? "Creating…" : "Confirm Contract"}
               </button>
             </form>
@@ -578,14 +578,14 @@ ${timelineRows || "<p>No timeline events available.</p>"}
           All Clients
         </button>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.75rem", marginBottom: "0.25rem" }}>
-          <h1 style={{ fontSize: "1.375rem", fontWeight: 800, color: "var(--color-foreground, #1e293b)", margin: 0 }}>
+          <h1 style={{ fontSize: "1.375rem", fontWeight: 700, color: "var(--color-foreground, #1e293b)", margin: 0 }}>
             {client.name}
           </h1>
           <button
             type="button"
             onClick={handleExportTimelinePdf}
             className="glow-button"
-            style={{ borderRadius: "0.5rem", padding: "0.45rem 0.8rem", fontSize: "0.75rem", fontWeight: 700, whiteSpace: "nowrap" }}
+            style={{ borderRadius: "999px", padding: "0.45rem 0.8rem", fontSize: "0.75rem", fontWeight: 700, whiteSpace: "nowrap" }}
           >
             Export Timeline PDF
           </button>
@@ -652,7 +652,7 @@ ${timelineRows || "<p>No timeline events available.</p>"}
                               else router.push("/dashboard/ealuminate");
                             }}
                             className="glow-button"
-                            style={{ marginTop: "0.625rem", padding: "0.4rem 1rem", fontWeight: 700, borderRadius: "0.5rem", fontSize: "0.8125rem", cursor: "pointer" }}
+                            style={{ marginTop: "0.625rem", padding: "0.4rem 1rem", fontWeight: 700, borderRadius: "999px", fontSize: "0.8125rem", cursor: "pointer" }}
                           >
                             Run Scan in Ealuminate
                           </button>
