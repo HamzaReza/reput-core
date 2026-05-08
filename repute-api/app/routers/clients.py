@@ -3,12 +3,12 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
-from sqlalchemy import desc, select, text
+from sqlalchemy import delete as sql_delete, desc, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.models.client import Client, ClientEvent
-from app.models.lead import Operator
+from app.models.lead import LeadGenerated, Operator
 from app.utils.auth import get_current_operator
 
 router = APIRouter(prefix="/clients", tags=["clients"])
@@ -188,3 +188,42 @@ async def get_client(
             for e in events
         ],
     }
+
+
+@router.delete("/{client_id}", status_code=status.HTTP_200_OK)
+async def delete_client(
+    client_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_operator: Operator = Depends(get_current_operator),
+) -> dict:
+    client_result = await db.execute(select(Client).where(Client.id == client_id))
+    client = client_result.scalar_one_or_none()
+    if client is None:
+        raise HTTPException(status_code=404, detail="Client not found.")
+
+    # Collect lead_ids from event_data before cascade deletes them
+    events_result = await db.execute(
+        select(ClientEvent).where(ClientEvent.client_id == client_id)
+    )
+    events = events_result.scalars().all()
+    lead_ids: list[uuid.UUID] = []
+    for event in events:
+        if event.data and isinstance(event.data, dict):
+            raw_id = event.data.get("lead_id")
+            if raw_id:
+                try:
+                    lead_ids.append(uuid.UUID(str(raw_id)))
+                except ValueError:
+                    pass
+
+    # Delete client (cascades client_events automatically)
+    await db.delete(client)
+    await db.flush()
+
+    # Delete orphaned lead records
+    if lead_ids:
+        await db.execute(
+            sql_delete(LeadGenerated).where(LeadGenerated.id.in_(lead_ids))
+        )
+
+    return {"ok": True}
