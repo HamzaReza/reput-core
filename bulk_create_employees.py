@@ -22,16 +22,12 @@ except ImportError:
 
 ENVIRONMENTS = {
     "local":      "http://localhost:8000/api/v1/auth/register-web-analyst",
-    # "develop":    "https://ealixir-reput-develop.up.railway.app/api/v1/auth/register-web-analyst",
-    # "production": "https://ealixir-reput-production.up.railway.app/api/v1/auth/register-web-analyst",
+    "develop":    "https://ealixir-reput-develop.up.railway.app/api/v1/auth/register-web-analyst",
+    "production": "https://ealixir-reput-production.up.railway.app/api/v1/auth/register-web-analyst",
 }
 
 WEB_ANALYSTS = [
-    {"name": "Web Analyst 1", "email": "1@test.com", "password": "12345678"},
-    {"name": "Web Analyst 2", "email": "2@test.com", "password": "12345678"},
-    {"name": "Web Analyst 3", "email": "3@test.com", "password": "12345678"},
-    {"name": "Web Analyst 4", "email": "4@test.com", "password": "12345678"},
-    {"name": "Web Analyst 5", "email": "5@test.com", "password": "12345678"},
+    {"name": "Web Analyst 1", "email": "Analyst1@test.com", "password": "Analyst12345"},
 ]
 
 def register_all(env_name, api_url):
