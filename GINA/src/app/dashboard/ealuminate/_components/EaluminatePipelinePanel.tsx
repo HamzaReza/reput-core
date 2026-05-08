@@ -50,7 +50,7 @@ export function EaluminatePipelinePanel({
             style={{
               marginBottom: i < 3 ? "0.75rem" : 0,
               padding: "0.65rem 0.625rem",
-              borderRadius: "0.5rem",
+              borderRadius: "0.875rem",
               backgroundColor: isActive
                 ? "rgba(255, 255, 255, 0.28)"
                 : isCompleted

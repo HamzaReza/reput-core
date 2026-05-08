@@ -49,9 +49,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             width: "24px",
             height: "24px",
             borderRadius: "50%",
-            backgroundColor: "#ffffff",
-            border: "1px solid var(--color-border, #e2e8f0)",
-            boxShadow: "0 2px 8px rgba(0,0,0,0.10)",
+            backgroundColor: "#1e293b",
+            border: "1px solid rgba(255,255,255,0.15)",
+            boxShadow: "0 2px 8px rgba(0,0,0,0.30)",
             cursor: "pointer",
             display: "flex",
             alignItems: "center",
@@ -62,11 +62,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           }}
         >
           {sidebarCollapsed ? (
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#64748b" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
               <polyline points="9 18 15 12 9 6" />
             </svg>
           ) : (
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#64748b" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
               <polyline points="15 18 9 12 15 6" />
             </svg>
           )}

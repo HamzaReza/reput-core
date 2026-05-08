@@ -49,7 +49,7 @@ export default function OperatorsPage() {
       <h1
         style={{
           fontSize: "1.25rem",
-          fontWeight: 800,
+          fontWeight: 700,
           color: "var(--color-foreground, #1e293b)",
           margin: "0 0 1.25rem",
         }}
