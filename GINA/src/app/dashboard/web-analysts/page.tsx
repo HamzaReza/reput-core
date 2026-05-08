@@ -1,6 +1,6 @@
 "use client";
 
-import { Operator, operatorsApi } from "@/lib/api";
+import { WebAnalyst, webAnalystsApi } from "@/lib/api";
 import { useEffect, useState } from "react";
 
 function getInitials(name: string, email: string) {
@@ -22,17 +22,17 @@ function formatDate(iso: string | null) {
   });
 }
 
-export default function OperatorsPage() {
-  const [list, setList] = useState<Operator[]>([]);
+export default function WebAnalystsPage() {
+  const [list, setList] = useState<WebAnalyst[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   useEffect(() => {
-    operatorsApi
+    webAnalystsApi
       .list()
       .then(setList)
       .catch((e) =>
-        setError(e instanceof Error ? e.message : "Failed to load operators."),
+        setError(e instanceof Error ? e.message : "Failed to load web analysts."),
       )
       .finally(() => setLoading(false));
   }, []);
@@ -54,7 +54,7 @@ export default function OperatorsPage() {
           margin: "0 0 1.25rem",
         }}
       >
-        Operators
+        Web Analysts
       </h1>
 
       <div
@@ -91,7 +91,7 @@ export default function OperatorsPage() {
           {loading && (
             <div style={{ padding: "2rem 1.25rem", textAlign: "center" }}>
               <p style={{ fontSize: "0.875rem", color: "var(--color-muted, #64748b)", margin: 0 }}>
-                Loading operators…
+                Loading web analysts…
               </p>
             </div>
           )}
@@ -103,7 +103,7 @@ export default function OperatorsPage() {
           {!loading && !error && list.length === 0 && (
             <div style={{ padding: "2rem 1.25rem", textAlign: "center" }}>
               <p style={{ fontSize: "0.875rem", color: "var(--color-muted, #64748b)", margin: 0 }}>
-                No operators found.
+                No web analysts found.
               </p>
             </div>
           )}

@@ -87,8 +87,8 @@ const NAV_ITEMS: NavItem[] = [
     ),
   },
   {
-    label: "Operators",
-    href: "/dashboard/operators",
+    label: "Web Analysts",
+    href: "/dashboard/web-analysts",
     icon: (
       <svg
         width="18"
