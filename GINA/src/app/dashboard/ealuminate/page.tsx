@@ -1,13 +1,20 @@
 "use client";
 
 import { clientsApi, leads, WebLink } from "@/lib/api";
-import { COUNTRY_NAMES } from "@/lib/countries";
+import { COUNTRY_NAME_TO_ISO } from "@/lib/countries";
 import { useSearchParams } from "next/navigation";
-import { Suspense, useEffect, useRef, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import Select from "react-select";
+import countryList from "react-select-country-list";
 import { EaluminateFormPanel } from "./_components/EaluminateFormPanel";
 import { EaluminatePipelinePanel } from "./_components/EaluminatePipelinePanel";
 import { EaluminateResultsPanel } from "./_components/EaluminateResultsPanel";
-import type { KeywordFocus, PreAnalysisProfile, RiskLevel, ScanResult } from "./_components/types";
+import type {
+  KeywordFocus,
+  PreAnalysisProfile,
+  RiskLevel,
+  ScanResult,
+} from "./_components/types";
 import { exportReportMasterPdf, exportSummaryPdf } from "./_utils/pdfExports";
 
 declare global {
@@ -33,9 +40,9 @@ const RESULTS_CAP_OPTIONS = [10, 20, 30, 40, 50];
 const KEYWORDS_CAP_OPTIONS = [3, 4, 5, 6, 7, 8];
 
 const KEYWORD_FOCUS_OPTIONS = [
-  { value: "all",      label: "All Coverage" },
+  { value: "all", label: "All Coverage" },
   { value: "negative", label: "Negative" },
-  { value: "neutral",  label: "Neutral" },
+  { value: "neutral", label: "Neutral" },
   { value: "positive", label: "Positive" },
 ] as const;
 
@@ -311,128 +318,82 @@ function CountryPicker({
   onChange: (v: string) => void;
   required?: boolean;
 }) {
-  const [query, setQuery] = useState("");
-  const [open, setOpen] = useState(false);
-  const containerRef = useRef<HTMLDivElement>(null);
+  type CountryOption = { value: string; label: string };
+  const normalizeCountryKey = (raw: string) => raw.trim().toLowerCase();
 
-  const filtered = query.trim()
-    ? COUNTRY_NAMES.filter((c) =>
-        c.toLowerCase().includes(query.toLowerCase()),
-      ).slice(0, 80)
-    : COUNTRY_NAMES;
+  const options = useMemo<CountryOption[]>(() => {
+    const base = countryList().getData() as CountryOption[];
+    const hasKosovo = base.some(
+      (item) =>
+        item.value.toUpperCase() === "XK" ||
+        item.label.toLowerCase() === "kosovo",
+    );
+    return hasKosovo ? base : [...base, { value: "XK", label: "Kosovo" }];
+  }, []);
 
-  const handleSelect = (name: string) => {
-    onChange(name);
-    setQuery("");
-    setOpen(false);
-  };
-  const onBlur = (e: React.FocusEvent) => {
-    if (!containerRef.current?.contains(e.relatedTarget as Node)) {
-      setOpen(false);
-      setQuery("");
-    }
-  };
+  const normalizedValue = normalizeCountryKey(value);
+  const savedIso = COUNTRY_NAME_TO_ISO[normalizedValue]?.toUpperCase();
+  const selected =
+    options.find(
+      (option) =>
+        normalizeCountryKey(option.label) === normalizedValue ||
+        option.value.toUpperCase() === savedIso,
+    ) ?? null;
 
   return (
-    <div ref={containerRef} style={{ position: "relative" }} onBlur={onBlur}>
-      <div style={{ position: "relative" }}>
+    <div style={{ position: "relative" }}>
+      <Select<CountryOption, false>
+        options={options}
+        value={selected}
+        onChange={(option) => onChange(option?.label ?? "")}
+        placeholder="Select a country"
+        isSearchable
+        isClearable={!required}
+        classNamePrefix="country-select"
+        styles={{
+          control: (base, state) => ({
+            ...base,
+            border: state.isFocused ? "1px solid #4479DA" : "1px solid #d1d9e0",
+            boxShadow: "none",
+            borderRadius: "0.25rem",
+            minHeight: "42px",
+            "&:hover": { borderColor: state.isFocused ? "#4479DA" : "#d1d9e0" },
+          }),
+          option: (base, state) => ({
+            ...base,
+            backgroundColor: state.isSelected
+              ? "#eef3ff"
+              : state.isFocused
+                ? "#f8fafc"
+                : "#ffffff",
+            color: "#1e293b",
+            cursor: "pointer",
+          }),
+          menu: (base) => ({
+            ...base,
+            zIndex: 200,
+          }),
+          placeholder: (base) => ({
+            ...base,
+            color: "#94a3b8",
+          }),
+        }}
+      />
+      {required && (
         <input
-          type="text"
-          value={open ? query : value}
-          placeholder="Select a country"
-          autoComplete="off"
-          required={required && !value}
-          onFocus={() => {
-            setQuery("");
-            setOpen(true);
-          }}
-          onChange={(e) => {
-            setQuery(e.target.value);
-            if (!open) setOpen(true);
-          }}
+          aria-hidden="true"
+          value={value}
+          onChange={() => {}}
+          required
           style={{
-            ...inputStyle,
-            paddingRight: "2.5rem",
-            color: value && !open ? "#1e293b" : open ? "#1e293b" : "#94a3b8",
+            position: "absolute",
+            // width: "20%",
+            height: "100%",
+            opacity: 0,
+            left: "50%",
+            top: 0,
           }}
         />
-        <svg
-          width="16"
-          height="16"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="rgba(100,116,139,0.6)"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          style={{
-            position: "absolute",
-            right: "1rem",
-            top: "50%",
-            transform: open
-              ? "translateY(-50%) rotate(180deg)"
-              : "translateY(-50%)",
-            pointerEvents: "none",
-            transition: "transform 0.2s",
-          }}
-        >
-          <polyline points="6 9 12 15 18 9" />
-        </svg>
-      </div>
-      {open && (
-        <div
-          style={{
-            position: "absolute",
-            top: "calc(100% + 4px)",
-            left: 0,
-            right: 0,
-            backgroundColor: "#ffffff",
-            border: "1px solid var(--color-border, #e2e8f0)",
-            borderRadius: "0.25rem",
-            boxShadow: "0 8px 24px rgba(0,0,0,0.12)",
-            maxHeight: "min(14rem, 40vh)",
-            overflowY: "auto",
-            zIndex: 200,
-          }}
-        >
-          {filtered.length === 0 ? (
-            <div
-              style={{
-                padding: "0.75rem 1rem",
-                color: "#94a3b8",
-                fontSize: "0.875rem",
-              }}
-            >
-              No results
-            </div>
-          ) : (
-            filtered.map((name) => (
-              <button
-                key={name}
-                type="button"
-                onMouseDown={(e) => {
-                  e.preventDefault();
-                  handleSelect(name);
-                }}
-                style={{
-                  display: "block",
-                  width: "100%",
-                  textAlign: "left",
-                  padding: "0.625rem 1rem",
-                  border: "none",
-                  borderBottom: "1px solid #f1f5f9",
-                  backgroundColor: name === value ? "#eef3ff" : "transparent",
-                  color: "#1e293b",
-                  fontSize: "0.9375rem",
-                  cursor: "pointer",
-                  fontWeight: name === value ? 500 : 400,
-                }}
-              >
-                {name}
-              </button>
-            ))
-          )}
-        </div>
       )}
     </div>
   );
