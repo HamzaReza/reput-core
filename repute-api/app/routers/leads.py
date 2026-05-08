@@ -8,8 +8,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.attributes import flag_modified
 
 from app.database import get_db
-from app.models.lead import Operator, LeadGenerated
-from app.utils.auth import get_current_operator
+from app.models.lead import WebAnalyst, LeadGenerated
+from app.utils.auth import get_current_web_analyst
 
 router = APIRouter(prefix="/leads", tags=["leads"])
 
@@ -35,7 +35,7 @@ class LeadUpdate(BaseModel):
 async def create_lead(
     payload: LeadCreate,
     db: AsyncSession = Depends(get_db),
-    current_operator: Operator = Depends(get_current_operator),
+    current_web_analyst: WebAnalyst = Depends(get_current_web_analyst),
 ) -> dict:
     existing = None
     if not payload.force_new and payload.name and payload.country:
@@ -48,7 +48,7 @@ async def create_lead(
         existing = result.scalar_one_or_none()
 
     if existing is not None:
-        existing.scanned_by_id = current_operator.id
+        existing.scanned_by_id = current_web_analyst.id
         existing.company = payload.company
         existing.background = payload.background
         existing.pre_analysis_summary = payload.pre_analysis_summary
@@ -63,7 +63,7 @@ async def create_lead(
         return {"id": str(existing.id)}
 
     lead = LeadGenerated(
-        scanned_by_id=current_operator.id,
+        scanned_by_id=current_web_analyst.id,
         name=payload.name,
         company=payload.company,
         country=payload.country,
@@ -82,7 +82,7 @@ async def update_lead(
     lead_id: uuid.UUID,
     payload: LeadUpdate,
     db: AsyncSession = Depends(get_db),
-    current_operator: Operator = Depends(get_current_operator),
+    current_web_analyst: WebAnalyst = Depends(get_current_web_analyst),
 ) -> dict:
     result = await db.execute(
         select(LeadGenerated).where(LeadGenerated.id == lead_id)
@@ -112,17 +112,17 @@ async def update_lead(
 async def get_lead(
     lead_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
-    current_operator: Operator = Depends(get_current_operator),
+    current_web_analyst: WebAnalyst = Depends(get_current_web_analyst),
 ) -> dict:
     result = await db.execute(
-        select(LeadGenerated, Operator.name.label("op_name"), Operator.email.label("op_email"))
-        .outerjoin(Operator, LeadGenerated.scanned_by_id == Operator.id)
+        select(LeadGenerated, WebAnalyst.name.label("wa_name"), WebAnalyst.email.label("wa_email"))
+        .outerjoin(WebAnalyst, LeadGenerated.scanned_by_id == WebAnalyst.id)
         .where(LeadGenerated.id == lead_id)
     )
     row = result.one_or_none()
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lead not found.")
-    lead, op_name, op_email = row
+    lead, wa_name, wa_email = row
     return {
         "id": str(lead.id),
         "name": lead.name,
@@ -134,8 +134,8 @@ async def get_lead(
         "links": lead.links or [],
         "summary": lead.summary,
         "score": lead.score,
-        "scanned_by_name": op_name or lead.scanned_by_name,
-        "scanned_by_email": op_email or lead.scanned_by_email,
+        "scanned_by_name": wa_name or lead.scanned_by_name,
+        "scanned_by_email": wa_email or lead.scanned_by_email,
         "researched_at": lead.researched_at.isoformat() if lead.researched_at else None,
         "scanned_at": lead.scanned_at.isoformat() if lead.scanned_at else None,
     }
@@ -145,11 +145,11 @@ async def get_lead(
 async def list_leads(
     limit: int = Query(default=5, ge=1, le=200),
     db: AsyncSession = Depends(get_db),
-    current_operator: Operator = Depends(get_current_operator),
+    current_web_analyst: WebAnalyst = Depends(get_current_web_analyst),
 ) -> list[dict]:
     result = await db.execute(
-        select(LeadGenerated, Operator.name.label("op_name"), Operator.email.label("op_email"))
-        .outerjoin(Operator, LeadGenerated.scanned_by_id == Operator.id)
+        select(LeadGenerated, WebAnalyst.name.label("wa_name"), WebAnalyst.email.label("wa_email"))
+        .outerjoin(WebAnalyst, LeadGenerated.scanned_by_id == WebAnalyst.id)
         .order_by(desc(LeadGenerated.researched_at))
         .limit(limit)
     )
@@ -162,10 +162,10 @@ async def list_leads(
             "country": lead.country,
             "background": lead.background,
             "score": lead.score,
-            "scanned_by_name": op_name or lead.scanned_by_name,
-            "scanned_by_email": op_email or lead.scanned_by_email,
+            "scanned_by_name": wa_name or lead.scanned_by_name,
+            "scanned_by_email": wa_email or lead.scanned_by_email,
             "researched_at": lead.researched_at.isoformat() if lead.researched_at else None,
             "scanned_at": lead.scanned_at.isoformat() if lead.scanned_at else None,
         }
-        for lead, op_name, op_email in rows
+        for lead, wa_name, wa_email in rows
     ]

@@ -266,10 +266,10 @@ function ReputScoreDonut() {
   );
 }
 
-/* ─── Operator Tasks (placeholder) ─── */
+/* ─── Web Analyst Tasks (placeholder) ─── */
 const TASKS = [
   { icon: "warn", text: "4 high risk cases need review", due: "Due today", urgent: true },
-  { icon: "scan", text: "12 scans awaiting operator input", due: "Due today", urgent: true },
+  { icon: "scan", text: "12 scans awaiting web analyst input", due: "Due today", urgent: true },
   { icon: "user", text: "3 client status updates pending", due: "Due tomorrow", urgent: false },
   { icon: "bell", text: "7 data source sync issues", due: "Due in 2 days", urgent: false },
   { icon: "doc", text: "5 briefs pending quality check", due: "Due in 2 days", urgent: false },
@@ -306,7 +306,7 @@ function TaskIcon({ type }: { type: string }) {
   );
 }
 
-function OperatorTasksCard() {
+function WebAnalystTasksCard() {
   return (
     <div
       className="glass glow-border animate-fade-up"
@@ -314,7 +314,7 @@ function OperatorTasksCard() {
     >
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.875rem" }}>
         <p style={{ fontSize: "0.875rem", fontWeight: 700, color: "var(--color-foreground, #1e293b)", margin: 0, letterSpacing: "-0.01em" }}>
-          Operator Tasks & Alerts
+          Web Analyst Tasks & Alerts
         </p>
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <circle cx="12" cy="12" r="10" />
@@ -579,14 +579,14 @@ function ActivityByRegionCard() {
 
 /* ─── Empty state defaults ─── */
 const EMPTY_STATS: DashboardStats = {
-  operators: 0,
+  web_analysts: 0,
   scans: 0,
   leads: 0,
   contracts: 0,
   clients: 0,
 };
 const EMPTY_CHARTS = {
-  operators: [] as MonthPoint[],
+  web_analysts: [] as MonthPoint[],
   contracts: [] as MonthPoint[],
   clients: [] as MonthPoint[],
 };
@@ -672,7 +672,7 @@ export default function DashboardHome() {
           {loading ? (
             <ChartPlaceholder height={330} />
           ) : (
-            <LineChartCard title="Research Activity Over Time" data={chartsData.operators} />
+            <LineChartCard title="Research Activity Over Time" data={chartsData.web_analysts} />
           )}
         </div>
         <div className="col-pipe">
@@ -689,7 +689,7 @@ export default function DashboardHome() {
           <RecentScans />
         </div>
         <div className="col-tasks">
-          <OperatorTasksCard />
+          <WebAnalystTasksCard />
         </div>
         <div className="col-region">
           <ActivityByRegionCard />

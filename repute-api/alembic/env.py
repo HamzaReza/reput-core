@@ -11,7 +11,7 @@ from alembic import context
 from app.models import User, UserProfile, ReputationScan, QuoteRequest  # noqa: F401
 from app.models.contract import Contract  # noqa: F401
 from app.models.meeting import Meeting  # noqa: F401
-from app.models.lead import Operator, LeadGenerated  # noqa: F401
+from app.models.lead import WebAnalyst, LeadGenerated  # noqa: F401
 from app.database import Base
 from app.config import get_settings
 
