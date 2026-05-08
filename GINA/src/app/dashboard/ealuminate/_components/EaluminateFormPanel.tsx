@@ -172,7 +172,13 @@ export function EaluminateFormPanel(props: EaluminateFormPanelProps) {
         </div>
       )}
 
-      <div className="eal-card-body">
+      <form
+        className="eal-card-body"
+        onSubmit={(e) => {
+          e.preventDefault();
+          handleResearch();
+        }}
+      >
         <div
           style={{
             flex: 1,
@@ -316,9 +322,8 @@ export function EaluminateFormPanel(props: EaluminateFormPanelProps) {
           {error && <p style={{ margin: 0, fontSize: "0.875rem", color: "#ef4444" }}>{error}</p>}
 
           <button
-            type="button"
+            type="submit"
             disabled={preAnalysisLoading || scanComplete}
-            onClick={handleResearch}
             className="glow-button"
             style={{
               width: "100%",
@@ -518,7 +523,7 @@ export function EaluminateFormPanel(props: EaluminateFormPanelProps) {
           )}
         </div>
         {pipeline}
-      </div>
+      </form>
     </div>
   );
 }
