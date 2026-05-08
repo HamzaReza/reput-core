@@ -563,8 +563,8 @@ function EaluminatePageInner() {
 
   const [scanComplete, setScanComplete] = useState(false);
 
-  const [operatorName, setOperatorName] = useState("");
-  const [operatorEmail, setOperatorEmail] = useState("");
+  const [webAnalystName, setWebAnalystName] = useState("");
+  const [webAnalystEmail, setWebAnalystEmail] = useState("");
   const [leadId, setLeadId] = useState<string | null>(null);
   const [clientId, setClientId] = useState<string | null>(null);
 
@@ -733,8 +733,8 @@ function EaluminatePageInner() {
       const raw = localStorage.getItem("reput_user");
       if (raw) {
         const u = JSON.parse(raw);
-        setOperatorName(u.name || u.email || "");
-        setOperatorEmail(u.email || "");
+        setWebAnalystName(u.name || u.email || "");
+        setWebAnalystEmail(u.email || "");
       }
     } catch {}
   }, []);
@@ -831,7 +831,7 @@ function EaluminatePageInner() {
       fullName,
       company,
       country,
-      operatorName,
+      webAnalystName,
       score,
       result,
     });
@@ -842,7 +842,7 @@ function EaluminatePageInner() {
       fullName,
       company,
       country,
-      operatorName,
+      webAnalystName,
       preAnalysisProfile,
       preAnalysisSummary,
       editableKeywords,

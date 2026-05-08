@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
 from app.database import engine, Base
-from app.routers import auth, users, reputation, quotes, contracts, meetings, feedback, dashboard, leads, operators, clients
+from app.routers import auth, users, reputation, quotes, contracts, meetings, feedback, dashboard, leads, web_analysts, clients
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
@@ -103,7 +103,7 @@ app.include_router(meetings.router, prefix=API_PREFIX)
 app.include_router(feedback.router, prefix=API_PREFIX)
 app.include_router(dashboard.router, prefix=API_PREFIX)
 app.include_router(leads.router, prefix=API_PREFIX)
-app.include_router(operators.router, prefix=API_PREFIX)
+app.include_router(web_analysts.router, prefix=API_PREFIX)
 app.include_router(clients.router, prefix=API_PREFIX)
 
 

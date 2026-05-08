@@ -6,12 +6,12 @@ from sqlalchemy.orm import selectinload
 
 from app.database import get_db
 from app.models.user import User, UserProfile
-from app.models.lead import Operator
+from app.models.lead import WebAnalyst
 from app.schemas.user import UserCreate, UserOut, UserWithToken
 from app.utils.auth import create_access_token, hash_password, verify_password, get_current_user
 from pydantic import BaseModel as _BaseModel
 
-class OperatorLoginPayload(_BaseModel):
+class WebAnalystLoginPayload(_BaseModel):
     email: str
     password: str
 
@@ -54,39 +54,39 @@ async def register(payload: UserCreate, db: AsyncSession = Depends(get_db)):
     return UserWithToken(user=UserOut.model_validate(user_with_profile), access_token=token)
 
 
-@router.post("/register-operator", status_code=status.HTTP_201_CREATED)
-async def register_operator(payload: UserCreate, db: AsyncSession = Depends(get_db)):
+@router.post("/register-web-analyst", status_code=status.HTTP_201_CREATED)
+async def register_web_analyst(payload: UserCreate, db: AsyncSession = Depends(get_db)):
     email = payload.email.lower()
-    existing = await db.execute(select(Operator).where(Operator.email == email))
+    existing = await db.execute(select(WebAnalyst).where(WebAnalyst.email == email))
     if existing.scalar_one_or_none():
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="An operator with this email already exists.",
+            detail="A web analyst with this email already exists.",
         )
-    op = Operator(
+    wa = WebAnalyst(
         name=payload.name or email,
         email=email,
         password_hash=hash_password(payload.password),
     )
-    db.add(op)
+    db.add(wa)
     await db.flush()
-    await db.refresh(op)
-    return {"id": str(op.id), "email": op.email}
+    await db.refresh(wa)
+    return {"id": str(wa.id), "email": wa.email}
 
 
-@router.post("/login-operator")
-async def login_operator(payload: OperatorLoginPayload, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(Operator).where(Operator.email == payload.email.lower()))
-    op = result.scalar_one_or_none()
-    if not op or not verify_password(payload.password, op.password_hash):
+@router.post("/login-web-analyst")
+async def login_web_analyst(payload: WebAnalystLoginPayload, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(WebAnalyst).where(WebAnalyst.email == payload.email.lower()))
+    wa = result.scalar_one_or_none()
+    if not wa or not verify_password(payload.password, wa.password_hash):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password.",
         )
-    token = create_access_token(str(op.id))
+    token = create_access_token(str(wa.id))
     return {
         "access_token": token,
-        "operator": {"id": str(op.id), "name": op.name, "email": op.email},
+        "web_analyst": {"id": str(wa.id), "name": wa.name, "email": wa.email},
     }
 
 

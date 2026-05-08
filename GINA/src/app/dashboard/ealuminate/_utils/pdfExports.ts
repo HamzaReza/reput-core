@@ -4,7 +4,7 @@ interface ExportSummaryPdfParams {
   fullName: string;
   company: string;
   country: string;
-  operatorName: string;
+  webAnalystName: string;
   score: number;
   result: ScanResult | null;
 }
@@ -13,7 +13,7 @@ interface ExportReportMasterPdfParams {
   fullName: string;
   company: string;
   country: string;
-  operatorName: string;
+  webAnalystName: string;
   preAnalysisProfile: PreAnalysisProfile | null;
   preAnalysisSummary: string;
   editableKeywords: string[];
@@ -57,7 +57,7 @@ function openPrintWindow(title: string): Window | null {
 }
 
 export function exportSummaryPdf(params: ExportSummaryPdfParams): void {
-  const { fullName, company, country, operatorName, score, result } = params;
+  const { fullName, company, country, webAnalystName, score, result } = params;
   const win = openPrintWindow("Ealuminate Report");
   if (!win) return;
 
@@ -306,7 +306,7 @@ export function exportSummaryPdf(params: ExportSummaryPdfParams): void {
     <div class="meta-cell"><div class="meta-label">Subject</div><div class="meta-value">${esc(fullName)}</div></div>
     ${company ? `<div class="meta-cell"><div class="meta-label">Company</div><div class="meta-value">${esc(company)}</div></div>` : ""}
     ${country ? `<div class="meta-cell"><div class="meta-label">Country</div><div class="meta-value">${esc(country)}</div></div>` : ""}
-    ${operatorName ? `<div class="meta-cell"><div class="meta-label">Prepared by</div><div class="meta-value">${esc(operatorName)}</div></div>` : ""}
+    ${webAnalystName ? `<div class="meta-cell"><div class="meta-label">Prepared by</div><div class="meta-value">${esc(webAnalystName)}</div></div>` : ""}
     <div class="meta-cell"><div class="meta-label">Generated</div><div class="meta-value">${esc(dateStr)}</div></div>
   </div>
   <div class="body">
@@ -357,7 +357,7 @@ export function exportReportMasterPdf(params: ExportReportMasterPdfParams): void
     fullName,
     company,
     country,
-    operatorName,
+    webAnalystName,
     preAnalysisProfile,
     preAnalysisSummary,
     editableKeywords,
@@ -582,7 +582,7 @@ export function exportReportMasterPdf(params: ExportReportMasterPdfParams): void
     <div class="meta-cell"><div class="meta-label">Subject</div><div class="meta-value">${esc(fullName)}</div></div>
     ${company ? `<div class="meta-cell"><div class="meta-label">Company</div><div class="meta-value">${esc(company)}</div></div>` : ""}
     ${country ? `<div class="meta-cell"><div class="meta-label">Country</div><div class="meta-value">${esc(country)}</div></div>` : ""}
-    ${operatorName ? `<div class="meta-cell"><div class="meta-label">Prepared by</div><div class="meta-value">${esc(operatorName)}</div></div>` : ""}
+    ${webAnalystName ? `<div class="meta-cell"><div class="meta-label">Prepared by</div><div class="meta-value">${esc(webAnalystName)}</div></div>` : ""}
     <div class="meta-cell"><div class="meta-label">Generated</div><div class="meta-value">${esc(dateStr)}</div></div>
   </div>
   <div class="body">

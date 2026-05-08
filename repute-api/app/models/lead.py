@@ -8,8 +8,8 @@ from sqlalchemy.orm import Mapped, mapped_column
 from app.database import Base
 
 
-class Operator(Base):
-    __tablename__ = "operators"
+class WebAnalyst(Base):
+    __tablename__ = "web_analysts"
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4

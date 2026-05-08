@@ -224,8 +224,8 @@ export const auth = {
     });
   },
 
-  loginOperator: async (email: string, password: string) => {
-    return fetchWithHelp(`${BASE_URL}/auth/login-operator`, {
+  loginWebAnalyst: async (email: string, password: string) => {
+    return fetchWithHelp(`${BASE_URL}/auth/login-web-analyst`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email, password }),
@@ -235,7 +235,10 @@ export const auth = {
         const msg = parseFastApiDetail(parsed) || "Login failed.";
         throw new Error(msg);
       }
-      return res.json() as Promise<{ access_token: string; operator: { id: string; name: string; email: string } }>;
+      return res.json() as Promise<{
+        access_token: string;
+        web_analyst: { id: string; name: string; email: string };
+      }>;
     });
   },
 
@@ -429,7 +432,7 @@ export const contracts = {
 // ── Dashboard types & endpoints ───────────────────────────────────────────────
 
 export interface DashboardStats {
-  operators: number;
+  web_analysts: number;
   scans: number;
   leads: number;
   contracts: number;
@@ -442,24 +445,28 @@ export interface MonthPoint {
 }
 
 export interface DashboardCharts {
-  operators: MonthPoint[];
+  web_analysts: MonthPoint[];
   leads: MonthPoint[];
   contracts: MonthPoint[];
   clients: MonthPoint[];
 }
 
-export interface Operator {
+export interface WebAnalyst {
   id: string;
   name: string;
   email: string;
   created_at: string | null;
 }
 
-export const operatorsApi = {
-  list: () => request<Operator[]>("/operators/", {}, true),
-  me: () => request<Operator>("/operators/me", {}, true),
+export const webAnalystsApi = {
+  list: () => request<WebAnalyst[]>("/web-analysts/", {}, true),
+  me: () => request<WebAnalyst>("/web-analysts/me", {}, true),
   updateMe: (data: { name: string }) =>
-    request<{ ok: boolean }>("/operators/me", { method: "PATCH", body: JSON.stringify(data) }, true),
+    request<{ ok: boolean }>(
+      "/web-analysts/me",
+      { method: "PATCH", body: JSON.stringify(data) },
+      true,
+    ),
 };
 
 export const dashboard = {
@@ -506,7 +513,11 @@ export interface FullLead {
   pre_analysis_summary: string | null;
   keywords_suggested: string[];
   links: WebLink[];
-  summary: { headline: string; issues: string[]; talkingPoints: string[] } | null;
+  summary: {
+    headline: string;
+    issues: string[];
+    talkingPoints: string[];
+  } | null;
   score: number | null;
   scanned_by_name: string | null;
   scanned_by_email: string | null;
@@ -545,13 +556,19 @@ export const leads = {
   list: (limit = 5) =>
     request<RecentLead[]>(`/leads/?limit=${limit}`, {}, true),
 
-  get: (id: string) =>
-    request<FullLead>(`/leads/${id}`, {}, true),
+  get: (id: string) => request<FullLead>(`/leads/${id}`, {}, true),
 };
 
 // ── Clients types & endpoints ─────────────────────────────────────────────────
 
-export type ClientEventType = "research" | "scan" | "quote_sent" | "quote_accepted" | "quote_rejected" | "contract_created" | "meeting_set";
+export type ClientEventType =
+  | "research"
+  | "scan"
+  | "quote_sent"
+  | "quote_accepted"
+  | "quote_rejected"
+  | "contract_created"
+  | "meeting_set";
 
 export interface ClientEvent {
   id: string;
@@ -611,10 +628,13 @@ export const clientsApi = {
     ),
 
   list: (limit = 100, offset = 0) =>
-    request<ClientListItem[]>(`/clients/?limit=${limit}&offset=${offset}`, {}, true),
+    request<ClientListItem[]>(
+      `/clients/?limit=${limit}&offset=${offset}`,
+      {},
+      true,
+    ),
 
-  get: (id: string) =>
-    request<ClientDetail>(`/clients/${id}`, {}, true),
+  get: (id: string) => request<ClientDetail>(`/clients/${id}`, {}, true),
 
   delete: (id: string) =>
     request<{ ok: boolean }>(`/clients/${id}`, { method: "DELETE" }, true),

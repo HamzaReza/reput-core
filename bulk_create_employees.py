@@ -21,17 +21,17 @@ except ImportError:
             return e.code, body
 
 ENVIRONMENTS = {
-    "local":      "http://localhost:8000/api/v1/auth/register-operator",
-    "develop":    "https://ealixir-reput-develop.up.railway.app/api/v1/auth/register-operator",
-    "production": "https://ealixir-reput-production.up.railway.app/api/v1/auth/register-operator",
+    "local":      "http://localhost:8000/api/v1/auth/register-web-analyst",
+    # "develop":    "https://ealixir-reput-develop.up.railway.app/api/v1/auth/register-web-analyst",
+    # "production": "https://ealixir-reput-production.up.railway.app/api/v1/auth/register-web-analyst",
 }
 
-OPERATORS = [
-    {"name": "Operator 1", "email": "Operator1@test.com", "password": "Operator12345"},
-    {"name": "Operator 2", "email": "Operator2@test.com", "password": "Operator12345"},
-    {"name": "Operator 3", "email": "Operator3@test.com", "password": "Operator12345"},
-    {"name": "Operator 4", "email": "Operator4@test.com", "password": "Operator12345"},
-    {"name": "Operator 5", "email": "Operator5@test.com", "password": "Operator12345"},
+WEB_ANALYSTS = [
+    {"name": "Web Analyst 1", "email": "1@test.com", "password": "12345678"},
+    {"name": "Web Analyst 2", "email": "2@test.com", "password": "12345678"},
+    {"name": "Web Analyst 3", "email": "3@test.com", "password": "12345678"},
+    {"name": "Web Analyst 4", "email": "4@test.com", "password": "12345678"},
+    {"name": "Web Analyst 5", "email": "5@test.com", "password": "12345678"},
 ]
 
 def register_all(env_name, api_url):
@@ -39,20 +39,20 @@ def register_all(env_name, api_url):
     print(f"  {env_name.upper()}: {api_url}")
     print(f"{'='*60}")
     success, failed = 0, 0
-    for i, op in enumerate(OPERATORS, 1):
-        status, body = post(api_url, op)
+    for i, wa in enumerate(WEB_ANALYSTS, 1):
+        status, body = post(api_url, wa)
         if status == 201:
-            print(f"[{i}/{len(OPERATORS)}] OK      {op['email']}")
+            print(f"[{i}/{len(WEB_ANALYSTS)}] OK      {wa['email']}")
             success += 1
         elif status == 409:
-            print(f"[{i}/{len(OPERATORS)}] EXISTS  {op['email']} — already registered")
+            print(f"[{i}/{len(WEB_ANALYSTS)}] EXISTS  {wa['email']} — already registered")
             failed += 1
         else:
-            print(f"[{i}/{len(OPERATORS)}] ERROR   {op['email']} — HTTP {status}: {body.get('detail', body)}")
+            print(f"[{i}/{len(WEB_ANALYSTS)}] ERROR   {wa['email']} — HTTP {status}: {body.get('detail', body)}")
             failed += 1
-        if i < len(OPERATORS):
+        if i < len(WEB_ANALYSTS):
             time.sleep(0.3)
-    print(f"\n  Result: {success} created, {failed} skipped/failed out of {len(OPERATORS)} operators.")
+    print(f"\n  Result: {success} created, {failed} skipped/failed out of {len(WEB_ANALYSTS)} web analysts.")
 
 def main():
     for env_name, api_url in ENVIRONMENTS.items():

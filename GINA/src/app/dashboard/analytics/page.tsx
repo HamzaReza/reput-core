@@ -68,12 +68,12 @@ const FUNNEL = [
   { stage: "Converted", value: 68   },
 ];
 
-const OPERATORS: { name: string; scans: number; briefs: number; time: string; quality: number; trend: "up" | "flat" | "down" }[] = [
-  { name: "Operator 1", scans: 312, briefs: 96, time: "6.1 hrs", quality: 94, trend: "up"   },
-  { name: "Operator 2", scans: 268, briefs: 79, time: "7.3 hrs", quality: 91, trend: "up"   },
-  { name: "Operator 3", scans: 224, briefs: 61, time: "8.4 hrs", quality: 88, trend: "flat" },
-  { name: "Operator 4", scans: 198, briefs: 54, time: "9.1 hrs", quality: 86, trend: "down" },
-  { name: "Operator 5", scans: 146, briefs: 38, time: "9.8 hrs", quality: 83, trend: "down" },
+const WEB_ANALYSTS: { name: string; scans: number; briefs: number; time: string; quality: number; trend: "up" | "flat" | "down" }[] = [
+  { name: "Web Analyst 1", scans: 312, briefs: 96, time: "6.1 hrs", quality: 94, trend: "up"   },
+  { name: "Web Analyst 2", scans: 268, briefs: 79, time: "7.3 hrs", quality: 91, trend: "up"   },
+  { name: "Web Analyst 3", scans: 224, briefs: 61, time: "8.4 hrs", quality: 88, trend: "flat" },
+  { name: "Web Analyst 4", scans: 198, briefs: 54, time: "9.1 hrs", quality: 86, trend: "down" },
+  { name: "Web Analyst 5", scans: 146, briefs: 38, time: "9.8 hrs", quality: 83, trend: "down" },
 ];
 
 const RISK_CATS = [
@@ -369,31 +369,31 @@ export default function AnalyticsPage() {
         </SectionCard>
       </div>
 
-      {/* ── Row 4: Operator Performance | Geographic Activity | Top Risk Categories ── */}
+      {/* ── Row 4: Web Analyst Performance | Geographic Activity | Top Risk Categories ── */}
       <div style={{ display: "grid", gridTemplateColumns: "2fr 2fr 1.5fr", gap: "0.875rem", alignItems: "start" }}>
 
-        {/* Operator Performance */}
-        <SectionCard title="Operator Performance" subtitle="Performance overview for research operators">
+        {/* Web Analyst Performance */}
+        <SectionCard title="Web Analyst Performance" subtitle="Performance overview for research web analysts">
           <div style={{ overflowX: "auto" }}>
             <table style={{ width: "100%", borderCollapse: "collapse" }}>
               <thead>
                 <tr>
-                  {["Operator", "Scans", "Briefs", "Avg Review Time", "Quality Score", "Trend"].map((h) => (
-                    <th key={h} style={{ fontSize: "0.6875rem", fontWeight: 600, color: "var(--color-muted, #64748b)", textAlign: h === "Operator" ? "left" : "center", padding: "0 0.5rem 0.625rem", borderBottom: "1px solid var(--color-border, #e2e8f0)", whiteSpace: "nowrap" }}>{h}</th>
+                  {["Web Analyst", "Scans", "Briefs", "Avg Review Time", "Quality Score", "Trend"].map((h) => (
+                    <th key={h} style={{ fontSize: "0.6875rem", fontWeight: 600, color: "var(--color-muted, #64748b)", textAlign: h === "Web Analyst" ? "left" : "center", padding: "0 0.5rem 0.625rem", borderBottom: "1px solid var(--color-border, #e2e8f0)", whiteSpace: "nowrap" }}>{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {OPERATORS.map((op, i) => (
+                {WEB_ANALYSTS.map((op, i) => (
                   <tr key={op.name}>
-                    <td style={{ fontSize: "0.8125rem", fontWeight: 500, color: "var(--color-foreground, #1e293b)", padding: "0.625rem 0.5rem", borderBottom: i < OPERATORS.length - 1 ? "1px solid var(--color-border, #e2e8f0)" : "none" }}>{op.name}</td>
-                    <td style={{ fontSize: "0.8125rem", color: "var(--color-foreground, #1e293b)", textAlign: "center", padding: "0.625rem 0.5rem", borderBottom: i < OPERATORS.length - 1 ? "1px solid var(--color-border, #e2e8f0)" : "none" }}>{op.scans}</td>
-                    <td style={{ fontSize: "0.8125rem", color: "var(--color-foreground, #1e293b)", textAlign: "center", padding: "0.625rem 0.5rem", borderBottom: i < OPERATORS.length - 1 ? "1px solid var(--color-border, #e2e8f0)" : "none" }}>{op.briefs}</td>
-                    <td style={{ fontSize: "0.8125rem", color: "var(--color-foreground, #1e293b)", textAlign: "center", padding: "0.625rem 0.5rem", borderBottom: i < OPERATORS.length - 1 ? "1px solid var(--color-border, #e2e8f0)" : "none" }}>{op.time}</td>
-                    <td style={{ textAlign: "center", padding: "0.625rem 0.5rem", borderBottom: i < OPERATORS.length - 1 ? "1px solid var(--color-border, #e2e8f0)" : "none" }}>
+                    <td style={{ fontSize: "0.8125rem", fontWeight: 500, color: "var(--color-foreground, #1e293b)", padding: "0.625rem 0.5rem", borderBottom: i < WEB_ANALYSTS.length - 1 ? "1px solid var(--color-border, #e2e8f0)" : "none" }}>{op.name}</td>
+                    <td style={{ fontSize: "0.8125rem", color: "var(--color-foreground, #1e293b)", textAlign: "center", padding: "0.625rem 0.5rem", borderBottom: i < WEB_ANALYSTS.length - 1 ? "1px solid var(--color-border, #e2e8f0)" : "none" }}>{op.scans}</td>
+                    <td style={{ fontSize: "0.8125rem", color: "var(--color-foreground, #1e293b)", textAlign: "center", padding: "0.625rem 0.5rem", borderBottom: i < WEB_ANALYSTS.length - 1 ? "1px solid var(--color-border, #e2e8f0)" : "none" }}>{op.briefs}</td>
+                    <td style={{ fontSize: "0.8125rem", color: "var(--color-foreground, #1e293b)", textAlign: "center", padding: "0.625rem 0.5rem", borderBottom: i < WEB_ANALYSTS.length - 1 ? "1px solid var(--color-border, #e2e8f0)" : "none" }}>{op.time}</td>
+                    <td style={{ textAlign: "center", padding: "0.625rem 0.5rem", borderBottom: i < WEB_ANALYSTS.length - 1 ? "1px solid var(--color-border, #e2e8f0)" : "none" }}>
                       <span style={{ fontSize: "0.75rem", fontWeight: 700, color: op.quality >= 90 ? "#22c55e" : op.quality >= 85 ? "#eab308" : "#f97316" }}>{op.quality}%</span>
                     </td>
-                    <td style={{ textAlign: "center", padding: "0.625rem 0.5rem", borderBottom: i < OPERATORS.length - 1 ? "1px solid var(--color-border, #e2e8f0)" : "none" }}>
+                    <td style={{ textAlign: "center", padding: "0.625rem 0.5rem", borderBottom: i < WEB_ANALYSTS.length - 1 ? "1px solid var(--color-border, #e2e8f0)" : "none" }}>
                       <SparkLine trend={op.trend} />
                     </td>
                   </tr>
@@ -402,7 +402,7 @@ export default function AnalyticsPage() {
             </table>
           </div>
           <button style={{ marginTop: "0.75rem", background: "none", border: "none", fontSize: "0.75rem", fontWeight: 600, color: "#4479DA", cursor: "pointer", padding: 0, display: "flex", alignItems: "center", gap: "0.25rem" }}>
-            View all operators →
+            View all web analysts →
           </button>
         </SectionCard>
 
