@@ -105,6 +105,16 @@ const COUNTRY_TO_LANGUAGE: Record<string, string> = {
   IE: "en",
 };
 
+const LANGUAGE_CODE_TO_NAME: Record<string, string> = {
+  en: "English", it: "Italian", es: "Spanish", fr: "French",
+  de: "German", pt: "Portuguese", nl: "Dutch", pl: "Polish",
+  ro: "Romanian", hu: "Hungarian", cs: "Czech", ru: "Russian",
+  uk: "Ukrainian", tr: "Turkish", ja: "Japanese", ko: "Korean",
+  "zh-CN": "Chinese", ar: "Arabic", hi: "Hindi", th: "Thai",
+  vi: "Vietnamese", id: "Indonesian", ms: "Malay", el: "Greek",
+  sv: "Swedish", no: "Norwegian", fi: "Finnish", da: "Danish",
+};
+
 function countryCodeFromName(country: string): string | null {
   const k = country.toLowerCase().trim();
   return COUNTRY_NAME_TO_ISO[k] ?? NATIONALITY_ALIASES[k] ?? null;
@@ -189,6 +199,8 @@ export async function POST(req: NextRequest) {
 
     const cap = Math.min(8, Math.max(3, Number(keywordsCap) || 5));
     const countryCode = countryCodeFromName(country);
+    const lang = countryCode ? COUNTRY_TO_LANGUAGE[countryCode.toUpperCase()] : null;
+    const languageName = (lang ? LANGUAGE_CODE_TO_NAME[lang] : null) ?? "English";
     const fullName = `${firstName.trim()} ${lastName.trim()}`;
 
     // Build 2–3 search queries
@@ -257,12 +269,12 @@ Rules:
 - negative_findings: if operator description mentions specific issues, prioritise those
 - ${
       {
-        negative: `keywords: exactly ${cap} items — ADVERSE reputation search terms only: legal disputes, fraud, misconduct, scandal, complaints, litigation. Surface negative coverage. Do NOT include the person's name.`,
-        positive: `keywords: exactly ${cap} items — POSITIVE reputation search terms only: achievements, awards, leadership, philanthropy, recognition. Surface positive coverage. Do NOT include the person's name.`,
-        neutral: `keywords: exactly ${cap} items — NEUTRAL factual search terms only: role, organisation, sector, projects. Objective, no sentiment bias. Do NOT include the person's name.`,
-        all: `keywords: exactly ${cap} items, 1-2 words each, balanced mix across positive, negative and neutral reputation angles. Do NOT include the person's name.`,
+        negative: `keywords: up to ${cap} items (return as many as are well-supported, minimum 1) — ADVERSE reputation search terms only: legal disputes, fraud, misconduct, scandal, complaints, litigation. Surface negative coverage. Do NOT include the person's name. All keywords must be in ${languageName}.`,
+        positive: `keywords: up to ${cap} items (return as many as are well-supported, minimum 1) — POSITIVE reputation search terms only: achievements, awards, leadership, philanthropy, recognition. Surface positive coverage. Do NOT include the person's name. All keywords must be in ${languageName}.`,
+        neutral: `keywords: up to ${cap} items (return as many as are well-supported, minimum 1) — NEUTRAL factual search terms only: role, organisation, sector, projects. Objective, no sentiment bias. Do NOT include the person's name. All keywords must be in ${languageName}.`,
+        all: `keywords: up to ${cap} items (return as many as are well-supported, minimum 1), 1-2 words each, balanced mix across positive, negative and neutral reputation angles. Do NOT include the person's name. All keywords must be in ${languageName}.`,
       }[keywordFocus] ??
-      `keywords: exactly ${cap} items, reputation-relevant, do NOT include the person's name.`
+      `keywords: up to ${cap} items (minimum 1), reputation-relevant, do NOT include the person's name. All keywords must be in ${languageName}.`
     }`;
 
     let profile: PreAnalysisProfile = FALLBACK_PROFILE;
@@ -273,12 +285,13 @@ Rules:
         model: "claude-sonnet-4-6",
         max_tokens: 1024,
         system:
-          "You are a research analyst. Analyse web search results about a person and produce a structured reputation profile. Output only valid JSON, no markdown fences, no extra keys.",
+          `You are a research analyst. Analyse web search results about a person and produce a structured reputation profile. IMPORTANT: Write ALL profile field values and ALL keywords in ${languageName}. Output only valid JSON, no markdown fences, no extra keys.`,
         messages: [{ role: "user", content: userPrompt }],
       });
 
-      const text =
+      const raw =
         msg.content[0].type === "text" ? msg.content[0].text.trim() : "";
+      const text = raw.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
       const parsed = JSON.parse(text) as {
         profile: PreAnalysisProfile;
         keywords: string[];

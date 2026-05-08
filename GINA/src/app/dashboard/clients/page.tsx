@@ -129,6 +129,23 @@ export default function ClientsPage() {
   const router = useRouter();
   const [list, setList] = useState<ClientListItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [hoveredId, setHoveredId] = useState<string | null>(null);
+  const [confirmId, setConfirmId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  const handleDelete = async (id: string) => {
+    setDeletingId(id);
+    try {
+      await clientsApi.delete(id);
+      setList((prev) => prev.filter((c) => c.id !== id));
+    } catch { /* non-fatal */ }
+    finally {
+      setDeletingId(null);
+      setConfirmId(null);
+    }
+  };
+
+  const confirmClient = confirmId ? list.find((c) => c.id === confirmId) : null;
 
   const handleExportCsv = () => {
     const rows = formatClientExportRows(list);
@@ -287,12 +304,14 @@ export default function ClientsPage() {
                   cursor: "pointer",
                   transition: "background-color 0.12s, box-shadow 0.12s",
                 }}
-                onMouseEnter={(e) =>
-                  (e.currentTarget.style.backgroundColor = "#f8fafc")
-                }
-                onMouseLeave={(e) =>
-                  (e.currentTarget.style.backgroundColor = "transparent")
-                }
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = "#f8fafc";
+                  setHoveredId(client.id);
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = "transparent";
+                  setHoveredId(null);
+                }}
               >
                 <div
                   style={{
@@ -373,6 +392,35 @@ export default function ClientsPage() {
                         gap: "0.6rem",
                       }}
                     >
+                      {hoveredId === client.id && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setConfirmId(client.id);
+                          }}
+                          style={{
+                            background: "none",
+                            border: "none",
+                            cursor: "pointer",
+                            padding: "0.2rem",
+                            color: "#94a3b8",
+                            display: "flex",
+                            alignItems: "center",
+                            borderRadius: "0.25rem",
+                          }}
+                          onMouseEnter={(e) => ((e.currentTarget as HTMLButtonElement).style.color = "#ef4444")}
+                          onMouseLeave={(e) => ((e.currentTarget as HTMLButtonElement).style.color = "#94a3b8")}
+                          aria-label="Delete client"
+                        >
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <polyline points="3 6 5 6 21 6" />
+                            <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                            <path d="M10 11v6M14 11v6" />
+                            <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+                          </svg>
+                        </button>
+                      )}
                       <span
                         style={{
                           fontSize: "0.6875rem",
@@ -415,6 +463,63 @@ export default function ClientsPage() {
             );
           })}
       </div>
+
+      {confirmClient && (
+        <div
+          style={{
+            position: "fixed", inset: 0, zIndex: 1000,
+            backgroundColor: "rgba(15,23,42,0.45)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            padding: "1.25rem",
+          }}
+          onClick={() => { if (!deletingId) setConfirmId(null); }}
+        >
+          <div
+            className="glass"
+            style={{
+              borderRadius: "0.875rem", padding: "1.5rem",
+              maxWidth: "24rem", width: "100%",
+              boxShadow: "0 20px 60px rgba(15,23,42,0.18)",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <p style={{ fontSize: "1rem", fontWeight: 700, color: "#1e293b", margin: "0 0 0.5rem" }}>
+              Delete Client
+            </p>
+            <p style={{ fontSize: "0.875rem", color: "#475569", lineHeight: 1.6, margin: "0 0 1.25rem" }}>
+              Delete <strong>{confirmClient.name}</strong>? This will permanently remove all their research, scans, and history. This cannot be undone.
+            </p>
+            <div style={{ display: "flex", gap: "0.625rem", justifyContent: "flex-end" }}>
+              <button
+                type="button"
+                onClick={() => setConfirmId(null)}
+                disabled={!!deletingId}
+                style={{
+                  padding: "0.5rem 1rem", borderRadius: "0.5rem", fontSize: "0.875rem",
+                  fontWeight: 600, border: "1px solid #e2e8f0", backgroundColor: "#fff",
+                  color: "#64748b", cursor: deletingId ? "default" : "pointer",
+                  opacity: deletingId ? 0.5 : 1,
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => handleDelete(confirmClient.id)}
+                disabled={!!deletingId}
+                style={{
+                  padding: "0.5rem 1rem", borderRadius: "0.5rem", fontSize: "0.875rem",
+                  fontWeight: 700, border: "none", backgroundColor: "#ef4444",
+                  color: "#fff", cursor: deletingId ? "default" : "pointer",
+                  opacity: deletingId ? 0.7 : 1,
+                }}
+              >
+                {deletingId === confirmClient.id ? "Deleting…" : "Delete"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

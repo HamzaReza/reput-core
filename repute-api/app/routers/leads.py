@@ -21,6 +21,7 @@ class LeadCreate(BaseModel):
     background: str | None = None
     pre_analysis_summary: str | None = None
     keywords_suggested: list[str] = []
+    force_new: bool = False
 
 
 class LeadUpdate(BaseModel):
@@ -37,7 +38,7 @@ async def create_lead(
     current_operator: Operator = Depends(get_current_operator),
 ) -> dict:
     existing = None
-    if payload.name and payload.country:
+    if not payload.force_new and payload.name and payload.country:
         result = await db.execute(
             select(LeadGenerated).where(
                 LeadGenerated.name == payload.name,

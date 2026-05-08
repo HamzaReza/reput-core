@@ -742,6 +742,17 @@ function EaluminatePageInner() {
   useEffect(() => {
     const id = searchParams.get("lead");
     if (!id) return;
+    // Reset scan state so stale results from a previous lead don't bleed through
+    setResult(null);
+    setScore(0);
+    setScanComplete(false);
+    setPreAnalysisDone(false);
+    setPreAnalysisSummary("");
+    setPreAnalysisProfile(null);
+    setEditableKeywords([]);
+    setKeywordsReady(false);
+    setLeadId(null);
+    setClientId(null);
     leads
       .get(id)
       .then(async (lead) => {
@@ -915,6 +926,7 @@ function EaluminatePageInner() {
           background: description.trim(),
           pre_analysis_summary: profile ? JSON.stringify(profile) : undefined,
           keywords_suggested: data.keywords ?? [],
+          force_new: true,
         });
         if (ld.id) setLeadId(ld.id);
 
@@ -997,10 +1009,31 @@ function EaluminatePageInner() {
       setResult(scanResult);
       setScanComplete(true);
 
-      // Append scan results to the lead entry
-      if (leadId) {
+      // Post-scan persistence — reuse the research lead if available, otherwise create a new one
+      let currentLeadId: string | null = leadId;
+      if (!currentLeadId) {
         try {
-          await leads.update(leadId, {
+          const ld = await leads.create({
+            name: fullName || undefined,
+            company: company.trim() || undefined,
+            country,
+            background: description.trim(),
+            pre_analysis_summary: preAnalysisSummary || undefined,
+            keywords_suggested: editableKeywords,
+            force_new: true,
+          });
+          if (ld.id) {
+            currentLeadId = ld.id;
+            setLeadId(ld.id);
+          }
+        } catch {
+          /* non-fatal */
+        }
+      }
+
+      if (currentLeadId) {
+        try {
+          await leads.update(currentLeadId, {
             links: scanResult.links as unknown[],
             summary: scanResult.summary
               ? ({ ...scanResult.summary } as Record<string, unknown>)
@@ -1024,6 +1057,8 @@ function EaluminatePageInner() {
               links_count: scanResult.links.length,
               negative_count: scanResult.negative.length,
               keywords: editableKeywords,
+              lead_id: currentLeadId ?? undefined,
+              links: scanResult.links,
             },
           });
         } catch {
