@@ -107,14 +107,23 @@ function ResearchDetail({ data }: { data: Record<string, unknown> }) {
   );
 }
 
-function ScanDetail({ data }: { data: Record<string, unknown> }) {
+function ScanDetail({ data, router }: { data: Record<string, unknown>; router: ReturnType<typeof useRouter> }) {
+  const [linksExpanded, setLinksExpanded] = useState(false);
+
   const score = data.score as number | undefined;
   const linksCount = data.links_count as number | undefined;
   const negCount = data.negative_count as number | undefined;
   const summary = data.summary as { headline?: string } | null | undefined;
   const keywords = data.keywords as string[] | undefined;
+  const leadId = data.lead_id as string | undefined;
+  const links = data.links as Array<{ url: string; title: string; source: string; sentiment: string; risk: string }> | undefined;
+
   const risk = score !== undefined ? riskFromScore(score) : null;
   const color = risk ? RISK_COLORS[risk] : "#94a3b8";
+
+  const SENTIMENT_COLORS: Record<string, string> = { negative: "#ef4444", positive: "#22c55e", neutral: "#94a3b8" };
+  const RISK_BADGE_COLORS: Record<string, string> = { high: "#ef4444", medium: "#f97316", low: "#eab308", none: "#94a3b8" };
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
       {score !== undefined && risk && (
@@ -135,6 +144,61 @@ function ScanDetail({ data }: { data: Record<string, unknown> }) {
             </span>
           ))}
         </div>
+      )}
+
+      {links && links.length > 0 && (
+        <div>
+          <button
+            type="button"
+            onClick={() => setLinksExpanded((v) => !v)}
+            style={{ display: "flex", alignItems: "center", gap: "0.375rem", padding: "0.25rem 0", background: "none", border: "none", cursor: "pointer", fontSize: "0.8125rem", fontWeight: 600, color: "#4479da" }}
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ transform: linksExpanded ? "rotate(90deg)" : "none", transition: "transform 0.15s" }}>
+              <polyline points="9 18 15 12 9 6" />
+            </svg>
+            {linksExpanded ? "Hide" : "Show"} {links.length} links
+          </button>
+          {linksExpanded && (
+            <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem", marginTop: "0.5rem" }}>
+              {links.map((link, i) => (
+                <div key={i} style={{ padding: "0.625rem 0.75rem", borderRadius: "0.375rem", border: "1px solid #e2e8f0", backgroundColor: "#f8fafc", display: "flex", flexDirection: "column", gap: "0.375rem" }}>
+                  <a href={link.url} target="_blank" rel="noopener noreferrer" style={{ fontSize: "0.8125rem", fontWeight: 600, color: "#1e293b", textDecoration: "none" }}
+                    onMouseEnter={(e) => ((e.currentTarget as HTMLAnchorElement).style.textDecoration = "underline")}
+                    onMouseLeave={(e) => ((e.currentTarget as HTMLAnchorElement).style.textDecoration = "none")}
+                  >
+                    {link.title || link.url}
+                  </a>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: "0.375rem" }}>
+                    {link.source && (
+                      <span style={{ fontSize: "0.6875rem", padding: "0.1rem 0.5rem", borderRadius: "999px", backgroundColor: "#f1f5f9", color: "#64748b", border: "1px solid #e2e8f0" }}>{link.source}</span>
+                    )}
+                    {link.sentiment && (
+                      <span style={{ fontSize: "0.6875rem", padding: "0.1rem 0.5rem", borderRadius: "999px", backgroundColor: (SENTIMENT_COLORS[link.sentiment] ?? "#94a3b8") + "18", color: SENTIMENT_COLORS[link.sentiment] ?? "#94a3b8", border: `1px solid ${(SENTIMENT_COLORS[link.sentiment] ?? "#94a3b8")}40`, fontWeight: 600 }}>{link.sentiment}</span>
+                    )}
+                    {link.risk && link.risk !== "none" && (
+                      <span style={{ fontSize: "0.6875rem", padding: "0.1rem 0.5rem", borderRadius: "999px", backgroundColor: (RISK_BADGE_COLORS[link.risk] ?? "#94a3b8") + "18", color: RISK_BADGE_COLORS[link.risk] ?? "#94a3b8", border: `1px solid ${(RISK_BADGE_COLORS[link.risk] ?? "#94a3b8")}40`, fontWeight: 600 }}>{link.risk} risk</span>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {leadId && (
+        <button
+          type="button"
+          onClick={() => router.push(`/dashboard/ealuminate?lead=${leadId}`)}
+          style={{ alignSelf: "flex-start", display: "flex", alignItems: "center", gap: "0.375rem", padding: "0.35rem 0.875rem", borderRadius: "0.375rem", fontSize: "0.8125rem", fontWeight: 600, cursor: "pointer", border: "1.5px solid #4479da", backgroundColor: "transparent", color: "#4479da", marginTop: "0.25rem" }}
+        >
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+            <polyline points="15 3 21 3 21 9" />
+            <line x1="10" y1="14" x2="21" y2="3" />
+          </svg>
+          View in Ealuminate
+        </button>
       )}
     </div>
   );
@@ -216,16 +280,13 @@ type FormMode = "quote" | "accepted" | "rejected" | "contract" | null;
 
 function ActionPanel({
   lastEventType,
-  client,
   onSubmit,
   submitting,
 }: {
   lastEventType: ClientEventType | undefined;
-  client: ClientDetail;
   onSubmit: (payload: ClientAddEventPayload) => Promise<void>;
   submitting: boolean;
 }) {
-  const router = useRouter();
   const [formMode, setFormMode] = useState<FormMode>(null);
   const [planType, setPlanType] = useState("Professional");
   const [message, setMessage] = useState("");
@@ -251,33 +312,18 @@ function ActionPanel({
     resetForm();
   };
 
-  // Navigate to ealuminate with the lead_id from the research event
-  const handleRunScan = () => {
-    const researchEvent = [...client.events].reverse().find((e) => e.event_type === "research");
-    const leadId = researchEvent?.data?.lead_id as string | undefined;
-    if (leadId) {
-      router.push(`/dashboard/ealuminate?lead=${leadId}`);
-    } else {
-      router.push("/dashboard/ealuminate");
-    }
-  };
-
-  // ── "Waiting" state — auto-resolved by timer after 3 min
   if (lastEventType === "quote_sent") {
     return (
       <div className="glass glow-border" style={{ borderRadius: "0.875rem", padding: "1.25rem" }}>
         <style>{`@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }`}</style>
         <div style={{ display: "flex", alignItems: "center", gap: "0.625rem" }}>
           <div style={{ width: 8, height: 8, borderRadius: "50%", backgroundColor: "#f59e0b", animation: "pulse 1.5s infinite", flexShrink: 0 }} />
-          <p style={{ margin: 0, fontSize: "0.9rem", fontWeight: 600, color: "#d97706" }}>
-            Waiting for quote response…
-          </p>
+          <p style={{ margin: 0, fontSize: "0.9rem", fontWeight: 600, color: "#d97706" }}>Waiting for quote response…</p>
         </div>
       </div>
     );
   }
 
-  // ── No action for contract_created
   if (lastEventType === "contract_created") {
     return (
       <div className="glass glow-border" style={{ borderRadius: "0.875rem", padding: "1.25rem" }}>
@@ -289,13 +335,10 @@ function ActionPanel({
     );
   }
 
-  // ── Action buttons for other states
-  const showRunScan = lastEventType === "research";
-  const showCreateQuote = lastEventType === "scan";
-  const showNewQuote = lastEventType === "quote_rejected";
+  const showQuote = lastEventType === "scan" || lastEventType === "quote_rejected";
   const showContract = lastEventType === "quote_accepted";
 
-  if (!showRunScan && !showCreateQuote && !showNewQuote && !showContract) return null;
+  if (!showQuote && !showContract) return null;
 
   return (
     <div className="glass glow-border" style={{ borderRadius: "0.875rem", padding: "1.25rem" }}>
@@ -303,17 +346,14 @@ function ActionPanel({
         Next Step
       </p>
 
-      {showRunScan && (
-        <button onClick={handleRunScan} className="glow-button" style={{ padding: "0.6rem 1.25rem", fontWeight: 700, borderRadius: "0.5rem", fontSize: "0.875rem", cursor: "pointer" }}>
-          Run Scan in Ealuminate
-        </button>
-      )}
-
-      {(showCreateQuote || showNewQuote) && (
-        <>
-          <div style={{ display: "flex", gap: "0.625rem", marginBottom: formMode ? "1.25rem" : 0 }}>
-            <button disabled={showCreateQuote} onClick={() => setFormMode(formMode === "quote" ? null : "quote")} style={{ padding: "0.5rem 1.25rem", borderRadius: "0.5rem", fontSize: "0.875rem", fontWeight: 600, border: "1.5px solid", cursor: showCreateQuote ? "not-allowed" : "pointer", opacity: showCreateQuote ? 0.45 : 1, borderColor: formMode === "quote" ? "#4479da" : "#e2e8f0", backgroundColor: formMode === "quote" ? "#eef3ff" : "#fff", color: formMode === "quote" ? "#4479da" : "#1e293b" }}>
-              {showNewQuote ? "Create New Quote" : "Create Quote"}
+      {showQuote && (
+        <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+          <div style={{ display: "flex", gap: "0.625rem", flexWrap: "wrap" }}>
+            <button
+              disabled
+              style={{ padding: "0.5rem 1.25rem", borderRadius: "0.5rem", fontSize: "0.875rem", fontWeight: 600, border: "1.5px solid #e2e8f0", cursor: "not-allowed", opacity: 0.4, backgroundColor: "#f8fafc", color: "#94a3b8" }}
+            >
+              {lastEventType === "quote_rejected" ? "Create New Quote" : "Create Quote"}
             </button>
           </div>
           {formMode === "quote" && (
@@ -337,13 +377,16 @@ function ActionPanel({
               </button>
             </form>
           )}
-        </>
+        </div>
       )}
 
       {showContract && (
-        <>
-          <div style={{ display: "flex", gap: "0.625rem", marginBottom: formMode ? "1.25rem" : 0 }}>
-            <button onClick={() => setFormMode(formMode === "contract" ? null : "contract")} style={{ padding: "0.5rem 1.25rem", borderRadius: "0.5rem", fontSize: "0.875rem", fontWeight: 600, border: "1.5px solid", cursor: "pointer", borderColor: formMode === "contract" ? "#8b5cf6" : "#e2e8f0", backgroundColor: formMode === "contract" ? "rgba(139,92,246,0.08)" : "#fff", color: formMode === "contract" ? "#8b5cf6" : "#1e293b" }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+          <div>
+            <button
+              onClick={() => setFormMode(formMode === "contract" ? null : "contract")}
+              style={{ padding: "0.5rem 1.25rem", borderRadius: "0.5rem", fontSize: "0.875rem", fontWeight: 600, border: "1.5px solid", cursor: "pointer", borderColor: formMode === "contract" ? "#8b5cf6" : "#e2e8f0", backgroundColor: formMode === "contract" ? "rgba(139,92,246,0.08)" : "#fff", color: formMode === "contract" ? "#8b5cf6" : "#1e293b" }}
+            >
               Create Contract
             </button>
           </div>
@@ -362,7 +405,7 @@ function ActionPanel({
               </button>
             </form>
           )}
-        </>
+        </div>
       )}
     </div>
   );
@@ -558,7 +601,6 @@ ${timelineRows || "<p>No timeline events available.</p>"}
         <div style={{ marginBottom: "1.25rem" }}>
           <ActionPanel
             lastEventType={lastEventType}
-            client={client}
             onSubmit={handleAddEvent}
             submitting={submitting}
           />
@@ -593,8 +635,31 @@ ${timelineRows || "<p>No timeline events available.</p>"}
                       <span style={{ fontSize: "0.875rem", fontWeight: 700, color: meta.color }}>{meta.label}</span>
                       <span style={{ fontSize: "0.75rem", color: "#94a3b8" }}>{formatDateTime(event.created_at)}</span>
                     </div>
-                    {event.event_type === "research" && <ResearchDetail data={data} />}
-                    {event.event_type === "scan" && <ScanDetail data={data} />}
+                    {event.event_type === "research" && (
+                      <>
+                        <ResearchDetail data={data} />
+                        {!client.events.slice(i + 1).some((e) => {
+                          if (e.event_type !== "scan") return false;
+                          const researchLeadId = data.lead_id as string | undefined;
+                          if (!researchLeadId) return true;
+                          return (e.data?.lead_id as string | undefined) === researchLeadId;
+                        }) && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const leadId = data.lead_id as string | undefined;
+                              if (leadId) router.push(`/dashboard/ealuminate?lead=${leadId}`);
+                              else router.push("/dashboard/ealuminate");
+                            }}
+                            className="glow-button"
+                            style={{ marginTop: "0.625rem", padding: "0.4rem 1rem", fontWeight: 700, borderRadius: "0.5rem", fontSize: "0.8125rem", cursor: "pointer" }}
+                          >
+                            Run Scan in Ealuminate
+                          </button>
+                        )}
+                      </>
+                    )}
+                    {event.event_type === "scan" && <ScanDetail data={data} router={router} />}
                     {event.event_type === "quote_sent" && <QuoteSentDetail data={data} />}
                     {(event.event_type === "quote_accepted" || event.event_type === "quote_rejected" || event.event_type === "contract_created" || event.event_type === "meeting_set") && <NoteDetail data={data} />}
                   </div>

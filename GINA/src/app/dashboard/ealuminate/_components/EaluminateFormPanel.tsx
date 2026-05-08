@@ -141,38 +141,14 @@ export function EaluminateFormPanel(props: EaluminateFormPanelProps) {
         />
       </div>
 
-      {scanComplete && (
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: "0.625rem",
-            padding: "0.75rem 1rem",
-            borderRadius: "0.25rem",
-            backgroundColor: "rgba(72,212,184,0.1)",
-            border: "1px solid rgba(72,212,184,0.35)",
-            marginBottom: "1.25rem",
-          }}
-        >
-          <svg
-            width="16"
-            height="16"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="#48D4B8"
-            strokeWidth="2.5"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <polyline points="20 6 9 17 4 12" />
-          </svg>
-          <p style={{ margin: 0, fontSize: "0.875rem", fontWeight: 600, color: "#48D4B8" }}>
-            Scan Complete — this lead has already been scanned. Fields are read-only.
-          </p>
-        </div>
-      )}
 
-      <div className="eal-card-body">
+      <form
+        className="eal-card-body"
+        onSubmit={(e) => {
+          e.preventDefault();
+          handleResearch();
+        }}
+      >
         <div
           style={{
             flex: 1,
@@ -188,11 +164,10 @@ export function EaluminateFormPanel(props: EaluminateFormPanelProps) {
               <input
                 type="text"
                 value={firstName}
-                onChange={(e) => !scanComplete && setFirstName(e.target.value)}
+                onChange={(e) => setFirstName(e.target.value)}
                 placeholder="e.g. John"
                 required
-                readOnly={scanComplete}
-                style={{ ...inputStyle, backgroundColor: scanComplete ? "#f8fafc" : "#ffffff" }}
+                style={inputStyle}
               />
             </div>
             <div>
@@ -200,11 +175,10 @@ export function EaluminateFormPanel(props: EaluminateFormPanelProps) {
               <input
                 type="text"
                 value={lastName}
-                onChange={(e) => !scanComplete && setLastName(e.target.value)}
+                onChange={(e) => setLastName(e.target.value)}
                 placeholder="e.g. Smith"
                 required
-                readOnly={scanComplete}
-                style={{ ...inputStyle, backgroundColor: scanComplete ? "#f8fafc" : "#ffffff" }}
+                style={inputStyle}
               />
             </div>
           </div>
@@ -214,37 +188,30 @@ export function EaluminateFormPanel(props: EaluminateFormPanelProps) {
             <input
               type="text"
               value={company}
-              onChange={(e) => !scanComplete && setCompany(e.target.value)}
+              onChange={(e) => setCompany(e.target.value)}
               placeholder="e.g. Acme Corp (optional)"
-              readOnly={scanComplete}
-              style={{ ...inputStyle, backgroundColor: scanComplete ? "#f8fafc" : "#ffffff" }}
+              style={inputStyle}
             />
           </div>
 
           <div>
             <label style={labelStyle}>Country *</label>
-            {scanComplete ? (
-              <input type="text" value={country} readOnly style={{ ...inputStyle, backgroundColor: "#f8fafc" }} />
-            ) : (
-              <CountryPicker value={country} onChange={setCountry} required />
-            )}
+            <CountryPicker value={country} onChange={setCountry} required />
           </div>
 
           <div>
             <label style={labelStyle}>Background &amp; Context *</label>
             <textarea
               value={description}
-              onChange={(e) => !scanComplete && handleDescriptionChange(e.target.value)}
+              onChange={(e) => handleDescriptionChange(e.target.value)}
               placeholder="Describe the subject's background, industry, role, known controversies, associations, or any context that may be relevant to the scan…"
               rows={4}
               required
-              readOnly={scanComplete}
               style={{
                 ...inputStyle,
-                resize: scanComplete ? "none" : "vertical",
+                resize: "vertical",
                 lineHeight: 1.6,
                 minHeight: "6rem",
-                backgroundColor: scanComplete ? "#f8fafc" : "#ffffff",
               }}
             />
           </div>
@@ -256,20 +223,18 @@ export function EaluminateFormPanel(props: EaluminateFormPanelProps) {
                 <button
                   key={n}
                   type="button"
-                  disabled={scanComplete}
                   onClick={() => setKeywordsCap(n)}
                   style={{
                     padding: "0.4rem 1rem",
                     borderRadius: "0.25rem",
                     fontSize: "0.875rem",
                     fontWeight: 500,
-                    cursor: scanComplete ? "default" : "pointer",
+                    cursor: "pointer",
                     transition: "all 0.15s",
                     border: "1.5px solid",
                     borderColor: keywordsCap === n ? "#4479DA" : "var(--color-border, #e2e8f0)",
                     backgroundColor: keywordsCap === n ? "#eef3ff" : "#ffffff",
                     color: keywordsCap === n ? "#4479DA" : "var(--color-muted, #64748b)",
-                    opacity: scanComplete ? 0.6 : 1,
                   }}
                 >
                   {n}
@@ -288,20 +253,18 @@ export function EaluminateFormPanel(props: EaluminateFormPanelProps) {
                 <button
                   key={value}
                   type="button"
-                  disabled={scanComplete}
                   onClick={() => handleFocusChange(value)}
                   style={{
                     padding: "0.4rem 1rem",
                     borderRadius: "0.25rem",
                     fontSize: "0.875rem",
                     fontWeight: 500,
-                    cursor: scanComplete ? "default" : "pointer",
+                    cursor: "pointer",
                     transition: "all 0.15s",
                     border: "1.5px solid",
                     borderColor: keywordFocus === value ? "#4479DA" : "var(--color-border, #e2e8f0)",
                     backgroundColor: keywordFocus === value ? "#eef3ff" : "#ffffff",
                     color: keywordFocus === value ? "#4479DA" : "var(--color-muted, #64748b)",
-                    opacity: scanComplete ? 0.6 : 1,
                   }}
                 >
                   {label}
@@ -316,17 +279,16 @@ export function EaluminateFormPanel(props: EaluminateFormPanelProps) {
           {error && <p style={{ margin: 0, fontSize: "0.875rem", color: "#ef4444" }}>{error}</p>}
 
           <button
-            type="button"
-            disabled={preAnalysisLoading || scanComplete}
-            onClick={handleResearch}
+            type="submit"
+            disabled={preAnalysisLoading}
             className="glow-button"
             style={{
               width: "100%",
               padding: "0.75rem",
               fontWeight: 700,
               borderRadius: "0.25rem",
-              opacity: preAnalysisLoading || scanComplete ? 0.5 : 1,
-              cursor: scanComplete ? "default" : "pointer",
+              opacity: preAnalysisLoading ? 0.5 : 1,
+              cursor: "pointer",
             }}
           >
             {preAnalysisLoading ? (
@@ -458,7 +420,7 @@ export function EaluminateFormPanel(props: EaluminateFormPanelProps) {
             <>
               <div>
                 <label style={labelStyle}>Keywords — edit or add your own</label>
-                <KeywordsEditor keywords={editableKeywords} setKeywords={setEditableKeywords} readOnly={scanComplete} />
+                <KeywordsEditor keywords={editableKeywords} setKeywords={setEditableKeywords} />
               </div>
               <div>
                 <label style={labelStyle}>Results Cap</label>
@@ -467,20 +429,18 @@ export function EaluminateFormPanel(props: EaluminateFormPanelProps) {
                     <button
                       key={cap}
                       type="button"
-                      disabled={scanComplete}
                       onClick={() => setResultsCap(cap)}
                       style={{
                         padding: "0.4rem 1rem",
                         borderRadius: "0.25rem",
                         fontSize: "0.875rem",
                         fontWeight: 500,
-                        cursor: scanComplete ? "default" : "pointer",
+                        cursor: "pointer",
                         transition: "all 0.15s",
                         border: "1.5px solid",
                         borderColor: resultsCap === cap ? "#4479DA" : "var(--color-border, #e2e8f0)",
                         backgroundColor: resultsCap === cap ? "#eef3ff" : "#ffffff",
                         color: resultsCap === cap ? "#4479DA" : "var(--color-muted, #64748b)",
-                        opacity: scanComplete ? 0.6 : 1,
                       }}
                     >
                       {cap}
@@ -493,7 +453,7 @@ export function EaluminateFormPanel(props: EaluminateFormPanelProps) {
               </div>
               <button
                 type="button"
-                disabled={loading || editableKeywords.length === 0 || scanComplete}
+                disabled={loading || editableKeywords.length === 0}
                 onClick={handleRunScan}
                 className="glow-button"
                 style={{
@@ -501,8 +461,8 @@ export function EaluminateFormPanel(props: EaluminateFormPanelProps) {
                   padding: "0.75rem",
                   fontWeight: 700,
                   borderRadius: "0.25rem",
-                  opacity: loading || editableKeywords.length === 0 || scanComplete ? 0.5 : 1,
-                  cursor: scanComplete ? "default" : "pointer",
+                  opacity: loading || editableKeywords.length === 0 ? 0.5 : 1,
+                  cursor: "pointer",
                 }}
               >
                 {loading ? (
@@ -518,7 +478,7 @@ export function EaluminateFormPanel(props: EaluminateFormPanelProps) {
           )}
         </div>
         {pipeline}
-      </div>
+      </form>
     </div>
   );
 }

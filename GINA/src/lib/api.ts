@@ -476,6 +476,7 @@ export interface LeadCreatePayload {
   background?: string;
   pre_analysis_summary?: string;
   keywords_suggested?: string[];
+  force_new?: boolean;
 }
 
 export interface LeadUpdatePayload {
@@ -614,4 +615,7 @@ export const clientsApi = {
 
   get: (id: string) =>
     request<ClientDetail>(`/clients/${id}`, {}, true),
+
+  delete: (id: string) =>
+    request<{ ok: boolean }>(`/clients/${id}`, { method: "DELETE" }, true),
 };
