@@ -59,7 +59,7 @@
   font-weight: 600;
   color: #ffffff;
   background-color: var(--color-button);
-  border-radius: 0.625rem;
+  border-radius: 999px;
   transition: background-color 0.2s ease, box-shadow 0.2s ease;
 }
 .glow-button:hover {

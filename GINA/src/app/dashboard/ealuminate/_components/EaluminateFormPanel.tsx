@@ -107,7 +107,7 @@ export function EaluminateFormPanel(props: EaluminateFormPanelProps) {
   return (
     <div
       style={{
-        borderRadius: "0.375rem",
+        borderRadius: "0.875rem",
         border: "1px solid #d1d9e0",
         backgroundColor: "#ffffff",
         padding: "clamp(1.25rem, 4vw, 2rem)",
@@ -125,7 +125,13 @@ export function EaluminateFormPanel(props: EaluminateFormPanelProps) {
         >
           EALUMINATE
         </h1>
-        <p style={{ margin: 0, fontSize: "0.9375rem", color: "var(--color-muted, #64748b)" }}>
+        <p
+          style={{
+            margin: 0,
+            fontSize: "0.9375rem",
+            color: "var(--color-muted, #64748b)",
+          }}
+        >
           Enter the prospect&apos;s details to generate a reputation report.
         </p>
         <div
@@ -136,11 +142,14 @@ export function EaluminateFormPanel(props: EaluminateFormPanelProps) {
             width: 8,
             height: 8,
             borderRadius: "50%",
-            backgroundColor: scanComplete ? "#4CAF50" : preAnalysisDone ? "#48D4B8" : "#f59e0b",
+            backgroundColor: scanComplete
+              ? "#4CAF50"
+              : preAnalysisDone
+                ? "#48D4B8"
+                : "#f59e0b",
           }}
         />
       </div>
-
 
       <form
         className="eal-card-body"
@@ -226,22 +235,34 @@ export function EaluminateFormPanel(props: EaluminateFormPanelProps) {
                   onClick={() => setKeywordsCap(n)}
                   style={{
                     padding: "0.4rem 1rem",
-                    borderRadius: "0.25rem",
+                    borderRadius: "999px",
                     fontSize: "0.875rem",
                     fontWeight: 500,
                     cursor: "pointer",
                     transition: "all 0.15s",
                     border: "1.5px solid",
-                    borderColor: keywordsCap === n ? "#4479DA" : "var(--color-border, #e2e8f0)",
+                    borderColor:
+                      keywordsCap === n
+                        ? "#4479DA"
+                        : "var(--color-border, #e2e8f0)",
                     backgroundColor: keywordsCap === n ? "#eef3ff" : "#ffffff",
-                    color: keywordsCap === n ? "#4479DA" : "var(--color-muted, #64748b)",
+                    color:
+                      keywordsCap === n
+                        ? "#4479DA"
+                        : "var(--color-muted, #64748b)",
                   }}
                 >
                   {n}
                 </button>
               ))}
             </div>
-            <p style={{ margin: "0.375rem 0 0", fontSize: "0.75rem", color: "#94a3b8" }}>
+            <p
+              style={{
+                margin: "0.375rem 0 0",
+                fontSize: "0.75rem",
+                color: "#94a3b8",
+              }}
+            >
               Number of keywords EALUMINATE generates from the description
             </p>
           </div>
@@ -256,27 +277,44 @@ export function EaluminateFormPanel(props: EaluminateFormPanelProps) {
                   onClick={() => handleFocusChange(value)}
                   style={{
                     padding: "0.4rem 1rem",
-                    borderRadius: "0.25rem",
+                    borderRadius: "999px",
                     fontSize: "0.875rem",
                     fontWeight: 500,
                     cursor: "pointer",
                     transition: "all 0.15s",
                     border: "1.5px solid",
-                    borderColor: keywordFocus === value ? "#4479DA" : "var(--color-border, #e2e8f0)",
-                    backgroundColor: keywordFocus === value ? "#eef3ff" : "#ffffff",
-                    color: keywordFocus === value ? "#4479DA" : "var(--color-muted, #64748b)",
+                    borderColor:
+                      keywordFocus === value
+                        ? "#4479DA"
+                        : "var(--color-border, #e2e8f0)",
+                    backgroundColor:
+                      keywordFocus === value ? "#eef3ff" : "#ffffff",
+                    color:
+                      keywordFocus === value
+                        ? "#4479DA"
+                        : "var(--color-muted, #64748b)",
                   }}
                 >
                   {label}
                 </button>
               ))}
             </div>
-            <p style={{ margin: "0.375rem 0 0", fontSize: "0.75rem", color: "#94a3b8" }}>
+            <p
+              style={{
+                margin: "0.375rem 0 0",
+                fontSize: "0.75rem",
+                color: "#94a3b8",
+              }}
+            >
               Focus applied to AI keyword generation
             </p>
           </div>
 
-          {error && <p style={{ margin: 0, fontSize: "0.875rem", color: "#ef4444" }}>{error}</p>}
+          {error && (
+            <p style={{ margin: 0, fontSize: "0.875rem", color: "#ef4444" }}>
+              {error}
+            </p>
+          )}
 
           <button
             type="submit"
@@ -286,7 +324,7 @@ export function EaluminateFormPanel(props: EaluminateFormPanelProps) {
               width: "100%",
               padding: "0.75rem",
               fontWeight: 700,
-              borderRadius: "0.25rem",
+              borderRadius: "999px",
               opacity: preAnalysisLoading ? 0.5 : 1,
               cursor: "pointer",
             }}
@@ -306,7 +344,7 @@ export function EaluminateFormPanel(props: EaluminateFormPanelProps) {
           {preAnalysisDone && (
             <div
               style={{
-                borderRadius: "0.375rem",
+                borderRadius: "0.875rem",
                 border: "1px solid #d1d9e0",
                 backgroundColor: "#f8fafc",
                 padding: "1.25rem",
@@ -338,7 +376,7 @@ export function EaluminateFormPanel(props: EaluminateFormPanelProps) {
                     alignItems: "center",
                     gap: "0.3rem",
                     padding: "0.2rem 0.4rem",
-                    borderRadius: "0.25rem",
+                    borderRadius: "999px",
                     border: "1px solid transparent",
                     backgroundColor: "transparent",
                     color: "#64748b",
@@ -348,12 +386,16 @@ export function EaluminateFormPanel(props: EaluminateFormPanelProps) {
                     transition: "color 0.15s, border-color 0.15s",
                   }}
                   onMouseEnter={(e) => {
-                    (e.currentTarget as HTMLButtonElement).style.borderColor = "#cbd5e1";
-                    (e.currentTarget as HTMLButtonElement).style.color = "#4479DA";
+                    (e.currentTarget as HTMLButtonElement).style.borderColor =
+                      "#cbd5e1";
+                    (e.currentTarget as HTMLButtonElement).style.color =
+                      "#4479DA";
                   }}
                   onMouseLeave={(e) => {
-                    (e.currentTarget as HTMLButtonElement).style.borderColor = "transparent";
-                    (e.currentTarget as HTMLButtonElement).style.color = "#64748b";
+                    (e.currentTarget as HTMLButtonElement).style.borderColor =
+                      "transparent";
+                    (e.currentTarget as HTMLButtonElement).style.color =
+                      "#64748b";
                   }}
                 >
                   <svg
@@ -374,13 +416,25 @@ export function EaluminateFormPanel(props: EaluminateFormPanelProps) {
                 </button>
               </div>
               {preAnalysisProfile ? (
-                <div style={{ display: "flex", flexDirection: "column", gap: "0.625rem" }}>
+                <div
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "0.625rem",
+                  }}
+                >
                   {(
                     [
                       ["Identity", preAnalysisProfile.identity],
                       ["Background", preAnalysisProfile.background],
-                      ["Negative Findings", preAnalysisProfile.negative_findings],
-                      ["Positive Presence", preAnalysisProfile.positive_presence],
+                      [
+                        "Negative Findings",
+                        preAnalysisProfile.negative_findings,
+                      ],
+                      [
+                        "Positive Presence",
+                        preAnalysisProfile.positive_presence,
+                      ],
                       ["Reputation Notes", preAnalysisProfile.reputation_notes],
                     ] as [string, string][]
                   ).map(([label, text]) => (
@@ -409,7 +463,14 @@ export function EaluminateFormPanel(props: EaluminateFormPanelProps) {
                   ))}
                 </div>
               ) : (
-                <p style={{ fontSize: "0.8125rem", color: "var(--color-muted, #64748b)", lineHeight: 1.65, margin: 0 }}>
+                <p
+                  style={{
+                    fontSize: "0.8125rem",
+                    color: "var(--color-muted, #64748b)",
+                    lineHeight: 1.65,
+                    margin: 0,
+                  }}
+                >
                   {preAnalysisSummary}
                 </p>
               )}
@@ -419,12 +480,19 @@ export function EaluminateFormPanel(props: EaluminateFormPanelProps) {
           {keywordsReady && (
             <>
               <div>
-                <label style={labelStyle}>Keywords — edit or add your own</label>
-                <KeywordsEditor keywords={editableKeywords} setKeywords={setEditableKeywords} />
+                <label style={labelStyle}>
+                  Keywords — edit or add your own
+                </label>
+                <KeywordsEditor
+                  keywords={editableKeywords}
+                  setKeywords={setEditableKeywords}
+                />
               </div>
               <div>
                 <label style={labelStyle}>Results Cap</label>
-                <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+                <div
+                  style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}
+                >
                   {resultsCapOptions.map((cap) => (
                     <button
                       key={cap}
@@ -432,22 +500,35 @@ export function EaluminateFormPanel(props: EaluminateFormPanelProps) {
                       onClick={() => setResultsCap(cap)}
                       style={{
                         padding: "0.4rem 1rem",
-                        borderRadius: "0.25rem",
+                        borderRadius: "999px",
                         fontSize: "0.875rem",
                         fontWeight: 500,
                         cursor: "pointer",
                         transition: "all 0.15s",
                         border: "1.5px solid",
-                        borderColor: resultsCap === cap ? "#4479DA" : "var(--color-border, #e2e8f0)",
-                        backgroundColor: resultsCap === cap ? "#eef3ff" : "#ffffff",
-                        color: resultsCap === cap ? "#4479DA" : "var(--color-muted, #64748b)",
+                        borderColor:
+                          resultsCap === cap
+                            ? "#4479DA"
+                            : "var(--color-border, #e2e8f0)",
+                        backgroundColor:
+                          resultsCap === cap ? "#eef3ff" : "#ffffff",
+                        color:
+                          resultsCap === cap
+                            ? "#4479DA"
+                            : "var(--color-muted, #64748b)",
                       }}
                     >
                       {cap}
                     </button>
                   ))}
                 </div>
-                <p style={{ margin: "0.375rem 0 0", fontSize: "0.75rem", color: "#94a3b8" }}>
+                <p
+                  style={{
+                    margin: "0.375rem 0 0",
+                    fontSize: "0.75rem",
+                    color: "#94a3b8",
+                  }}
+                >
                   Results fetched and analysed per keyword
                 </p>
               </div>
@@ -460,7 +541,7 @@ export function EaluminateFormPanel(props: EaluminateFormPanelProps) {
                   width: "100%",
                   padding: "0.75rem",
                   fontWeight: 700,
-                  borderRadius: "0.25rem",
+                  borderRadius: "999px",
                   opacity: loading || editableKeywords.length === 0 ? 0.5 : 1,
                   cursor: "pointer",
                 }}

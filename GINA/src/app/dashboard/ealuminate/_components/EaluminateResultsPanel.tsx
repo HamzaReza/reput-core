@@ -45,7 +45,7 @@ export function EaluminateResultsPanel({
     <div
       className="animate-scale-in"
       style={{
-        borderRadius: "0.375rem",
+        borderRadius: "0.875rem",
         border: loading || result ? "1px solid #d1d9e0" : "none",
         backgroundColor: loading || result ? "#ffffff" : "transparent",
         padding: "2.5rem 2rem",
@@ -68,6 +68,7 @@ export function EaluminateResultsPanel({
             width: "100%",
             maxWidth: "22rem",
             textAlign: "center",
+            marginTop: "5rem",
           }}
         >
           <div
@@ -133,7 +134,9 @@ export function EaluminateResultsPanel({
             />
           </div>
 
-          <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+          <div
+            style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}
+          >
             <p
               style={{
                 margin: 0,
@@ -144,7 +147,7 @@ export function EaluminateResultsPanel({
                 color: "#94a3b8",
               }}
             >
-              Scanning prospect
+              REPUTATION INTELLIGENCE IN PROGRESS
             </p>
           </div>
 
@@ -168,11 +171,14 @@ export function EaluminateResultsPanel({
       )}
 
       {!loading && result && (
-        <div className="animate-fade-up" style={{ width: "100%", textAlign: "center" }}>
+        <div
+          className="animate-fade-up"
+          style={{ width: "100%", textAlign: "center" }}
+        >
           <h2
             style={{
               fontSize: "1.5rem",
-              fontWeight: 800,
+              fontWeight: 700,
               color: "var(--color-foreground)",
               letterSpacing: "0.08em",
               marginBottom: "2rem",
@@ -191,7 +197,7 @@ export function EaluminateResultsPanel({
               position: "relative",
               zIndex: 1,
               padding: "0.625rem 2rem",
-              borderRadius: "0.25rem",
+              borderRadius: "0.875rem",
               backgroundColor: "var(--color-surface, #fff)",
               border: "1px solid var(--color-border)",
             }}
@@ -199,7 +205,7 @@ export function EaluminateResultsPanel({
             <p
               style={{
                 fontSize: "2.5rem",
-                fontWeight: 800,
+                fontWeight: 600,
                 color: scoreLabel(score).color,
                 lineHeight: 1,
                 marginBottom: "0.25rem",
@@ -240,7 +246,7 @@ export function EaluminateResultsPanel({
                     key={kw}
                     style={{
                       padding: "0.25rem 0.75rem",
-                      borderRadius: "0.25rem",
+                      borderRadius: "999px",
                       backgroundColor: "rgba(68,121,218,0.08)",
                       border: "1px solid rgba(29, 65, 133, 0.2)",
                       color: "#4479DA",
@@ -259,7 +265,7 @@ export function EaluminateResultsPanel({
             <div
               style={{
                 marginTop: "1.25rem",
-                borderRadius: "0.375rem",
+                borderRadius: "0.875rem",
                 border: "1px solid #d1d9e0",
                 backgroundColor: "#f8fafc",
                 textAlign: "left",
@@ -296,7 +302,7 @@ export function EaluminateResultsPanel({
                     alignItems: "center",
                     gap: "0.3rem",
                     padding: "0.2rem 0.45rem",
-                    borderRadius: "0.25rem",
+                    borderRadius: "999px",
                     border: "1px solid transparent",
                     backgroundColor: "transparent",
                     color: "#64748b",
@@ -306,15 +312,28 @@ export function EaluminateResultsPanel({
                     transition: "color 0.15s, border-color 0.15s",
                   }}
                   onMouseEnter={(e) => {
-                    (e.currentTarget as HTMLButtonElement).style.borderColor = "#cbd5e1";
-                    (e.currentTarget as HTMLButtonElement).style.color = "#4479DA";
+                    (e.currentTarget as HTMLButtonElement).style.borderColor =
+                      "#cbd5e1";
+                    (e.currentTarget as HTMLButtonElement).style.color =
+                      "#4479DA";
                   }}
                   onMouseLeave={(e) => {
-                    (e.currentTarget as HTMLButtonElement).style.borderColor = "transparent";
-                    (e.currentTarget as HTMLButtonElement).style.color = "#64748b";
+                    (e.currentTarget as HTMLButtonElement).style.borderColor =
+                      "transparent";
+                    (e.currentTarget as HTMLButtonElement).style.color =
+                      "#64748b";
                   }}
                 >
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <svg
+                    width="12"
+                    height="12"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
                     <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
                     <polyline points="7 10 12 15 17 10" />
                     <line x1="12" y1="15" x2="12" y2="3" />
@@ -356,7 +375,14 @@ export function EaluminateResultsPanel({
                     }}
                   >
                     {result.summary.issues.map((issue, i) => (
-                      <li key={i} style={{ fontSize: "0.8125rem", color: "#475569", lineHeight: 1.5 }}>
+                      <li
+                        key={i}
+                        style={{
+                          fontSize: "0.8125rem",
+                          color: "#475569",
+                          lineHeight: 1.5,
+                        }}
+                      >
                         {issue}
                       </li>
                     ))}
@@ -385,7 +411,14 @@ export function EaluminateResultsPanel({
                     }}
                   >
                     {result.summary.talkingPoints.map((point, i) => (
-                      <li key={i} style={{ fontSize: "0.8125rem", color: "#475569", lineHeight: 1.5 }}>
+                      <li
+                        key={i}
+                        style={{
+                          fontSize: "0.8125rem",
+                          color: "#475569",
+                          lineHeight: 1.5,
+                        }}
+                      >
                         {point}
                       </li>
                     ))}
@@ -400,7 +433,7 @@ export function EaluminateResultsPanel({
               style={{
                 marginTop: "1.5rem",
                 padding: "1.5rem",
-                borderRadius: "0.375rem",
+                borderRadius: "0.875rem",
                 border: "1px solid var(--color-border)",
                 textAlign: "center",
                 color: "var(--color-muted)",
@@ -434,21 +467,39 @@ export function EaluminateResultsPanel({
                 return (
                   <div
                     key={item.url}
-                    onClick={() => setExpandedLinkIndex(isExpanded ? null : String(i))}
+                    onClick={() =>
+                      setExpandedLinkIndex(isExpanded ? null : String(i))
+                    }
                     style={{
                       display: "flex",
-                      borderRadius: "0.25rem",
+                      borderRadius: "0.875rem",
                       overflow: "hidden",
                       background: "#fff",
                       border: "1px solid #e2e8f0",
                       cursor: "pointer",
                       transition: "border-color 0.15s ease",
                     }}
-                    onMouseEnter={(e) => (e.currentTarget.style.borderColor = "#b6c4d4")}
-                    onMouseLeave={(e) => (e.currentTarget.style.borderColor = "#e2e8f0")}
+                    onMouseEnter={(e) =>
+                      (e.currentTarget.style.borderColor = "#b6c4d4")
+                    }
+                    onMouseLeave={(e) =>
+                      (e.currentTarget.style.borderColor = "#e2e8f0")
+                    }
                   >
-                    <div style={{ width: 4, flexShrink: 0, backgroundColor: risk.color }} />
-                    <div style={{ flex: 1, padding: "0.75rem 0.875rem", minWidth: 0 }}>
+                    <div
+                      style={{
+                        width: 4,
+                        flexShrink: 0,
+                        backgroundColor: risk.color,
+                      }}
+                    />
+                    <div
+                      style={{
+                        flex: 1,
+                        padding: "0.75rem 0.875rem",
+                        minWidth: 0,
+                      }}
+                    >
                       <div
                         style={{
                           display: "flex",
@@ -482,9 +533,22 @@ export function EaluminateResultsPanel({
                             target="_blank"
                             rel="noopener noreferrer"
                             onClick={(e) => e.stopPropagation()}
-                            style={{ color: "#94a3b8", display: "flex", lineHeight: 1 }}
+                            style={{
+                              color: "#94a3b8",
+                              display: "flex",
+                              lineHeight: 1,
+                            }}
                           >
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                            <svg
+                              width="12"
+                              height="12"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="2.5"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            >
                               <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
                               <polyline points="15 3 21 3 21 9" />
                               <line x1="10" y1="14" x2="21" y2="3" />
@@ -501,7 +565,9 @@ export function EaluminateResultsPanel({
                             strokeLinejoin="round"
                             style={{
                               color: "#cbd5e1",
-                              transform: isExpanded ? "rotate(180deg)" : "rotate(0deg)",
+                              transform: isExpanded
+                                ? "rotate(180deg)"
+                                : "rotate(0deg)",
                               transition: "transform 0.2s ease",
                             }}
                           >
@@ -519,14 +585,40 @@ export function EaluminateResultsPanel({
                           marginTop: "0.375rem",
                         }}
                       >
-                        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                          <span style={{ fontSize: "0.6875rem", color: "#94a3b8" }}>{domain}</span>
-                          <span style={{ fontSize: "0.6875rem", color: "#cbd5e1" }}>·</span>
-                          <span style={{ fontSize: "0.6875rem", fontWeight: 600, color: risk.color }}>
+                        <div
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "0.5rem",
+                          }}
+                        >
+                          <span
+                            style={{ fontSize: "0.6875rem", color: "#94a3b8" }}
+                          >
+                            {domain}
+                          </span>
+                          <span
+                            style={{ fontSize: "0.6875rem", color: "#cbd5e1" }}
+                          >
+                            ·
+                          </span>
+                          <span
+                            style={{
+                              fontSize: "0.6875rem",
+                              fontWeight: 600,
+                              color: risk.color,
+                            }}
+                          >
                             {uiRisk}
                           </span>
                         </div>
-                        {item.date && <span style={{ fontSize: "0.6875rem", color: "#94a3b8" }}>{item.date}</span>}
+                        {item.date && (
+                          <span
+                            style={{ fontSize: "0.6875rem", color: "#94a3b8" }}
+                          >
+                            {item.date}
+                          </span>
+                        )}
                       </div>
 
                       {isExpanded && (
@@ -554,4 +646,3 @@ export function EaluminateResultsPanel({
     </div>
   );
 }
-

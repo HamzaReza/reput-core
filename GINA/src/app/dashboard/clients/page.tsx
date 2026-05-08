@@ -199,7 +199,7 @@ export default function ClientsPage() {
           <h1
             style={{
               fontSize: "1.25rem",
-              fontWeight: 800,
+              fontWeight: 700,
               color: "var(--color-foreground, #1e293b)",
               margin: "0 0 0.25rem",
             }}
@@ -226,7 +226,7 @@ export default function ClientsPage() {
               border: "1px solid #e2e8f0",
               backgroundColor: "#ffffff",
               color: "#1e293b",
-              borderRadius: "0.5rem",
+              borderRadius: "999px",
               padding: "0.45rem 0.75rem",
               fontSize: "0.75rem",
               fontWeight: 700,
@@ -242,7 +242,7 @@ export default function ClientsPage() {
             disabled={loading || list.length === 0}
             className="glow-button"
             style={{
-              borderRadius: "0.5rem",
+              borderRadius: "999px",
               padding: "0.45rem 0.75rem",
               fontSize: "0.75rem",
               fontWeight: 700,
@@ -343,7 +343,7 @@ export default function ClientsPage() {
                         alignItems: "center",
                         justifyContent: "center",
                         fontSize: "0.6875rem",
-                        fontWeight: 800,
+                        fontWeight: 600,
                         letterSpacing: "0.03em",
                       }}
                     >
@@ -407,7 +407,7 @@ export default function ClientsPage() {
                             color: "#94a3b8",
                             display: "flex",
                             alignItems: "center",
-                            borderRadius: "0.25rem",
+                            borderRadius: "999px",
                           }}
                           onMouseEnter={(e) => ((e.currentTarget as HTMLButtonElement).style.color = "#ef4444")}
                           onMouseLeave={(e) => ((e.currentTarget as HTMLButtonElement).style.color = "#94a3b8")}
@@ -495,7 +495,7 @@ export default function ClientsPage() {
                 onClick={() => setConfirmId(null)}
                 disabled={!!deletingId}
                 style={{
-                  padding: "0.5rem 1rem", borderRadius: "0.5rem", fontSize: "0.875rem",
+                  padding: "0.5rem 1rem", borderRadius: "999px", fontSize: "0.875rem",
                   fontWeight: 600, border: "1px solid #e2e8f0", backgroundColor: "#fff",
                   color: "#64748b", cursor: deletingId ? "default" : "pointer",
                   opacity: deletingId ? 0.5 : 1,
@@ -508,7 +508,7 @@ export default function ClientsPage() {
                 onClick={() => handleDelete(confirmClient.id)}
                 disabled={!!deletingId}
                 style={{
-                  padding: "0.5rem 1rem", borderRadius: "0.5rem", fontSize: "0.875rem",
+                  padding: "0.5rem 1rem", borderRadius: "999px", fontSize: "0.875rem",
                   fontWeight: 700, border: "none", backgroundColor: "#ef4444",
                   color: "#fff", cursor: deletingId ? "default" : "pointer",
                   opacity: deletingId ? 0.7 : 1,

@@ -71,7 +71,7 @@ export default function SettingsPage() {
   return (
     <div style={{ padding: "clamp(1.25rem, 4vw, 2rem)", backgroundColor: "#f8fafc", minHeight: "100%", boxSizing: "border-box" }}>
       <div style={{ marginBottom: "1.5rem" }}>
-        <h1 style={{ fontSize: "1.25rem", fontWeight: 800, color: "var(--color-foreground, #1e293b)", margin: "0 0 0.25rem" }}>
+        <h1 style={{ fontSize: "1.25rem", fontWeight: 700, color: "var(--color-foreground, #1e293b)", margin: "0 0 0.25rem" }}>
           Settings
         </h1>
         <p style={{ fontSize: "0.875rem", color: "var(--color-muted, #64748b)", margin: 0 }}>
@@ -89,14 +89,14 @@ export default function SettingsPage() {
               <input
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                style={{ padding: "0.4rem 0.75rem", borderRadius: "0.5rem", border: "1px solid var(--color-border, #e2e8f0)", fontSize: "0.875rem", color: "var(--color-foreground, #1e293b)", backgroundColor: "#fff", outline: "none", width: "220px" }}
+                style={{ padding: "0.4rem 0.75rem", borderRadius: "0.875rem", border: "1px solid var(--color-border, #e2e8f0)", fontSize: "0.875rem", color: "var(--color-foreground, #1e293b)", backgroundColor: "#fff", outline: "none", width: "220px" }}
               />
             </Field>
             <Field label="Email Address" description="Contact support to change your email.">
               <input
                 value={email}
                 readOnly
-                style={{ padding: "0.4rem 0.75rem", borderRadius: "0.5rem", border: "1px solid var(--color-border, #e2e8f0)", fontSize: "0.875rem", color: "var(--color-muted, #64748b)", backgroundColor: "#f8fafc", outline: "none", width: "240px", cursor: "default" }}
+                style={{ padding: "0.4rem 0.75rem", borderRadius: "0.875rem", border: "1px solid var(--color-border, #e2e8f0)", fontSize: "0.875rem", color: "var(--color-muted, #64748b)", backgroundColor: "#f8fafc", outline: "none", width: "240px", cursor: "default" }}
               />
             </Field>
             {error && (
@@ -110,7 +110,7 @@ export default function SettingsPage() {
                 onClick={handleSave}
                 disabled={saving}
                 className="glow-button"
-                style={{ padding: "0.5rem 1.25rem", borderRadius: "0.5rem", fontSize: "0.875rem", border: "none", cursor: saving ? "not-allowed" : "pointer", opacity: saving ? 0.7 : 1 }}
+                style={{ padding: "0.5rem 1.25rem", borderRadius: "999px", fontSize: "0.875rem", border: "none", cursor: saving ? "not-allowed" : "pointer", opacity: saving ? 0.7 : 1 }}
               >
                 {saving ? "Saving…" : "Save Changes"}
               </button>
@@ -123,7 +123,7 @@ export default function SettingsPage() {
       <Section title="Security">
         <Field label="Password" description="Update your account password.">
           <button
-            style={{ padding: "0.4rem 0.875rem", borderRadius: "0.5rem", border: "1px solid var(--color-border, #e2e8f0)", fontSize: "0.8125rem", fontWeight: 600, color: "var(--color-foreground, #1e293b)", backgroundColor: "#fff", cursor: "pointer" }}
+            style={{ padding: "0.4rem 0.875rem", borderRadius: "999px", border: "1px solid var(--color-border, #e2e8f0)", fontSize: "0.8125rem", fontWeight: 600, color: "var(--color-foreground, #1e293b)", backgroundColor: "#fff", cursor: "pointer" }}
           >
             Change Password
           </button>

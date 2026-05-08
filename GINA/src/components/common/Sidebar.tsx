@@ -180,8 +180,8 @@ export default function Sidebar({
       style={{
         width: collapsed ? "60px" : "240px",
         height: "100%",
-        backgroundColor: "#ffffff",
-        borderRight: "1px solid var(--color-border, #e2e8f0)",
+        backgroundColor: "#0f172a",
+        borderRight: "1px solid rgba(255,255,255,0.08)",
         display: "flex",
         flexDirection: "column",
         flexShrink: 0,
@@ -193,7 +193,7 @@ export default function Sidebar({
       <div
         style={{
           height: "64px",
-          borderBottom: "1px solid var(--color-border, #e2e8f0)",
+          borderBottom: "1px solid rgba(255,255,255,0.08)",
           display: "flex",
           alignItems: "center",
           justifyContent: collapsed ? "center" : "center",
@@ -216,6 +216,24 @@ export default function Sidebar({
           />
         </Link>
       </div>
+
+      {/* GINA branding */}
+      {!collapsed && (
+        <div
+          style={{
+            padding: "1rem 1.25rem",
+            borderBottom: "1px solid rgba(255,255,255,0.08)",
+            flexShrink: 0,
+          }}
+        >
+          <p style={{ fontSize: "1.5rem", fontWeight: 700, color: "#f1f5f9", margin: 0, letterSpacing: "0.04em", lineHeight: 1.1 }}>
+            GINA
+          </p>
+          <p style={{ fontSize: "0.625rem", fontWeight: 600, color: "#48D4B8", margin: "0.2rem 0 0", letterSpacing: "0.12em", textTransform: "uppercase" }}>
+            Reputation Intelligence OS
+          </p>
+        </div>
+      )}
 
       {/* Nav */}
       <nav
@@ -243,15 +261,15 @@ export default function Sidebar({
                 justifyContent: collapsed ? "center" : "space-between",
                 gap: "0.625rem",
                 padding: collapsed ? "0.65rem 0" : "0.6rem 0.75rem",
-                borderRadius: collapsed ? "0" : "0.5rem",
+                borderRadius: collapsed ? "0" : "999px",
                 textDecoration: "none",
                 fontSize: "0.9rem",
                 fontWeight: isActive ? 600 : 500,
                 color: isActive
                   ? "#48D4B8"
-                  : "var(--color-foreground, #1e293b)",
+                  : "#cbd5e1",
                 backgroundColor: isActive
-                  ? "rgba(72,212,184,0.10)"
+                  ? "rgba(72,212,184,0.12)"
                   : "transparent",
                 transition: "background-color 0.15s, color 0.15s",
                 marginBottom: "0.125rem",
@@ -304,7 +322,7 @@ export default function Sidebar({
       <div
         style={{
           padding: collapsed ? "1rem 0" : "1rem 1.25rem",
-          borderTop: "1px solid var(--color-border, #e2e8f0)",
+          borderTop: "1px solid rgba(255,255,255,0.08)",
           display: "flex",
           flexDirection: "column",
           alignItems: collapsed ? "center" : "stretch",
@@ -322,7 +340,7 @@ export default function Sidebar({
                   width: "32px",
                   height: "32px",
                   borderRadius: "50%",
-                  backgroundColor: "rgba(72,212,184,0.15)",
+                  backgroundColor: "rgba(72,212,184,0.18)",
                   color: "#48D4B8",
                   display: "flex",
                   alignItems: "center",
@@ -342,7 +360,7 @@ export default function Sidebar({
                 background: "none",
                 border: "none",
                 cursor: "pointer",
-                color: "var(--color-muted, #64748b)",
+                color: "#94a3b8",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
@@ -374,7 +392,7 @@ export default function Sidebar({
                   style={{
                     fontSize: "0.875rem",
                     fontWeight: 600,
-                    color: "var(--color-foreground, #1e293b)",
+                    color: "#f1f5f9",
                     margin: 0,
                     overflow: "hidden",
                     textOverflow: "ellipsis",
@@ -404,10 +422,10 @@ export default function Sidebar({
               style={{
                 width: "100%",
                 padding: "0.5rem 0.75rem",
-                borderRadius: "0.5rem",
-                border: "1px solid var(--color-border, #e2e8f0)",
+                borderRadius: "999px",
+                border: "1px solid rgba(255,255,255,0.12)",
                 backgroundColor: "transparent",
-                color: "var(--color-muted, #64748b)",
+                color: "#94a3b8",
                 fontSize: "0.875rem",
                 fontWeight: 500,
                 cursor: "pointer",
