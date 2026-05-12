@@ -1,8 +1,8 @@
 "use client";
 
-import { clientsApi, leads, WebLink } from "@/lib/api";
+import { clientsApi, getToken, leads, WebLink } from "@/lib/api";
 import { COUNTRY_NAME_TO_ISO } from "@/lib/countries";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import Select from "react-select";
 import countryList from "react-select-country-list";
@@ -547,6 +547,7 @@ function KeywordsEditor({
 // ── Main Page ──────────────────────────────────────────────────────────────────
 function EaluminatePageInner() {
   const searchParams = useSearchParams();
+  const router = useRouter();
 
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
@@ -896,7 +897,7 @@ function EaluminatePageInner() {
     try {
       const res = await fetch("/api/pre-analysis", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${getToken()}` },
         body: JSON.stringify({
           firstName: firstName.trim(),
           lastName: lastName.trim(),
@@ -907,6 +908,10 @@ function EaluminatePageInner() {
           keywordFocus,
         }),
       });
+      if (res.status === 401) {
+        router.replace("/login?reason=session_expired");
+        return;
+      }
       const data = await res.json();
       if (!res.ok || data.error) {
         setError(data.error ?? "Research failed. Please try again.");
@@ -973,7 +978,7 @@ function EaluminatePageInner() {
     try {
       const res = await fetch("/api/generate-lead", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${getToken()}` },
         body: JSON.stringify({
           firstName: firstName.trim(),
           lastName: lastName.trim(),
@@ -984,6 +989,10 @@ function EaluminatePageInner() {
           resultsCap,
         }),
       });
+      if (res.status === 401) {
+        router.replace("/login?reason=session_expired");
+        return;
+      }
       const data = await res.json();
       if (!res.ok || data.error) {
         setError(data.error ?? "Scan failed. Please try again.");
