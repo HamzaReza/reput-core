@@ -1,7 +1,8 @@
 "use client";
 
-import { WebAnalyst, webAnalystsApi } from "@/lib/api";
+import { WebAnalyst, webAnalystsApi, isAdmin } from "@/lib/api";
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 
 function getInitials(name: string, email: string) {
   const source = name || email;
@@ -23,11 +24,13 @@ function formatDate(iso: string | null) {
 }
 
 export default function WebAnalystsPage() {
+  const router = useRouter();
   const [list, setList] = useState<WebAnalyst[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   useEffect(() => {
+    if (!isAdmin()) { router.replace("/dashboard"); return; }
     webAnalystsApi
       .list()
       .then(setList)

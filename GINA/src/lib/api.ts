@@ -32,6 +32,19 @@ export function isAuthed(): boolean {
   return !!getToken();
 }
 
+export function getRole(): "admin" | "analyst" | null {
+  try {
+    const raw = localStorage.getItem("reput_user");
+    if (!raw) return null;
+    const u = JSON.parse(raw);
+    return u.role ?? null;
+  } catch { return null; }
+}
+
+export function isAdmin(): boolean {
+  return getRole() === "admin";
+}
+
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 export interface UserProfile {
@@ -237,7 +250,7 @@ export const auth = {
       }
       return res.json() as Promise<{
         access_token: string;
-        web_analyst: { id: string; name: string; email: string };
+        web_analyst: WebAnalyst;
       }>;
     });
   },
@@ -455,6 +468,7 @@ export interface WebAnalyst {
   id: string;
   name: string;
   email: string;
+  role: "admin" | "analyst";
   created_at: string | null;
 }
 
@@ -534,6 +548,8 @@ export interface RecentLead {
   score: number | null;
   scanned_by_name: string | null;
   scanned_by_email: string | null;
+  scanned_by_role: string | null;
+  assigned_to_name: string | null;
   researched_at: string | null;
   scanned_at: string | null;
 }
@@ -582,6 +598,10 @@ export interface ClientListItem {
   name: string;
   country: string;
   company: string | null;
+  scanned_by_name: string | null;
+  scanned_by_role: string | null;
+  assigned_to_id: string | null;
+  assigned_to_name: string | null;
   created_at: string;
   updated_at: string;
   latest_event_type: ClientEventType | null;
@@ -594,6 +614,14 @@ export interface ClientDetail {
   name: string;
   country: string;
   company: string | null;
+  email: string | null;
+  phone: string | null;
+  researched_by_name: string | null;
+  researched_by_role: string | null;
+  scanned_by_name: string | null;
+  scanned_by_role: string | null;
+  assigned_to_id: string | null;
+  assigned_to_name: string | null;
   created_at: string;
   updated_at: string;
   events: ClientEvent[];
@@ -603,6 +631,8 @@ export interface ClientUpsertPayload {
   name: string;
   country: string;
   company?: string;
+  email?: string;
+  phone?: string;
   event_type?: ClientEventType;
   event_data?: Record<string, unknown>;
 }
@@ -638,4 +668,25 @@ export const clientsApi = {
 
   delete: (id: string) =>
     request<{ ok: boolean }>(`/clients/${id}`, { method: "DELETE" }, true),
+
+  assign: (clientId: string, analystId: string | null) =>
+    request<{ ok: boolean; assigned_to: string | null }>(
+      `/clients/${clientId}/assign`,
+      { method: "PATCH", body: JSON.stringify({ analyst_id: analystId }) },
+      true,
+    ),
+};
+
+// ── Web Analysts ──────────────────────────────────────────────────────────────
+
+export interface WebAnalystItem {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  created_at: string;
+}
+
+export const webAnalysts = {
+  list: () => request<WebAnalystItem[]>("/web-analysts/", {}, true),
 };

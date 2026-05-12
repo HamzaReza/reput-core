@@ -3,11 +3,12 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
-from sqlalchemy import desc, select
+from sqlalchemy import and_, desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.attributes import flag_modified
 
 from app.database import get_db
+from app.models.client import Client
 from app.models.lead import WebAnalyst, LeadGenerated
 from app.utils.auth import get_current_web_analyst
 
@@ -49,6 +50,7 @@ async def create_lead(
 
     if existing is not None:
         existing.scanned_by_id = current_web_analyst.id
+        existing.scanned_by_role = current_web_analyst.role
         existing.company = payload.company
         existing.background = payload.background
         existing.pre_analysis_summary = payload.pre_analysis_summary
@@ -64,6 +66,7 @@ async def create_lead(
 
     lead = LeadGenerated(
         scanned_by_id=current_web_analyst.id,
+        scanned_by_role=current_web_analyst.role,
         name=payload.name,
         company=payload.company,
         country=payload.country,
@@ -90,6 +93,8 @@ async def update_lead(
     lead = result.scalar_one_or_none()
     if lead is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lead not found.")
+    if current_web_analyst.role != "admin" and lead.scanned_by_id != current_web_analyst.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied.")
 
     if payload.links is not None:
         lead.links = payload.links
@@ -114,15 +119,24 @@ async def get_lead(
     db: AsyncSession = Depends(get_db),
     current_web_analyst: WebAnalyst = Depends(get_current_web_analyst),
 ) -> dict:
-    result = await db.execute(
-        select(LeadGenerated, WebAnalyst.name.label("wa_name"), WebAnalyst.email.label("wa_email"))
+    query = (
+        select(
+            LeadGenerated,
+            WebAnalyst.name.label("wa_name"),
+            WebAnalyst.email.label("wa_email"),
+            Client.assigned_to_name.label("assigned_to_name"),
+        )
         .outerjoin(WebAnalyst, LeadGenerated.scanned_by_id == WebAnalyst.id)
+        .outerjoin(Client, and_(Client.name == LeadGenerated.name, Client.country == LeadGenerated.country))
         .where(LeadGenerated.id == lead_id)
     )
+    if current_web_analyst.role != "admin":
+        query = query.where(LeadGenerated.scanned_by_id == current_web_analyst.id)
+    result = await db.execute(query)
     row = result.one_or_none()
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lead not found.")
-    lead, wa_name, wa_email = row
+    lead, wa_name, wa_email, assigned_to_name = row
     return {
         "id": str(lead.id),
         "name": lead.name,
@@ -136,6 +150,8 @@ async def get_lead(
         "score": lead.score,
         "scanned_by_name": wa_name or lead.scanned_by_name,
         "scanned_by_email": wa_email or lead.scanned_by_email,
+        "scanned_by_role": lead.scanned_by_role,
+        "assigned_to_name": assigned_to_name,
         "researched_at": lead.researched_at.isoformat() if lead.researched_at else None,
         "scanned_at": lead.scanned_at.isoformat() if lead.scanned_at else None,
     }
@@ -147,12 +163,21 @@ async def list_leads(
     db: AsyncSession = Depends(get_db),
     current_web_analyst: WebAnalyst = Depends(get_current_web_analyst),
 ) -> list[dict]:
-    result = await db.execute(
-        select(LeadGenerated, WebAnalyst.name.label("wa_name"), WebAnalyst.email.label("wa_email"))
+    query = (
+        select(
+            LeadGenerated,
+            WebAnalyst.name.label("wa_name"),
+            WebAnalyst.email.label("wa_email"),
+            Client.assigned_to_name.label("assigned_to_name"),
+        )
         .outerjoin(WebAnalyst, LeadGenerated.scanned_by_id == WebAnalyst.id)
+        .outerjoin(Client, and_(Client.name == LeadGenerated.name, Client.country == LeadGenerated.country))
         .order_by(desc(LeadGenerated.researched_at))
         .limit(limit)
     )
+    if current_web_analyst.role != "admin":
+        query = query.where(LeadGenerated.scanned_by_id == current_web_analyst.id)
+    result = await db.execute(query)
     rows = result.all()
     return [
         {
@@ -164,8 +189,10 @@ async def list_leads(
             "score": lead.score,
             "scanned_by_name": wa_name or lead.scanned_by_name,
             "scanned_by_email": wa_email or lead.scanned_by_email,
+            "scanned_by_role": lead.scanned_by_role,
+            "assigned_to_name": assigned_to_name,
             "researched_at": lead.researched_at.isoformat() if lead.researched_at else None,
             "scanned_at": lead.scanned_at.isoformat() if lead.scanned_at else None,
         }
-        for lead, wa_name, wa_email in rows
+        for lead, wa_name, wa_email, assigned_to_name in rows
     ]

@@ -15,9 +15,20 @@ class Client(Base):
     name: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     country: Mapped[str] = mapped_column(String(255), nullable=False)
     company: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    email: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    phone: Mapped[str | None] = mapped_column(String(100), nullable=True)
     created_by_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("web_analysts.id", ondelete="SET NULL"), nullable=True, index=True
     )
+    scanned_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("web_analysts.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    scanned_by_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    scanned_by_role: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    assigned_to_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("web_analysts.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    assigned_to_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
