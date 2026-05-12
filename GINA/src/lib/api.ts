@@ -198,6 +198,13 @@ async function request<T>(
   });
 
   if (!res.ok) {
+    if (withAuth && res.status === 401) {
+      clearAuth();
+      if (typeof window !== "undefined") {
+        window.location.replace("/login?reason=session_expired");
+        return new Promise(() => {}) as Promise<T>;
+      }
+    }
     const parsed = await res.json().catch(() => null);
     const msg =
       parseFastApiDetail(parsed) || `Request failed with status ${res.status}`;
@@ -275,6 +282,13 @@ export async function getCachedMe(): Promise<User> {
     }
   } catch {}
   const user = await auth.me();
+  if (!user.is_active) {
+    clearAuth();
+    if (typeof window !== "undefined") {
+      window.location.replace("/login?reason=session_expired");
+    }
+    throw new Error("Session expired.");
+  }
   try {
     sessionStorage.setItem(
       USER_CACHE_KEY,

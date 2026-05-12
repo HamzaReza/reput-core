@@ -525,6 +525,18 @@ Return a JSON object (no markdown, no explanation) with:
 }
 
 export async function POST(req: NextRequest) {
+  const token = req.headers.get("Authorization");
+  if (!token) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
+  const authCheck = await fetch(`${apiUrl}/auth/me`, {
+    headers: { Authorization: token },
+  }).catch(() => null);
+  if (!authCheck || !authCheck.ok) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
     return NextResponse.json(

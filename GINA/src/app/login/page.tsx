@@ -1,8 +1,10 @@
 "use client";
 
 import { auth, setToken } from "@/lib/api";
-import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useState } from "react";
+import { toast, ToastContainer } from "react-toastify";
+import "react-toastify/dist/ReactToastify.css";
 
 const inputStyle: React.CSSProperties = {
   width: "100%",
@@ -48,12 +50,33 @@ function Spinner() {
 
 export default function LoginPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  const handleLogin = async (e: React.FormEvent<HTMLFormElement>) => {
+  useEffect(() => {
+    if (searchParams.get("reason") === "session_expired") {
+      toast.error("The session has expired", {
+        position: "top-center",
+        style: {
+          background: "#0f172a",
+          color: "#f1f5f9",
+          borderLeft: "4px solid #ef4444",
+          borderRadius: "0.75rem",
+          boxShadow: "0 8px 32px rgba(0,0,0,0.4)",
+          fontSize: "0.9375rem",
+          fontWeight: 500,
+          padding: "1rem 1.25rem",
+          minWidth: "20rem",
+        },
+        icon: () => "🔒",
+      });
+    }
+  }, []);
+
+  const handleLogin = async (e: React.SyntheticEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError("");
     setLoading(true);
@@ -205,6 +228,8 @@ export default function LoginPage() {
           </button>
         </form>
       </div>
+
+      <ToastContainer position="top-center" autoClose={3500} />
     </div>
   );
 }
