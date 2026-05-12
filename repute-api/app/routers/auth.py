@@ -92,6 +92,11 @@ async def login_web_analyst(payload: WebAnalystLoginPayload, db: AsyncSession = 
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password.",
         )
+    if wa.is_blocked:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Your account has been temporarily blocked. Please contact an administrator.",
+        )
     token = create_access_token(str(wa.id))
     return {
         "access_token": token,

@@ -483,6 +483,7 @@ export interface WebAnalyst {
   name: string;
   email: string;
   role: "admin" | "analyst";
+  is_blocked: boolean;
   created_at: string | null;
 }
 
@@ -495,6 +496,20 @@ export const webAnalystsApi = {
       { method: "PATCH", body: JSON.stringify(data) },
       true,
     ),
+  create: (data: { name: string; email: string; password: string; role: "admin" | "analyst" }) =>
+    request<{ id: string }>("/web-analysts/", { method: "POST", body: JSON.stringify(data) }, true),
+  delete: (id: string) =>
+    request<void>(`/web-analysts/${id}`, { method: "DELETE" }, true),
+  setBlocked: (id: string, blocked: boolean) =>
+    request<{ ok: boolean; is_blocked: boolean }>(
+      `/web-analysts/${id}/block`,
+      { method: "PATCH", body: JSON.stringify({ blocked }) },
+      true,
+    ),
+  changePassword: (data: { current_password: string; new_password: string }) =>
+    request<{ ok: boolean }>("/web-analysts/me/password", { method: "PATCH", body: JSON.stringify(data) }, true),
+  deleteMe: () =>
+    request<void>("/web-analysts/me", { method: "DELETE" }, true),
 };
 
 export const dashboard = {
