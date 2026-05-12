@@ -88,7 +88,7 @@ async def get_current_web_analyst(
 
     result = await db.execute(select(WebAnalyst).where(WebAnalyst.id == web_analyst_id))
     web_analyst = result.scalar_one_or_none()
-    if web_analyst is None:
+    if web_analyst is None or web_analyst.is_blocked:
         raise credentials_exc
 
     return web_analyst
