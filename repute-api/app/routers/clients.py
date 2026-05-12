@@ -20,6 +20,8 @@ class ClientUpsertPayload(BaseModel):
     name: str
     country: str
     company: str | None = None
+    email: str | None = None
+    phone: str | None = None
     event_type: str | None = None
     event_data: dict | None = None
 
@@ -27,6 +29,10 @@ class ClientUpsertPayload(BaseModel):
 class ClientAddEventPayload(BaseModel):
     event_type: str
     event_data: dict | None = None
+
+
+class ClientAssignPayload(BaseModel):
+    analyst_id: str | None = None
 
 
 @router.post("/upsert", status_code=status.HTTP_200_OK)
@@ -52,6 +58,8 @@ async def upsert_client(
             name=payload.name,
             country=payload.country,
             company=payload.company,
+            email=payload.email,
+            phone=payload.phone,
             created_by_id=current_web_analyst.id,
         )
         db.add(client)
@@ -59,10 +67,48 @@ async def upsert_client(
     else:
         if payload.company is not None:
             client.company = payload.company
+        if payload.email is not None:
+            client.email = payload.email
+        if payload.phone is not None:
+            client.phone = payload.phone
         client.updated_at = datetime.now(timezone.utc)
         db.add(client)
 
     await db.flush()
+
+    # On the first research event, lock the client to this scanner and set assignment.
+    # If already scanned by someone else, block the scan.
+    if payload.event_type == "research":
+        if (
+            client.scanned_by_id is not None
+            and client.scanned_by_id != current_web_analyst.id
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    f"This client has already been scanned by "
+                    f"{client.scanned_by_name or 'another analyst'} "
+                    f"and cannot be scanned again by a different user."
+                ),
+            )
+
+        if client.scanned_by_id is None:
+            client.scanned_by_id = current_web_analyst.id
+            client.scanned_by_name = current_web_analyst.name
+            client.scanned_by_role = current_web_analyst.role
+            db.add(client)
+            await db.flush()
+
+    # Auto-assign analyst to any client they interact with if not already assigned
+    if (
+        payload.event_type
+        and current_web_analyst.role == "analyst"
+        and client.assigned_to_id is None
+    ):
+        client.assigned_to_id = current_web_analyst.id
+        client.assigned_to_name = current_web_analyst.name
+        db.add(client)
+        await db.flush()
 
     if payload.event_type:
         event = ClientEvent(
@@ -94,6 +140,11 @@ async def add_event(
     if client is None:
         raise HTTPException(status_code=404, detail="Client not found.")
 
+    # Auto-assign analyst to any client they interact with if not already assigned
+    if current_web_analyst.role == "analyst" and client.assigned_to_id is None:
+        client.assigned_to_id = current_web_analyst.id
+        client.assigned_to_name = current_web_analyst.name
+
     event = ClientEvent(
         client_id=client.id,
         event_type=payload.event_type,
@@ -109,6 +160,41 @@ async def add_event(
     return {"event_id": str(event.id)}
 
 
+@router.patch("/{client_id}/assign", status_code=status.HTTP_200_OK)
+async def assign_client(
+    client_id: uuid.UUID,
+    payload: ClientAssignPayload,
+    db: AsyncSession = Depends(get_db),
+    current_web_analyst: WebAnalyst = Depends(get_current_web_analyst),
+) -> dict:
+    if current_web_analyst.role != "admin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required.")
+
+    client_result = await db.execute(select(Client).where(Client.id == client_id))
+    client = client_result.scalar_one_or_none()
+    if client is None:
+        raise HTTPException(status_code=404, detail="Client not found.")
+
+    if payload.analyst_id is None:
+        client.assigned_to_id = None
+        client.assigned_to_name = None
+    else:
+        analyst_result = await db.execute(
+            select(WebAnalyst).where(WebAnalyst.id == uuid.UUID(payload.analyst_id))
+        )
+        analyst = analyst_result.scalar_one_or_none()
+        if analyst is None:
+            raise HTTPException(status_code=404, detail="Analyst not found.")
+        client.assigned_to_id = analyst.id
+        client.assigned_to_name = analyst.name
+
+    client.updated_at = datetime.now(timezone.utc)
+    db.add(client)
+    await db.flush()
+
+    return {"ok": True, "assigned_to": client.assigned_to_name}
+
+
 @router.get("/")
 async def list_clients(
     limit: int = Query(default=100, ge=1, le=500),
@@ -116,9 +202,18 @@ async def list_clients(
     db: AsyncSession = Depends(get_db),
     current_web_analyst: WebAnalyst = Depends(get_current_web_analyst),
 ) -> list[dict]:
-    rows = await db.execute(text("""
+    is_admin = current_web_analyst.role == "admin"
+    ownership_filter = "" if is_admin else "AND (c.scanned_by_id = :user_id OR c.assigned_to_id = :user_id)"
+    params: dict = {"limit": limit, "offset": offset}
+    if not is_admin:
+        params["user_id"] = current_web_analyst.id
+
+    rows = await db.execute(text(f"""
         SELECT
             c.id, c.name, c.country, c.company,
+            c.email, c.phone,
+            c.scanned_by_name, c.scanned_by_role,
+            c.assigned_to_id, c.assigned_to_name,
             c.created_at, c.updated_at,
             ce.event_type  AS latest_event_type,
             ce.created_at  AS latest_event_at,
@@ -131,9 +226,10 @@ async def list_clients(
             ORDER BY created_at DESC
             LIMIT 1
         ) ce ON true
+        WHERE 1=1 {ownership_filter}
         ORDER BY c.updated_at DESC
         LIMIT :limit OFFSET :offset
-    """), {"limit": limit, "offset": offset})
+    """), params)
 
     out = []
     for row in rows.mappings():
@@ -144,6 +240,12 @@ async def list_clients(
             "name": row["name"],
             "country": row["country"],
             "company": row["company"],
+            "email": row["email"],
+            "phone": row["phone"],
+            "scanned_by_name": row["scanned_by_name"],
+            "scanned_by_role": row["scanned_by_role"],
+            "assigned_to_id": str(row["assigned_to_id"]) if row["assigned_to_id"] else None,
+            "assigned_to_name": row["assigned_to_name"],
             "created_at": row["created_at"].isoformat() if row["created_at"] else None,
             "updated_at": row["updated_at"].isoformat() if row["updated_at"] else None,
             "latest_event_type": row["latest_event_type"],
@@ -164,6 +266,13 @@ async def get_client(
     if client is None:
         raise HTTPException(status_code=404, detail="Client not found.")
 
+    if current_web_analyst.role != "admin":
+        if (
+            client.scanned_by_id != current_web_analyst.id
+            and client.assigned_to_id != current_web_analyst.id
+        ):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied.")
+
     events_result = await db.execute(
         select(ClientEvent)
         .where(ClientEvent.client_id == client_id)
@@ -171,11 +280,50 @@ async def get_client(
     )
     events = events_result.scalars().all()
 
+    # Derive researcher from the first "research" event's creator
+    res_id_row = await db.execute(
+        select(ClientEvent.created_by_id)
+        .where(ClientEvent.client_id == client_id, ClientEvent.event_type == "research")
+        .order_by(ClientEvent.created_at.asc())
+        .limit(1)
+    )
+    researched_by_id = res_id_row.scalar_one_or_none()
+
+    # Derive scanner from the most recent "scan" event's creator
+    scan_id_row = await db.execute(
+        select(ClientEvent.created_by_id)
+        .where(ClientEvent.client_id == client_id, ClientEvent.event_type == "scan")
+        .order_by(ClientEvent.created_at.desc())
+        .limit(1)
+    )
+    scanned_by_id = scan_id_row.scalar_one_or_none()
+
+    # Fall back to the FK column if no event-derived ID (pre-event-tracking clients)
+    effective_researcher_id = researched_by_id or client.scanned_by_id
+
+    analyst_ids = [i for i in [effective_researcher_id, scanned_by_id] if i]
+    analysts_map: dict[uuid.UUID, WebAnalyst] = {}
+    if analyst_ids:
+        wa_result = await db.execute(select(WebAnalyst).where(WebAnalyst.id.in_(analyst_ids)))
+        for wa in wa_result.scalars():
+            analysts_map[wa.id] = wa
+
+    researched_by = analysts_map.get(effective_researcher_id) if effective_researcher_id else None
+    scanned_by = analysts_map.get(scanned_by_id) if scanned_by_id else None
+
     return {
         "id": str(client.id),
         "name": client.name,
         "country": client.country,
         "company": client.company,
+        "email": client.email,
+        "phone": client.phone,
+        "researched_by_name": researched_by.name if researched_by else client.scanned_by_name,
+        "researched_by_role": researched_by.role if researched_by else client.scanned_by_role,
+        "scanned_by_name": scanned_by.name if scanned_by else None,
+        "scanned_by_role": scanned_by.role if scanned_by else None,
+        "assigned_to_id": str(client.assigned_to_id) if client.assigned_to_id else None,
+        "assigned_to_name": client.assigned_to_name,
         "created_at": client.created_at.isoformat() if client.created_at else None,
         "updated_at": client.updated_at.isoformat() if client.updated_at else None,
         "events": [

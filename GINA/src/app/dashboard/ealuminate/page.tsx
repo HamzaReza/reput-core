@@ -551,6 +551,8 @@ function EaluminatePageInner() {
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [company, setCompany] = useState("");
+  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
   const [country, setCountry] = useState("");
   const [description, setDescription] = useState("");
   const [resultsCap, setResultsCap] = useState(20);
@@ -934,6 +936,8 @@ function EaluminatePageInner() {
           name: fullName,
           country,
           company: company.trim() || undefined,
+          email: email.trim() || undefined,
+          phone: phone.trim() || undefined,
           event_type: "research",
           event_data: {
             profile: profile ?? {},
@@ -1146,6 +1150,10 @@ function EaluminatePageInner() {
           setLastName={setLastName}
           company={company}
           setCompany={setCompany}
+          email={email}
+          setEmail={setEmail}
+          phone={phone}
+          setPhone={setPhone}
           country={country}
           setCountry={setCountry}
           description={description}

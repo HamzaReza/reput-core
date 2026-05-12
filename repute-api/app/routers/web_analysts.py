@@ -14,13 +14,20 @@ class WebAnalystCreate(BaseModel):
     name: str
     email: str
     password: str
+    role: str = "analyst"
 
 
 @router.post("/", status_code=status.HTTP_201_CREATED)
 async def create_web_analyst(
     payload: WebAnalystCreate,
     db: AsyncSession = Depends(get_db),
+    current_web_analyst: WebAnalyst = Depends(get_current_web_analyst),
 ) -> dict:
+    if current_web_analyst.role != "admin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required.")
+    if payload.role not in ("admin", "analyst"):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid role.")
+
     email = payload.email.lower()
     existing = await db.execute(
         select(WebAnalyst).where(WebAnalyst.email == email).limit(1)
@@ -32,6 +39,7 @@ async def create_web_analyst(
         name=payload.name,
         email=email,
         password_hash=hash_password(payload.password),
+        role=payload.role,
     )
     db.add(wa)
     await db.flush()
@@ -47,6 +55,7 @@ async def get_me(
         "id": str(current_web_analyst.id),
         "name": current_web_analyst.name,
         "email": current_web_analyst.email,
+        "role": current_web_analyst.role,
     }
 
 
@@ -68,6 +77,8 @@ async def list_web_analysts(
     db: AsyncSession = Depends(get_db),
     current_web_analyst: WebAnalyst = Depends(get_current_web_analyst),
 ) -> list[dict]:
+    if current_web_analyst.role != "admin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required.")
     result = await db.execute(
         select(WebAnalyst).order_by(desc(WebAnalyst.created_at))
     )
@@ -77,6 +88,7 @@ async def list_web_analysts(
             "id": str(w.id),
             "name": w.name,
             "email": w.email,
+            "role": w.role,
             "created_at": w.created_at.isoformat() if w.created_at else None,
         }
         for w in web_analysts

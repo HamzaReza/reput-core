@@ -32,6 +32,10 @@ interface EaluminateFormPanelProps {
   setLastName: (value: string) => void;
   company: string;
   setCompany: (value: string) => void;
+  email: string;
+  setEmail: (value: string) => void;
+  phone: string;
+  setPhone: (value: string) => void;
   country: string;
   setCountry: (value: string) => void;
   description: string;
@@ -74,6 +78,10 @@ export function EaluminateFormPanel(props: EaluminateFormPanelProps) {
     setLastName,
     company,
     setCompany,
+    email,
+    setEmail,
+    phone,
+    setPhone,
     country,
     setCountry,
     description,
@@ -201,6 +209,29 @@ export function EaluminateFormPanel(props: EaluminateFormPanelProps) {
               placeholder="e.g. Acme Corp (optional)"
               style={inputStyle}
             />
+          </div>
+
+          <div className="lead-name-grid">
+            <div>
+              <label style={labelStyle}>Email</label>
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="e.g. john@example.com (optional)"
+                style={inputStyle}
+              />
+            </div>
+            <div>
+              <label style={labelStyle}>Phone</label>
+              <input
+                type="tel"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                placeholder="e.g. +1 555 000 0000 (optional)"
+                style={inputStyle}
+              />
+            </div>
           </div>
 
           <div>
