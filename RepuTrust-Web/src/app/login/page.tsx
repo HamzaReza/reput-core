@@ -4,7 +4,7 @@ import Footer from "@/components/common/Footer";
 import Header from "@/components/common/Header";
 import { Toast, useToast } from "@/components/common/Toast";
 import { auth, setToken } from "@/lib/api";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 const inputStyle: React.CSSProperties = {
@@ -51,7 +51,6 @@ function Spinner() {
 
 export default function LoginPage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loginLoading, setLoginLoading] = useState(false);
@@ -59,7 +58,8 @@ export default function LoginPage() {
   const toast = useToast();
 
   useEffect(() => {
-    if (searchParams.get("reason") === "session_expired") {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("reason") === "session_expired") {
       toast.show("The session has expired");
     }
   }, []);
