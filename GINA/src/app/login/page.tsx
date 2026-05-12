@@ -1,7 +1,7 @@
 "use client";
 
 import { auth, setToken } from "@/lib/api";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
@@ -50,14 +50,14 @@ function Spinner() {
 
 export default function LoginPage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
-    if (searchParams.get("reason") === "session_expired") {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("reason") === "session_expired") {
       toast.error("The session has expired", {
         position: "top-center",
         style: {
