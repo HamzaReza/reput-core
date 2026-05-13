@@ -323,7 +323,6 @@ async function classifyWithClaude(
   name: string,
   country: string | null,
   keywords: string[],
-  context?: string,
 ): Promise<WebLink[]> {
   if (articles.length === 0) return [];
 
@@ -339,15 +338,12 @@ async function classifyWithClaude(
   const countryLine = country
     ? `The subject is from ${country}. Only include results clearly relevant to this person and their region.`
     : "";
-  const contextLine = context
-    ? `\nBackground context about this person: ${context}\n`
-    : "";
   const keywordList =
     keywords.length > 0 ? keywords.join(", ") : "general reputation";
 
   const prompt = `You are a reputation intelligence analyst. Classify the following ${articles.length} articles about "${name}".
 
-${countryLine}${contextLine}
+${countryLine}
 Search context keywords used: ${keywordList}
 
 CLASSIFICATION RULES:
@@ -473,7 +469,6 @@ async function generateMeetingSummary(
   name: string,
   score: number,
   links: WebLink[],
-  context?: string,
 ): Promise<{ headline: string; issues: string[]; talkingPoints: string[] }> {
   const negLinks = links.filter(
     (l) =>
@@ -495,10 +490,8 @@ async function generateMeetingSummary(
       : "No positive results found.",
   ].join("\n\n");
 
-  const contextLine = context ? `\nBackground: ${context}\n` : "";
-
   const prompt = `You are an analyst at a reputation management firm. A scan for "${name}" returned a ReputScore of ${score}/100.
-${contextLine}
+
 Findings:
 ${findingsSummary}
 
@@ -536,28 +529,18 @@ export async function POST(req: NextRequest) {
   const {
     firstName,
     lastName,
-    company,
     country,
-    description,
     keywords,
     resultsCap,
   } = (await req.json()) as {
     firstName: string;
     lastName: string;
-    company?: string;
     country: string;
-    description: string;
     keywords: string[];
     resultsCap?: number;
   };
 
-  if (
-    !firstName ||
-    !lastName ||
-    !country ||
-    !description ||
-    !keywords?.length
-  ) {
+  if (!firstName || !lastName || !country || !keywords?.length) {
     return NextResponse.json(
       { error: "Required fields missing" },
       { status: 400 },
@@ -566,7 +549,6 @@ export async function POST(req: NextRequest) {
 
   const name = `${firstName.trim()} ${lastName.trim()}`.trim();
   const sanitizedName = name.slice(0, 200).replace(/[\r\n]/g, " ");
-  const sanitizedDescription = description.trim().slice(0, 2000);
 
   const client = new Anthropic({ apiKey });
   const countryCode = countryCodeFromName(country);
@@ -625,7 +607,6 @@ export async function POST(req: NextRequest) {
       sanitizedName,
       country,
       keywords,
-      sanitizedDescription,
     );
 
     const deduped = dedupeLinks(classified).map((link) => ({
@@ -641,7 +622,6 @@ export async function POST(req: NextRequest) {
       sanitizedName,
       deriveScoreServer(negative.length, positive.length),
       deduped,
-      sanitizedDescription,
     );
 
     return NextResponse.json({

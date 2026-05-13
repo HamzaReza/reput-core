@@ -973,9 +973,7 @@ function EaluminatePageInner() {
         body: JSON.stringify({
           firstName: firstName.trim(),
           lastName: lastName.trim(),
-          company: company.trim() || undefined,
           country,
-          description: description.trim(),
           keywords: editableKeywords,
           resultsCap,
         }),
