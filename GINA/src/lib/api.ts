@@ -502,6 +502,7 @@ export interface WebLink {
   source: string;
   type: string;
   date?: string;
+  keyword?: string;
 }
 
 export interface FullLead {

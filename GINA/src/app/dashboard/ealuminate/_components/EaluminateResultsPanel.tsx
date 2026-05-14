@@ -611,6 +611,27 @@ export function EaluminateResultsPanel({
                           >
                             {uiRisk}
                           </span>
+                          {item.keyword && (
+                            <>
+                              <span
+                                style={{ fontSize: "0.6875rem", color: "#cbd5e1" }}
+                              >
+                                ·
+                              </span>
+                              <span
+                                style={{
+                                  fontSize: "0.6875rem",
+                                  fontWeight: 500,
+                                  color: "#6366f1",
+                                  backgroundColor: "rgba(99,102,241,0.08)",
+                                  padding: "0.125rem 0.5rem",
+                                  borderRadius: "999px",
+                                }}
+                              >
+                                {item.keyword}
+                              </span>
+                            </>
+                          )}
                         </div>
                         {item.date && (
                           <span
