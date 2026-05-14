@@ -207,6 +207,62 @@ const COUNTRY_TO_LANGUAGE: Record<string, string> = {
   IE: "en",
 };
 
+const MONTH_MAP: Record<string, number> = {
+  // English
+  jan: 1,
+  feb: 2,
+  mar: 3,
+  apr: 4,
+  may: 5,
+  jun: 6,
+  jul: 7,
+  aug: 8,
+  sep: 9,
+  oct: 10,
+  nov: 11,
+  dec: 12,
+  // Italian
+  gen: 1,
+  mag: 5,
+  giu: 6,
+  lug: 7,
+  ago: 8,
+  set: 9,
+  ott: 10,
+  dic: 12,
+  // Spanish
+  ene: 1,
+  abr: 4,
+  ago_es: 8, // ago already covered
+  // French
+  fév: 2,
+  avr: 4,
+  aoû: 8,
+  // German
+  mär: 3,
+  okt: 10,
+  // Portuguese
+  fev: 2,
+  out: 10,
+};
+
+function parseSerperDate(dateStr: string): number {
+  // Try native parse first (works for ISO / English formats)
+  const native = Date.parse(dateStr);
+  if (!isNaN(native)) return native;
+
+  // Try "DD MMM YYYY" or "D MMM YYYY" in any supported locale
+  const m = dateStr
+    .trim()
+    .match(/^(\d{1,2})\s+([a-záàâäéèêëíìîïóòôöúùûüñç]+)\.?\s+(\d{4})$/i);
+  if (m) {
+    const month = MONTH_MAP[m[2].toLowerCase()];
+    if (month) return new Date(Number(m[3]), month - 1, Number(m[1])).getTime();
+  }
+
+  return NaN;
+}
+
 function countryCodeFromName(country: string): string | null {
   const k = country.toLowerCase().trim();
   return COUNTRY_NAME_TO_ISO[k] ?? NATIONALITY_ALIASES[k] ?? null;
@@ -238,30 +294,38 @@ async function searchSerper(
   countryCode: string | null,
   languageCode: string | null,
   numResults = 20,
-): Promise<SerperResult[]> {
+): Promise<{ organic: SerperResult[]; raw: SerperResponse[] }> {
   const serperKey = process.env.SERPER_API_KEY;
   if (!serperKey) throw new Error("SERPER_API_KEY not configured");
 
-  const payload: Record<string, unknown> = { q: query, num: numResults };
-  if (countryCode) payload.gl = countryCode.toLowerCase();
-  const lang =
-    languageCode ??
-    (countryCode ? COUNTRY_TO_LANGUAGE[countryCode.toUpperCase()] : null);
-  if (lang) payload.hl = lang;
+  const resultsPerPage = 10;
+  const pagesNeeded = Math.ceil(numResults / resultsPerPage);
 
-  const res = await fetch("https://google.serper.dev/search", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "X-API-KEY": serperKey },
-    body: JSON.stringify(payload),
-  });
+  const makePayload = (page: number) => {
+    const payload: Record<string, unknown> = { q: query, page };
+    if (countryCode) payload.gl = countryCode.toLowerCase();
+    const lang =
+      languageCode ??
+      (countryCode ? COUNTRY_TO_LANGUAGE[countryCode.toUpperCase()] : null);
+    if (lang) payload.hl = lang;
+    return payload;
+  };
 
-  if (!res.ok) {
-    const body = await res.text();
-    throw new Error(`Search service error (${res.status}): ${body}`);
-  }
+  const raw = await Promise.all(
+    Array.from({ length: pagesNeeded }, (_, i) =>
+      fetch("https://google.serper.dev/search", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-API-KEY": serperKey },
+        body: JSON.stringify(makePayload(i + 1)),
+      }).then((res) => {
+        if (!res.ok) throw new Error(`Search service error (${res.status})`);
+        return res.json() as Promise<SerperResponse>;
+      }),
+    ),
+  );
 
-  const data = (await res.json()) as SerperResponse;
-  return data.organic ?? [];
+  const organic = raw.flatMap((r) => r.organic ?? []).slice(0, numResults);
+  return { organic, raw };
 }
 
 async function isPdf(url: string): Promise<boolean> {
@@ -307,7 +371,7 @@ async function scrapeWithFirecrawl(url: string): Promise<string | null> {
     if (!res.ok) return null;
     const data = (await res.json()) as FirecrawlResponse;
     if (!data.success || !data.data?.markdown) return null;
-    return data.data.markdown.slice(0, 4000);
+    return data.data.markdown.slice(0, 8000);
   } catch (err) {
     console.error(
       `[firecrawl] Failed to scrape ${url}:`,
@@ -333,8 +397,10 @@ async function classifyWithClaude(
     )
     .join("\n\n---\n\n");
 
-  const lastName = name.split(" ").pop() ?? name;
-  const firstName = name.split(" ").shift() ?? name;
+  const nameParts = name.split(" ").filter(Boolean);
+  const firstName = nameParts[0] ?? name;
+  const lastName = nameParts.slice(1).join(" ");
+
   const countryLine = country
     ? `The subject is from ${country}. Only include results clearly relevant to this person and their region.`
     : "";
@@ -384,6 +450,7 @@ INCLUDE the article if:
 EXCLUDE the article if:
 • Only the first name appears without the last name, OR
 • Only the last name appears without the first name, OR
+• The article is clearly about a different person with a similar name OR
 • Neither appears at all
 
 If EXCLUDED → do not include this article in the output array at all.
@@ -526,19 +593,14 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const {
-    firstName,
-    lastName,
-    country,
-    keywords,
-    resultsCap,
-  } = (await req.json()) as {
-    firstName: string;
-    lastName: string;
-    country: string;
-    keywords: string[];
-    resultsCap?: number;
-  };
+  const { firstName, lastName, country, keywords, resultsCap } =
+    (await req.json()) as {
+      firstName: string;
+      lastName: string;
+      country: string;
+      keywords: string[];
+      resultsCap?: number;
+    };
 
   if (!firstName || !lastName || !country || !keywords?.length) {
     return NextResponse.json(
@@ -564,16 +626,19 @@ export async function POST(req: NextRequest) {
 
     const cap = resultsCap ?? 20;
 
-    const allResults = await Promise.all(
+    const serperResults = await Promise.all(
       searchQueries.map((q) => searchSerper(q, countryCode, languageCode, cap)),
     );
+    const allResults = serperResults.map((s) => s.organic);
+    const allRaw = serperResults.map((s) => s.raw);
 
     // ── Phase 2: Deduplicate URLs, scrape with Firecrawl in parallel ──────────
     const seenUrls = new Set<string>();
     const articles: ArticleForClassification[] = [];
     const dateMap = new Map<string, string>();
+    const keywordMap = new Map<string, string>(); // url → first keyword that found it
 
-    for (const results of allResults) {
+    allResults.forEach((results, kwIdx) => {
       for (const r of results) {
         if (!seenUrls.has(r.link)) {
           seenUrls.add(r.link);
@@ -584,9 +649,12 @@ export async function POST(req: NextRequest) {
             content: r.snippet,
           });
           if (r.date) dateMap.set(r.link, r.date);
+          keywordMap.set(r.link, keywords[kwIdx]!);
         }
       }
-    }
+    });
+
+    const urlsSentToFirecrawl = articles.map((a) => a.url);
 
     const scrapeResults = await Promise.allSettled(
       articles.map(async (a) =>
@@ -594,11 +662,18 @@ export async function POST(req: NextRequest) {
       ),
     );
 
+    const firecrawlSuccess: string[] = [];
+    const firecrawlFailed: string[] = [];
     scrapeResults.forEach((result, i) => {
       if (result.status === "fulfilled" && result.value) {
         articles[i].content = result.value;
+        firecrawlSuccess.push(articles[i].url);
+      } else {
+        firecrawlFailed.push(articles[i].url);
       }
     });
+
+    const urlsSentToClaude = articles.map((a) => a.url);
 
     // ── Phase 3: Claude classification ───────────────────────────────────────
     const classified = await classifyWithClaude(
@@ -609,10 +684,22 @@ export async function POST(req: NextRequest) {
       keywords,
     );
 
-    const deduped = dedupeLinks(classified).map((link) => ({
-      ...link,
-      date: dateMap.get(link.url),
-    }));
+    const deduped = dedupeLinks(classified)
+      .map((link) => ({
+        ...link,
+        date: dateMap.get(link.url),
+        keyword: keywordMap.get(link.url),
+      }))
+      .sort((a, b) => {
+        const da = a.date ? parseSerperDate(a.date) : NaN;
+        const db = b.date ? parseSerperDate(b.date) : NaN;
+        const validA = !isNaN(da);
+        const validB = !isNaN(db);
+        if (validA && validB) return db - da;
+        if (validA) return -1;
+        if (validB) return 1;
+        return 0;
+      });
     const negative = deduped.filter((l) => l.sentiment === "negative");
     const positive = deduped.filter((l) => l.sentiment === "positive");
     const neutral = deduped.filter((l) => l.sentiment === "neutral");
@@ -631,6 +718,24 @@ export async function POST(req: NextRequest) {
       neutral,
       summary,
       score: deriveScoreServer(negative.length, positive.length),
+      // _serper: keywords.map((kw, i) => ({
+      //   keyword: kw,
+      //   query: searchQueries[i]!,
+      //   count: allResults[i].length,
+      //   links: allRaw[i].flatMap((page) =>
+      //     (page.organic ?? []).map((r) => r.link),
+      //   ),
+      // })),
+      // _firecrawl: keywords.map((kw) => ({
+      //   keyword: kw,
+      //   sent: urlsSentToFirecrawl.filter((u) => keywordMap.get(u) === kw),
+      //   success: firecrawlSuccess.filter((u) => keywordMap.get(u) === kw),
+      //   failed: firecrawlFailed.filter((u) => keywordMap.get(u) === kw),
+      // })),
+      // _claude: keywords.map((kw) => ({
+      //   keyword: kw,
+      //   sent: urlsSentToClaude.filter((u) => keywordMap.get(u) === kw),
+      // })),
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
