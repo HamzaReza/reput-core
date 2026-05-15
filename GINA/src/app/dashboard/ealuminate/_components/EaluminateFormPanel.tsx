@@ -26,6 +26,8 @@ interface EaluminateFormPanelProps {
   preAnalysisDone: boolean;
   preAnalysisLoading: boolean;
   error: string;
+  subjectType: "individual" | "company";
+  setSubjectType: (value: "individual" | "company") => void;
   firstName: string;
   setFirstName: (value: string) => void;
   lastName: string;
@@ -47,8 +49,8 @@ interface EaluminateFormPanelProps {
   keywordsReady: boolean;
   editableKeywords: string[];
   setEditableKeywords: Dispatch<SetStateAction<string[]>>;
-  resultsCap: number;
-  setResultsCap: (value: number) => void;
+  pagesCap: number;
+  setPagesCap: (value: number) => void;
   handleRunScan: () => void;
   loading: boolean;
   CountryPicker: ComponentType<CountryPickerProps>;
@@ -58,7 +60,12 @@ interface EaluminateFormPanelProps {
   labelStyle: CSSProperties;
   keywordsCapOptions: readonly number[];
   keywordFocusOptions: readonly { value: KeywordFocus; label: string }[];
-  resultsCapOptions: readonly number[];
+  pagesCapOptions: readonly number[];
+  reportLanguage: string;
+  setReportLanguage: (value: string) => void;
+  reportLanguageOptions: readonly { value: string; label: string }[];
+  useKeywords: boolean;
+  setUseKeywords: (value: boolean) => void;
   pipeline: ReactNode;
 }
 
@@ -68,6 +75,8 @@ export function EaluminateFormPanel(props: EaluminateFormPanelProps) {
     preAnalysisDone,
     preAnalysisLoading,
     error,
+    subjectType,
+    setSubjectType,
     firstName,
     setFirstName,
     lastName,
@@ -89,8 +98,8 @@ export function EaluminateFormPanel(props: EaluminateFormPanelProps) {
     keywordsReady,
     editableKeywords,
     setEditableKeywords,
-    resultsCap,
-    setResultsCap,
+    pagesCap,
+    setPagesCap,
     handleRunScan,
     loading,
     CountryPicker,
@@ -100,7 +109,12 @@ export function EaluminateFormPanel(props: EaluminateFormPanelProps) {
     labelStyle,
     keywordsCapOptions,
     keywordFocusOptions,
-    resultsCapOptions,
+    pagesCapOptions,
+    reportLanguage,
+    setReportLanguage,
+    reportLanguageOptions,
+    useKeywords,
+    setUseKeywords,
     pipeline,
   } = props;
 
@@ -167,38 +181,71 @@ export function EaluminateFormPanel(props: EaluminateFormPanelProps) {
             gap: "1.25rem",
           }}
         >
-          <div className="lead-name-grid">
-            <div>
-              <label style={labelStyle}>First Name *</label>
-              <input
-                type="text"
-                value={firstName}
-                onChange={(e) => setFirstName(e.target.value)}
-                placeholder="e.g. John"
-                required
-                style={inputStyle}
-              />
-            </div>
-            <div>
-              <label style={labelStyle}>Last Name *</label>
-              <input
-                type="text"
-                value={lastName}
-                onChange={(e) => setLastName(e.target.value)}
-                placeholder="e.g. Smith"
-                required
-                style={inputStyle}
-              />
+          <div>
+            <label style={labelStyle}>Subject Type</label>
+            <div style={{ display: "flex", gap: "0.5rem" }}>
+              {(["individual", "company"] as const).map((type) => (
+                <button
+                  key={type}
+                  type="button"
+                  onClick={() => setSubjectType(type)}
+                  style={{
+                    padding: "0.4rem 1rem",
+                    borderRadius: "999px",
+                    fontSize: "0.875rem",
+                    fontWeight: 500,
+                    cursor: "pointer",
+                    transition: "all 0.15s",
+                    border: "1.5px solid",
+                    borderColor: subjectType === type ? "#4479DA" : "var(--color-border, #e2e8f0)",
+                    backgroundColor: subjectType === type ? "#eef3ff" : "#ffffff",
+                    color: subjectType === type ? "#4479DA" : "var(--color-muted, #64748b)",
+                    textTransform: "capitalize",
+                  }}
+                >
+                  {type}
+                </button>
+              ))}
             </div>
           </div>
 
+          {subjectType === "individual" && (
+            <div className="lead-name-grid">
+              <div>
+                <label style={labelStyle}>First Name *</label>
+                <input
+                  type="text"
+                  value={firstName}
+                  onChange={(e) => setFirstName(e.target.value)}
+                  placeholder="e.g. John"
+                  required
+                  style={inputStyle}
+                />
+              </div>
+              <div>
+                <label style={labelStyle}>Last Name *</label>
+                <input
+                  type="text"
+                  value={lastName}
+                  onChange={(e) => setLastName(e.target.value)}
+                  placeholder="e.g. Smith"
+                  required
+                  style={inputStyle}
+                />
+              </div>
+            </div>
+          )}
+
           <div>
-            <label style={labelStyle}>Company</label>
+            <label style={labelStyle}>
+              Company{subjectType === "individual" ? " (optional)" : " *"}
+            </label>
             <input
               type="text"
               value={company}
               onChange={(e) => setCompany(e.target.value)}
-              placeholder="e.g. Acme Corp (optional)"
+              placeholder={subjectType === "company" ? "e.g. Acme Corp" : "e.g. Acme Corp (optional)"}
+              required={subjectType === "company"}
               style={inputStyle}
             />
           </div>
@@ -307,6 +354,42 @@ export function EaluminateFormPanel(props: EaluminateFormPanelProps) {
               }}
             >
               Focus applied to AI keyword generation
+            </p>
+          </div>
+
+          <div>
+            <label style={labelStyle}>Report Language</label>
+            <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+              {reportLanguageOptions.map((opt) => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => setReportLanguage(opt.value)}
+                  style={{
+                    padding: "0.4rem 1rem",
+                    borderRadius: "999px",
+                    fontSize: "0.875rem",
+                    fontWeight: 500,
+                    cursor: "pointer",
+                    transition: "all 0.15s",
+                    border: "1.5px solid",
+                    borderColor: reportLanguage === opt.value ? "#4479DA" : "var(--color-border, #e2e8f0)",
+                    backgroundColor: reportLanguage === opt.value ? "#eef3ff" : "#ffffff",
+                    color: reportLanguage === opt.value ? "#4479DA" : "var(--color-muted, #64748b)",
+                  }}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+            <p
+              style={{
+                margin: "0.375rem 0 0",
+                fontSize: "0.75rem",
+                color: "#94a3b8",
+              }}
+            >
+              Language used for all AI-generated report text
             </p>
           </div>
 
@@ -480,6 +563,40 @@ export function EaluminateFormPanel(props: EaluminateFormPanelProps) {
           {keywordsReady && (
             <>
               <div>
+                <label style={labelStyle}>Use Keywords</label>
+                <div style={{ display: "flex", gap: "0.5rem" }}>
+                  {([
+                    { value: true,  label: "Yes" },
+                    { value: false, label: "No"  },
+                  ] as const).map((opt) => (
+                    <button
+                      key={String(opt.value)}
+                      type="button"
+                      onClick={() => setUseKeywords(opt.value)}
+                      style={{
+                        padding: "0.4rem 1rem",
+                        borderRadius: "999px",
+                        fontSize: "0.875rem",
+                        fontWeight: 500,
+                        cursor: "pointer",
+                        transition: "all 0.15s",
+                        border: "1.5px solid",
+                        borderColor: useKeywords === opt.value ? "#4479DA" : "var(--color-border, #e2e8f0)",
+                        backgroundColor: useKeywords === opt.value ? "#eef3ff" : "#ffffff",
+                        color: useKeywords === opt.value ? "#4479DA" : "var(--color-muted, #64748b)",
+                      }}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+                <p style={{ margin: "0.375rem 0 0", fontSize: "0.75rem", color: "#94a3b8" }}>
+                  {useKeywords
+                    ? "Searches using keyword-based queries"
+                    : "Searches by name/company only — no keywords"}
+                </p>
+              </div>
+              <div style={{ opacity: useKeywords ? 1 : 0.4, pointerEvents: useKeywords ? "auto" : "none", transition: "opacity 0.15s" }}>
                 <label style={labelStyle}>
                   Keywords — edit or add your own
                 </label>
@@ -489,15 +606,15 @@ export function EaluminateFormPanel(props: EaluminateFormPanelProps) {
                 />
               </div>
               <div>
-                <label style={labelStyle}>Results Cap</label>
+                <label style={labelStyle}>Pages per Keyword</label>
                 <div
                   style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}
                 >
-                  {resultsCapOptions.map((cap) => (
+                  {pagesCapOptions.map((page) => (
                     <button
-                      key={cap}
+                      key={page}
                       type="button"
-                      onClick={() => setResultsCap(cap)}
+                      onClick={() => setPagesCap(page)}
                       style={{
                         padding: "0.4rem 1rem",
                         borderRadius: "999px",
@@ -507,18 +624,18 @@ export function EaluminateFormPanel(props: EaluminateFormPanelProps) {
                         transition: "all 0.15s",
                         border: "1.5px solid",
                         borderColor:
-                          resultsCap === cap
+                          pagesCap === page
                             ? "#4479DA"
                             : "var(--color-border, #e2e8f0)",
                         backgroundColor:
-                          resultsCap === cap ? "#eef3ff" : "#ffffff",
+                          pagesCap === page ? "#eef3ff" : "#ffffff",
                         color:
-                          resultsCap === cap
+                          pagesCap === page
                             ? "#4479DA"
                             : "var(--color-muted, #64748b)",
                       }}
                     >
-                      {cap}
+                      {page}
                     </button>
                   ))}
                 </div>
@@ -534,7 +651,7 @@ export function EaluminateFormPanel(props: EaluminateFormPanelProps) {
               </div>
               <button
                 type="button"
-                disabled={loading || editableKeywords.length === 0}
+                disabled={loading || (useKeywords && editableKeywords.length === 0)}
                 onClick={handleRunScan}
                 className="glow-button"
                 style={{
@@ -542,7 +659,7 @@ export function EaluminateFormPanel(props: EaluminateFormPanelProps) {
                   padding: "0.75rem",
                   fontWeight: 700,
                   borderRadius: "999px",
-                  opacity: loading || editableKeywords.length === 0 ? 0.5 : 1,
+                  opacity: loading || (useKeywords && editableKeywords.length === 0) ? 0.5 : 1,
                   cursor: "pointer",
                 }}
               >

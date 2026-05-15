@@ -293,13 +293,10 @@ async function searchSerper(
   query: string,
   countryCode: string | null,
   languageCode: string | null,
-  numResults = 20,
+  numPages = 2,
 ): Promise<{ organic: SerperResult[]; raw: SerperResponse[] }> {
   const serperKey = process.env.SERPER_API_KEY;
   if (!serperKey) throw new Error("SERPER_API_KEY not configured");
-
-  const resultsPerPage = 10;
-  const pagesNeeded = Math.ceil(numResults / resultsPerPage);
 
   const makePayload = (page: number) => {
     const payload: Record<string, unknown> = { q: query, page };
@@ -312,7 +309,7 @@ async function searchSerper(
   };
 
   const raw = await Promise.all(
-    Array.from({ length: pagesNeeded }, (_, i) =>
+    Array.from({ length: numPages }, (_, i) =>
       fetch("https://google.serper.dev/search", {
         method: "POST",
         headers: { "Content-Type": "application/json", "X-API-KEY": serperKey },
@@ -324,7 +321,7 @@ async function searchSerper(
     ),
   );
 
-  const organic = raw.flatMap((r) => r.organic ?? []).slice(0, numResults);
+  const organic = raw.flatMap((r) => r.organic ?? []);
   return { organic, raw };
 }
 
@@ -387,6 +384,8 @@ async function classifyWithClaude(
   name: string,
   country: string | null,
   keywords: string[],
+  subjectType: "individual" | "company" = "individual",
+  languageName = "English",
 ): Promise<WebLink[]> {
   if (articles.length === 0) return [];
 
@@ -401,11 +400,39 @@ async function classifyWithClaude(
   const firstName = nameParts[0] ?? name;
   const lastName = nameParts.slice(1).join(" ");
 
-  const countryLine = country
-    ? `The subject is from ${country}. Only include results clearly relevant to this person and their region.`
-    : "";
+  const countryLine = subjectType === "company"
+    ? (country ? `The subject is a company from ${country}. Only include results clearly relevant to this company and their region.` : "")
+    : (country ? `The subject is from ${country}. Only include results clearly relevant to this person and their region.` : "");
+
   const keywordList =
     keywords.length > 0 ? keywords.join(", ") : "general reputation";
+
+  const nameFilter = subjectType === "company"
+    ? `MANDATORY NAME FILTER:
+Before classifying, check whether the company "${name}" is clearly identifiable in the title, snippet, or content.
+
+INCLUDE the article if:
+• The company name "${name}" appears (case-insensitive)
+
+EXCLUDE the article if:
+• The article clearly refers to a different company with a similar name, OR
+• The company name does not appear at all
+
+If EXCLUDED → do not include this article in the output array at all.`
+    : `MANDATORY NAME FILTER:
+Before classifying, check whether the subject "${name}" is clearly identifiable in the title, snippet, or content.
+
+INCLUDE the article if:
+• The full name "${name}" appears (case-insensitive), OR
+• Both "${firstName}" AND "${lastName}" appear in close proximity (within the same sentence or paragraph)
+
+EXCLUDE the article if:
+• Only the first name appears without the last name, OR
+• Only the last name appears without the first name, OR
+• The article is clearly about a different person with a similar name OR
+• Neither appears at all
+
+If EXCLUDED → do not include this article in the output array at all.`;
 
   const prompt = `You are a reputation intelligence analyst. Classify the following ${articles.length} articles about "${name}".
 
@@ -440,20 +467,7 @@ RISK CLASSIFICATION:
 - "low": minor criticism or weak negative mentions
 - "none": positive or neutral content
 
-MANDATORY NAME FILTER:
-Before classifying, check whether the subject "${name}" is clearly identifiable in the title, snippet, or content.
-
-INCLUDE the article if:
-• The full name "${name}" appears (case-insensitive), OR
-• Both "${firstName}" AND "${lastName}" appear in close proximity (within the same sentence or paragraph)
-
-EXCLUDE the article if:
-• Only the first name appears without the last name, OR
-• Only the last name appears without the first name, OR
-• The article is clearly about a different person with a similar name OR
-• Neither appears at all
-
-If EXCLUDED → do not include this article in the output array at all.
+${nameFilter}
 
 ARTICLES TO CLASSIFY:
 ${articleList}
@@ -462,7 +476,7 @@ Return a JSON array only — no explanation, no markdown code fences. Each eleme
 {
   "url": "...",
   "title": "...",
-  "snippet": "3 sentence explanation of the reputational significance of this article, written in your own words based on the title and content — not copied from the source. Write the snippet in the same language as the article.",
+  "snippet": "3 sentence explanation of the reputational significance of this article, written in your own words based on the title and content — not copied from the source. Write the snippet in ${languageName}.",
   "sentiment": "negative" | "positive" | "neutral",
   "risk": "high" | "medium" | "low" | "none",
   "source": "domain.com",
@@ -536,6 +550,7 @@ async function generateMeetingSummary(
   name: string,
   score: number,
   links: WebLink[],
+  languageName = "English",
 ): Promise<{ headline: string; issues: string[]; talkingPoints: string[] }> {
   const negLinks = links.filter(
     (l) =>
@@ -567,7 +582,9 @@ Return a JSON object (no markdown, no explanation) with:
   "headline": "one-line assessment for the sales team",
   "issues": ["up to 4 key points about their reputation (positive or negative), or 1 entry if nothing found"],
   "talkingPoints": ["2-3 suggested opening lines for a client meeting focused on why they need reputation management"]
-}`;
+}
+
+Write all output (headline, issues, talkingPoints) in ${languageName}.`;
 
   const response = await client.messages.create({
     model: "claude-sonnet-4-6",
@@ -593,24 +610,30 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const { firstName, lastName, country, keywords, resultsCap } =
+  const { firstName, lastName, company, country, keywords, pagesCap, subjectType = "individual", reportLanguage, useKeywords = true } =
     (await req.json()) as {
-      firstName: string;
-      lastName: string;
+      firstName?: string;
+      lastName?: string;
+      company?: string;
       country: string;
       keywords: string[];
-      resultsCap?: number;
+      pagesCap?: number;
+      subjectType?: "individual" | "company";
+      reportLanguage?: string;
+      useKeywords?: boolean;
     };
 
-  if (!firstName || !lastName || !country || !keywords?.length) {
+  if (!country || (useKeywords && !keywords?.length)) {
     return NextResponse.json(
       { error: "Required fields missing" },
       { status: 400 },
     );
   }
 
-  const name = `${firstName.trim()} ${lastName.trim()}`.trim();
-  const sanitizedName = name.slice(0, 200).replace(/[\r\n]/g, " ");
+  const searchSubject = subjectType === "company" && company
+    ? company.trim()
+    : `${(firstName ?? "").trim()} ${(lastName ?? "").trim()}`.trim();
+  const sanitizedSubject = searchSubject.slice(0, 200).replace(/[\r\n]/g, " ");
 
   const client = new Anthropic({ apiKey });
   const countryCode = countryCodeFromName(country);
@@ -618,16 +641,27 @@ export async function POST(req: NextRequest) {
     ? (COUNTRY_TO_LANGUAGE[countryCode.toUpperCase()] ?? null)
     : null;
 
+  const REPORT_LANG_MAP: Record<string, string> = { en: "English", it: "Italian", es: "Spanish" };
+  const LANG_CODE_TO_NAME: Record<string, string> = {
+    en: "English", it: "Italian", es: "Spanish", fr: "French", de: "German",
+    pt: "Portuguese", nl: "Dutch", pl: "Polish", ro: "Romanian", hu: "Hungarian",
+    cs: "Czech", ru: "Russian", uk: "Ukrainian", tr: "Turkish", ja: "Japanese",
+    ko: "Korean", "zh-CN": "Chinese", ar: "Arabic", hi: "Hindi", th: "Thai",
+    vi: "Vietnamese", id: "Indonesian", ms: "Malay", el: "Greek",
+    sv: "Swedish", no: "Norwegian", fi: "Finnish", da: "Danish",
+  };
+  const outputLanguageName = reportLanguage
+    ? (REPORT_LANG_MAP[reportLanguage] ?? "English")
+    : (languageCode ? (LANG_CODE_TO_NAME[languageCode] ?? "English") : "English");
+
   try {
     // ── Phase 1: Parallel Serper searches ─────────────────────────────────────
-    const searchQueries = keywords.map(
-      (kw: string) => `${sanitizedName} ${kw}`,
-    );
-
-    const cap = resultsCap ?? 20;
+    const searchQueries = useKeywords
+      ? keywords.map((kw: string) => `${sanitizedSubject} ${kw}`)
+      : [sanitizedSubject];
 
     const serperResults = await Promise.all(
-      searchQueries.map((q) => searchSerper(q, countryCode, languageCode, cap)),
+      searchQueries.map((q) => searchSerper(q, countryCode, languageCode, pagesCap ?? 2)),
     );
     const allResults = serperResults.map((s) => s.organic);
     const allRaw = serperResults.map((s) => s.raw);
@@ -649,7 +683,7 @@ export async function POST(req: NextRequest) {
             content: r.snippet,
           });
           if (r.date) dateMap.set(r.link, r.date);
-          keywordMap.set(r.link, keywords[kwIdx]!);
+          if (useKeywords && keywords[kwIdx]) keywordMap.set(r.link, keywords[kwIdx]!);
         }
       }
     });
@@ -679,9 +713,11 @@ export async function POST(req: NextRequest) {
     const classified = await classifyWithClaude(
       client,
       articles,
-      sanitizedName,
+      sanitizedSubject,
       country,
       keywords,
+      subjectType,
+      outputLanguageName,
     );
 
     const deduped = dedupeLinks(classified)
@@ -706,9 +742,10 @@ export async function POST(req: NextRequest) {
 
     const summary = await generateMeetingSummary(
       client,
-      sanitizedName,
+      sanitizedSubject,
       deriveScoreServer(negative.length, positive.length),
       deduped,
+      outputLanguageName,
     );
 
     return NextResponse.json({
