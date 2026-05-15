@@ -21,6 +21,72 @@ interface EaluminateResultsPanelProps {
   riskColors: Record<RiskLevel, { bg: string; color: string; border: string }>;
   onExportSummary: () => void;
   GaugeComponent: ComponentType<{ score: number }>;
+  useKeywords: boolean;
+}
+
+function KeywordsUsed({
+  usedKeywords,
+  allLinks,
+  useKeywords,
+}: {
+  usedKeywords: string[];
+  allLinks: WebLink[];
+  useKeywords: boolean;
+}) {
+  return (
+    <div style={{ marginTop: "1.25rem" }}>
+      {usedKeywords.length > 0 && (
+        <>
+          <p
+            style={{
+              fontSize: "0.6875rem",
+              fontWeight: 700,
+              letterSpacing: "0.1em",
+              textTransform: "uppercase",
+              color: "#94a3b8",
+              marginBottom: "0.5rem",
+            }}
+          >
+            Keywords Found
+          </p>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem", justifyContent: "center" }}>
+            {usedKeywords.map((kw) => (
+              <span
+                key={kw}
+                style={{
+                  padding: "0.25rem 0.75rem",
+                  borderRadius: "999px",
+                  backgroundColor: "rgba(68,121,218,0.08)",
+                  border: "1px solid rgba(29, 65, 133, 0.2)",
+                  color: "#4479DA",
+                  fontSize: "0.8125rem",
+                  fontWeight: 500,
+                }}
+              >
+                {kw}
+              </span>
+            ))}
+          </div>
+        </>
+      )}
+      {allLinks.length > 0 && (
+        <p
+          style={{
+            marginTop: "0.6rem",
+            fontSize: "0.9375rem",
+            color: "#64748b",
+          }}
+        >
+          We retrieved{" "}
+          <strong style={{ color: "#1e293b" }}>{allLinks.length}</strong>{" "}
+          relevant {allLinks.length === 1 ? "link" : "links"}{" "}
+          {useKeywords
+            ? "across all keyword searches."
+            : "from the direct name search."}
+        </p>
+      )}
+    </div>
+  );
 }
 
 export function EaluminateResultsPanel({
@@ -40,6 +106,7 @@ export function EaluminateResultsPanel({
   riskColors,
   onExportSummary,
   GaugeComponent,
+  useKeywords,
 }: EaluminateResultsPanelProps) {
   return (
     <div
@@ -226,40 +293,11 @@ export function EaluminateResultsPanel({
             </p>
           </div>
 
-          {usedKeywords.length > 0 && (
-            <div style={{ marginTop: "1.25rem", textAlign: "left" }}>
-              <p
-                style={{
-                  fontSize: "0.6875rem",
-                  fontWeight: 700,
-                  letterSpacing: "0.1em",
-                  textTransform: "uppercase",
-                  color: "#94a3b8",
-                  marginBottom: "0.5rem",
-                }}
-              >
-                Keywords Used
-              </p>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
-                {usedKeywords.map((kw) => (
-                  <span
-                    key={kw}
-                    style={{
-                      padding: "0.25rem 0.75rem",
-                      borderRadius: "999px",
-                      backgroundColor: "rgba(68,121,218,0.08)",
-                      border: "1px solid rgba(29, 65, 133, 0.2)",
-                      color: "#4479DA",
-                      fontSize: "0.8125rem",
-                      fontWeight: 500,
-                    }}
-                  >
-                    {kw}
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
+          <KeywordsUsed
+            usedKeywords={usedKeywords}
+            allLinks={allLinks}
+            useKeywords={useKeywords}
+          />
 
           {result.summary && (
             <div
@@ -518,6 +556,15 @@ export function EaluminateResultsPanel({
                             letterSpacing: "-0.01em",
                           }}
                         >
+                          <span
+                            style={{
+                              color: "#94a3b8",
+                              fontWeight: 400,
+                              marginRight: "0.35rem",
+                            }}
+                          >
+                            {i + 1}.
+                          </span>
                           {item.title}
                         </p>
                         <div
@@ -614,7 +661,10 @@ export function EaluminateResultsPanel({
                           {item.keyword && (
                             <>
                               <span
-                                style={{ fontSize: "0.6875rem", color: "#cbd5e1" }}
+                                style={{
+                                  fontSize: "0.6875rem",
+                                  color: "#cbd5e1",
+                                }}
                               >
                                 ·
                               </span>
