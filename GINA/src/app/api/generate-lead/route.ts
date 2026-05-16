@@ -382,10 +382,11 @@ async function classifyWithClaude(
   client: Anthropic,
   articles: ArticleForClassification[],
   name: string,
-  country: string | null,
+  countries: string[],
   keywords: string[],
   subjectType: "individual" | "company" = "individual",
   languageName = "English",
+  scanFocus?: string,
 ): Promise<WebLink[]> {
   if (articles.length === 0) return [];
 
@@ -400,9 +401,12 @@ async function classifyWithClaude(
   const firstName = nameParts[0] ?? name;
   const lastName = nameParts.slice(1).join(" ");
 
-  const countryLine = subjectType === "company"
-    ? (country ? `The subject is a company from ${country}. Only include results clearly relevant to this company and their region.` : "")
-    : (country ? `The subject is from ${country}. Only include results clearly relevant to this person and their region.` : "");
+  const countriesLabel = countries.join(", ");
+  const countryLine = countries.length > 0
+    ? subjectType === "company"
+      ? `The subject is a company from ${countriesLabel}. Only include results clearly relevant to this company and these regions.`
+      : `The subject is from ${countriesLabel}. Only include results clearly relevant to this person and these regions.`
+    : "";
 
   const keywordList =
     keywords.length > 0 ? keywords.join(", ") : "general reputation";
@@ -434,11 +438,20 @@ EXCLUDE the article if:
 
 If EXCLUDED → do not include this article in the output array at all.`;
 
+  const scanFocusRule =
+    scanFocus && scanFocus !== "all"
+      ? {
+          negative: `\nSCAN FOCUS: Return ONLY articles with NEGATIVE sentiment or HIGH/MEDIUM risk. Exclude all positive and neutral articles from the output entirely.\n`,
+          positive: `\nSCAN FOCUS: Return ONLY articles with POSITIVE sentiment. Exclude all negative and neutral articles from the output entirely.\n`,
+          neutral: `\nSCAN FOCUS: Return ONLY articles with NEUTRAL sentiment (purely informational). Exclude all negative and positive articles from the output entirely.\n`,
+        }[scanFocus] ?? ""
+      : "";
+
   const prompt = `You are a reputation intelligence analyst. Classify the following ${articles.length} articles about "${name}".
 
 ${countryLine}
 Search context keywords used: ${keywordList}
-
+${scanFocusRule}
 CLASSIFICATION RULES:
 
 NEGATIVE sentiment — classify if the article contains ANY of:
@@ -610,20 +623,27 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const { firstName, lastName, company, country, keywords, pagesCap, subjectType = "individual", reportLanguage, useKeywords = true } =
+  const { firstName, lastName, company, country: countrySingle, countries: countriesRaw, keywords, pagesCap, subjectType = "individual", reportLanguage, useKeywords = true, scanFocus } =
     (await req.json()) as {
       firstName?: string;
       lastName?: string;
       company?: string;
-      country: string;
+      country?: string;
+      countries?: string[];
       keywords: string[];
       pagesCap?: number;
       subjectType?: "individual" | "company";
       reportLanguage?: string;
       useKeywords?: boolean;
+      scanFocus?: "negative" | "positive" | "neutral";
     };
 
-  if (!country || (useKeywords && !keywords?.length)) {
+  // Normalize to array — accept both legacy `country` string and new `countries` array
+  const countries: string[] = Array.isArray(countriesRaw) && countriesRaw.length > 0
+    ? countriesRaw
+    : countrySingle ? [countrySingle] : [];
+
+  if (!countries.length || (useKeywords && !keywords?.length)) {
     return NextResponse.json(
       { error: "Required fields missing" },
       { status: 400 },
@@ -636,7 +656,9 @@ export async function POST(req: NextRequest) {
   const sanitizedSubject = searchSubject.slice(0, 200).replace(/[\r\n]/g, " ");
 
   const client = new Anthropic({ apiKey });
-  const countryCode = countryCodeFromName(country);
+  // Use first country for language/region detection
+  const primaryCountry = countries[0] ?? "";
+  const countryCode = countryCodeFromName(primaryCountry);
   const languageCode = countryCode
     ? (COUNTRY_TO_LANGUAGE[countryCode.toUpperCase()] ?? null)
     : null;
@@ -656,15 +678,31 @@ export async function POST(req: NextRequest) {
 
   try {
     // ── Phase 1: Parallel Serper searches ─────────────────────────────────────
+    const FOCUS_QUERY_SUFFIX: Record<string, string> = {
+      negative: "scandal fraud lawsuit complaint allegations",
+      positive: "award recognition achievement success",
+    };
+    const focusSuffix = scanFocus ? (FOCUS_QUERY_SUFFIX[scanFocus] ?? "") : "";
     const searchQueries = useKeywords
       ? keywords.map((kw: string) => `${sanitizedSubject} ${kw}`)
-      : [sanitizedSubject];
+      : [focusSuffix ? `${sanitizedSubject} ${focusSuffix}` : sanitizedSubject];
+
+    const countryConfigs = countries.map((c) => {
+      const code = countryCodeFromName(c);
+      return {
+        countryCode: code,
+        languageCode: code ? (COUNTRY_TO_LANGUAGE[code.toUpperCase()] ?? null) : null,
+      };
+    });
 
     const serperResults = await Promise.all(
-      searchQueries.map((q) => searchSerper(q, countryCode, languageCode, pagesCap ?? 2)),
+      searchQueries.flatMap((q) =>
+        countryConfigs.map(({ countryCode: cc, languageCode: lc }) =>
+          searchSerper(q, cc, lc, pagesCap ?? 2),
+        ),
+      ),
     );
     const allResults = serperResults.map((s) => s.organic);
-    const allRaw = serperResults.map((s) => s.raw);
 
     // ── Phase 2: Deduplicate URLs, scrape with Firecrawl in parallel ──────────
     const seenUrls = new Set<string>();
@@ -714,10 +752,11 @@ export async function POST(req: NextRequest) {
       client,
       articles,
       sanitizedSubject,
-      country,
+      countries,
       keywords,
       subjectType,
       outputLanguageName,
+      scanFocus,
     );
 
     const deduped = dedupeLinks(classified)
