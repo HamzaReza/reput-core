@@ -134,6 +134,8 @@ function countryCodeFromName(country: string): string | null {
 interface PreAnalysisProfile {
   identity: string;
   background: string;
+  associations: string;
+  recent_news: string;
   negative_findings: string;
   positive_presence: string;
   reputation_notes: string;
@@ -141,8 +143,9 @@ interface PreAnalysisProfile {
 
 const FALLBACK_PROFILE: PreAnalysisProfile = {
   identity: "No public information found for this subject.",
-  background:
-    "Either no public information found or the context provided is not enough to generate a profile.",
+  background: "Either no public information found or the context provided is not enough to generate a profile.",
+  associations: "No known associations found in available sources.",
+  recent_news: "No recent news found in available sources.",
   negative_findings: "No negative findings in available sources.",
   positive_presence: "No positive coverage found in available sources.",
   reputation_notes: "Insufficient data to assess reputation.",
@@ -160,7 +163,8 @@ export async function POST(req: NextRequest) {
       firstName,
       lastName,
       company,
-      country,
+      country: countrySingle,
+      countries: countriesRaw,
       description,
       keywordsCap = 5,
       keywordFocus = "all",
@@ -170,7 +174,8 @@ export async function POST(req: NextRequest) {
       firstName?: string;
       lastName?: string;
       company?: string;
-      country: string;
+      country?: string;
+      countries?: string[];
       description: string;
       keywordsCap?: number;
       keywordFocus?: string;
@@ -178,9 +183,15 @@ export async function POST(req: NextRequest) {
       reportLanguage?: string;
     };
 
-    if (!country) {
+    // Normalize to array — accept both legacy `country` string and new `countries` array
+    const countries: string[] = Array.isArray(countriesRaw) && countriesRaw.length > 0
+      ? countriesRaw
+      : countrySingle ? [countrySingle] : [];
+    const country = countries[0] ?? "";
+
+    if (!countries.length) {
       return NextResponse.json(
-        { error: "country is required." },
+        { error: "At least one country is required." },
         { status: 400 },
       );
     }
@@ -233,24 +244,29 @@ export async function POST(req: NextRequest) {
       }[keywordFocus] ??
       `keywords: up to ${cap} items (minimum 1), reputation-relevant. ${noNameInstruction} All keywords in ${languageName}.`;
 
+    const countriesLabel = countries.join(", ");
     const searchSystem =
       subjectType === "company"
-        ? `You are a research analyst with web search access. Search for public information about the company described. Try multiple searches: by company name alone, by company name and country, and by company name with contextual details. Write a comprehensive factual summary of everything you find — business background, legal issues, regulatory sanctions, controversies, financial performance, customer complaints, positive coverage. Write in ${languageName}.`
-        : `You are a research analyst with web search access. Search for public information about the person described. Try multiple searches: by name alone, by name and company, and by name with any contextual details. Write a comprehensive factual summary of everything you find — professional background, controversies, legal issues, positive coverage, notable mentions. Write in ${languageName}.`;
+        ? `You are a senior investigative research analyst with web search access. Search thoroughly for public information about the company described. Run multiple searches: company name alone, company name + country (run for each country listed: ${countriesLabel}), company name + industry, company name + legal or controversy keywords, company name + key executives, company name + news ${new Date().getFullYear()}. For each search, look for: founding history and ownership, business model and revenue streams, key executives and leadership, regulatory filings or sanctions, litigation or legal disputes, customer reviews or complaints, financial performance, industry reputation, media coverage, partnerships and affiliations. Also explicitly search for the latest news — recent articles, press releases, announcements, incidents, or developments from the past 12 months. Write a detailed, comprehensive factual summary covering all angles — leave no dimension unexplored. Write in ${languageName}.`
+        : `You are a senior investigative research analyst with web search access. Search thoroughly for public information about the person described. Run multiple searches: full name alone, name + company, name + each country (${countriesLabel}), name + industry, name + legal or controversy keywords, name + news ${new Date().getFullYear()}. For each search, look for: career history and current role, educational background, company affiliations and business ventures, legal proceedings or regulatory actions, media mentions and interviews, social media presence, awards or public recognition, controversies or allegations, known associates and partners. Also explicitly search for the latest news — recent articles, interviews, public statements, incidents, or developments involving this person from the past 12 months. Write a detailed, comprehensive factual summary covering all angles — leave no dimension unexplored. Write in ${languageName}.`;
 
     const searchContent =
       subjectType === "company"
-        ? `Research this company:\n\nCompany: ${company}\nCountry: ${country}${description?.trim() ? `\nContext: ${description.trim()}` : ""}`
-        : `Research this person:\n\nName: ${fullName}${company ? `\nCompany: ${company}` : ""}\nCountry: ${country}${description?.trim() ? `\nContext: ${description.trim()}` : ""}`;
+        ? `Research this company:\n\nCompany: ${company}\nCountry: ${countriesLabel}${description?.trim() ? `\nContext: ${description.trim()}` : ""}`
+        : `Research this person:\n\nName: ${fullName}${company ? `\nCompany: ${company}` : ""}\nCountry: ${countriesLabel}${description?.trim() ? `\nContext: ${description.trim()}` : ""}`;
 
     const formatIdentityHint =
       subjectType === "company"
-        ? "<1-2 sentences: company name, industry, country, area of operation>"
-        : "<1-2 sentences: full name, known roles, nationality, area of operation>";
+        ? "<2-3 sentences: company name, industry, country of origin, area of operation, size or scale indicator>"
+        : "<2-3 sentences: full name, known professional roles, nationality, geographic base, industry sector>";
     const formatBackgroundHint =
       subjectType === "company"
-        ? "<2-3 sentences: business history, sector, key products/services, notable activities>"
-        : "<2-3 sentences: professional history, companies, sector, notable activities>";
+        ? "<5-7 sentences: founding story, business model, growth trajectory, key products or services, market position, major clients or partnerships, geographic reach>"
+        : "<5-7 sentences: career arc from early career to present, key employers, roles held, major projects or deals, educational background if known, industry standing>";
+    const formatAssociationsHint =
+      subjectType === "company"
+        ? "<3-5 sentences: parent company or subsidiaries, key investors or shareholders, notable clients or partners, industry associations, executive network>"
+        : "<3-5 sentences: known business partners, employers, investors, political or professional affiliations, notable co-founders or collaborators, family business connections>";
 
     let profile: PreAnalysisProfile = FALLBACK_PROFILE;
     let keywords: string[] = [];
@@ -279,12 +295,12 @@ export async function POST(req: NextRequest) {
       // Call 2: format prose → structured JSON (no tools)
       const formatMsg = await anthropic.messages.create({
         model: "claude-sonnet-4-6",
-        max_tokens: 1024,
+        max_tokens: 2048,
         system: `You are a data formatter. Convert the research summary into the specified JSON shape. Write ALL field values and ALL keywords in ${languageName}. Output ONLY valid JSON — no markdown fences, no explanation, no extra keys.`,
         messages: [
           {
             role: "user",
-            content: `Research summary about ${subjectLabel}:\n${researchSummary}\n\nReturn ONLY this JSON (no explanation, no markdown):\n{\n  "profile": {\n    "identity": "${formatIdentityHint}",\n    "background": "${formatBackgroundHint}",\n    "negative_findings": "<2-4 sentences: legal issues, controversies, accusations — if none write 'No negative findings in available sources'>",\n    "positive_presence": "<2-3 sentences: positive coverage, awards, neutral public mentions>",\n    "reputation_notes": "<1-2 sentences: overall reputational assessment>"\n  },\n  "keywords": ["<keyword1>", ...]\n}\nRules: every field populated, based only on the summary above, ${keywordFocusRule}`,
+            content: `Research summary about ${subjectLabel}:\n${researchSummary}\n\nReturn ONLY this JSON (no explanation, no markdown):\n{\n  "profile": {\n    "identity": "${formatIdentityHint}",\n    "background": "${formatBackgroundHint}",\n    "associations": "${formatAssociationsHint}",\n    "recent_news": "<3-6 sentences: latest news, articles, announcements, incidents, or developments from the past 12 months — include dates where available; if none found write 'No recent news found in available sources'>",\n    "negative_findings": "<4-8 sentences: legal proceedings, regulatory sanctions, fraud allegations, controversies, scandals, complaints — include dates and specifics where available; if none write 'No negative findings in available sources'>",\n    "positive_presence": "<3-6 sentences: awards, recognitions, successful ventures, positive media coverage, industry leadership, philanthropic activities>",\n    "reputation_notes": "<2-4 sentences: overall reputational standing, key risk indicators, public perception summary, recommended scrutiny level>"\n  },\n  "keywords": ["<keyword1>", ...]\n}\nRules: every field fully populated with detail, based only on the summary above, ${keywordFocusRule}`,
           },
         ],
       });

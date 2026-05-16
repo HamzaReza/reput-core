@@ -562,13 +562,14 @@ function EaluminatePageInner() {
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [company, setCompany] = useState("");
-  const [country, setCountry] = useState("");
+  const [countries, setCountries] = useState<string[]>([]);
   const [description, setDescription] = useState("");
   const [pagesCap, setPagesCap] = useState(2);
   const [keywordsCap, setKeywordsCap] = useState(5);
   const [keywordFocus, setKeywordFocus] = useState<KeywordFocus>("all");
   const [reportLanguage, setReportLanguage] = useState<ReportLanguage>("auto");
   const [useKeywords, setUseKeywords] = useState(true);
+  const [scanFocus, setScanFocus] = useState<KeywordFocus>("all");
 
   const [editableKeywords, setEditableKeywords] = useState<string[]>([]);
   const [keywordsReady, setKeywordsReady] = useState(false);
@@ -773,7 +774,7 @@ function EaluminatePageInner() {
         setFirstName(parts[0] ?? "");
         setLastName(parts.slice(1).join(" "));
         setCompany(lead.company ?? "");
-        setCountry(lead.country ?? "");
+        if (lead.country) setCountries([lead.country]);
         setDescription(lead.background ?? "");
         setLeadId(lead.id);
 
@@ -809,12 +810,18 @@ function EaluminatePageInner() {
                 ["auto", "en", "it", "es"].includes(d.reportLanguage as string)
               )
                 setReportLanguage(d.reportLanguage as ReportLanguage);
+              if (Array.isArray(d.countries) && (d.countries as string[]).length > 0)
+                setCountries(d.countries as string[]);
+              else if (typeof d.country === "string" && d.country)
+                setCountries([d.country as string]);
             }
             const scanEvent = clientDetail.events
               .filter((e) => e.event_type === "scan")
               .find((e) => (e.data?.lead_id as string | undefined) === lead.id);
             if (typeof scanEvent?.data?.useKeywords === "boolean")
               setUseKeywords(scanEvent.data.useKeywords as boolean);
+            if (["all", "negative", "positive", "neutral"].includes(scanEvent?.data?.scanFocus as string))
+              setScanFocus(scanEvent?.data?.scanFocus as KeywordFocus);
           }
         } catch {
           /* non-fatal */
@@ -868,6 +875,8 @@ function EaluminatePageInner() {
   }, [searchParams]);
 
   const fullName = `${firstName.trim()} ${lastName.trim()}`.trim();
+
+  const country = countries[0] ?? "";
 
   const handleExportSummaryPdf = () => {
     exportSummaryPdf({
@@ -926,8 +935,8 @@ function EaluminatePageInner() {
       setError("Company name is required.");
       return;
     }
-    if (!country || !description.trim()) {
-      setError("Country and description are required.");
+    if (!countries.length || !description.trim()) {
+      setError("At least one country and description are required.");
       return;
     }
     setError("");
@@ -949,7 +958,7 @@ function EaluminatePageInner() {
             subjectType === "individual" ? firstName.trim() : undefined,
           lastName: subjectType === "individual" ? lastName.trim() : undefined,
           company: company.trim() || undefined,
-          country,
+          countries,
           description: description.trim(),
           keywordsCap,
           keywordFocus,
@@ -998,6 +1007,7 @@ function EaluminatePageInner() {
             keywordFocus,
             pagesCap,
             reportLanguage,
+            countries,
           },
         });
         if (cl.id) setClientId(cl.id);
@@ -1033,13 +1043,14 @@ function EaluminatePageInner() {
             subjectType === "individual" ? firstName.trim() : undefined,
           lastName: subjectType === "individual" ? lastName.trim() : undefined,
           company: company.trim() || undefined,
-          country,
+          countries,
           keywords: editableKeywords,
           pagesCap,
           subjectType,
           reportLanguage:
             reportLanguage !== "auto" ? reportLanguage : undefined,
           useKeywords,
+          scanFocus: scanFocus !== "all" ? scanFocus : undefined,
         }),
       });
       const data = await res.json();
@@ -1122,6 +1133,8 @@ function EaluminatePageInner() {
               lead_id: currentLeadId ?? undefined,
               links: scanResult.links,
               useKeywords,
+              scanFocus: scanFocus !== "all" ? scanFocus : undefined,
+              countries,
             },
           });
         } catch {
@@ -1218,8 +1231,8 @@ function EaluminatePageInner() {
           setLastName={setLastName}
           company={company}
           setCompany={setCompany}
-          country={country}
-          setCountry={setCountry}
+          countries={countries}
+          setCountries={setCountries}
           description={description}
           keywordsCap={keywordsCap}
           setKeywordsCap={setKeywordsCap}
@@ -1250,6 +1263,8 @@ function EaluminatePageInner() {
           reportLanguageOptions={REPORT_LANGUAGE_OPTIONS}
           useKeywords={useKeywords}
           setUseKeywords={setUseKeywords}
+          scanFocus={scanFocus}
+          setScanFocus={setScanFocus}
           pipeline={
             <EaluminatePipelinePanel
               pipelineStep={pipelineStep}
