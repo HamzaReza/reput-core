@@ -1,6 +1,6 @@
 "use client";
 
-import { clearAuth } from "@/lib/api";
+import { clearAuth, getRole } from "@/lib/api";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -11,6 +11,7 @@ interface NavItem {
   href: string;
   badge?: number | null;
   icon: React.ReactNode;
+  adminOnly?: boolean;
 }
 
 const NAV_ITEMS: NavItem[] = [
@@ -69,6 +70,7 @@ const NAV_ITEMS: NavItem[] = [
   {
     label: "Analytics",
     href: "/dashboard/analytics",
+    adminOnly: true,
     icon: (
       <svg
         width="18"
@@ -89,6 +91,7 @@ const NAV_ITEMS: NavItem[] = [
   {
     label: "Web Analysts",
     href: "/dashboard/web-analysts",
+    adminOnly: true,
     icon: (
       <svg
         width="18"
@@ -150,6 +153,7 @@ export default function Sidebar({
 
   const [userName, setUserName] = useState("");
   const [userEmail, setUserEmail] = useState("");
+  const [role, setRole] = useState<"admin" | "analyst" | null>(null);
 
   const readUser = () => {
     try {
@@ -158,6 +162,7 @@ export default function Sidebar({
         const u = JSON.parse(raw);
         setUserEmail(u.email ?? "");
         setUserName(u.name || u.email || "");
+        setRole(u.role ?? getRole());
       }
     } catch {}
   };
@@ -244,7 +249,7 @@ export default function Sidebar({
           overflowX: "hidden",
         }}
       >
-        {NAV_ITEMS.map((item) => {
+        {NAV_ITEMS.filter((item) => !item.adminOnly || role === "admin").map((item) => {
           const isActive =
             item.href === "/dashboard"
               ? pathname === "/dashboard"

@@ -32,6 +32,19 @@ export function isAuthed(): boolean {
   return !!getToken();
 }
 
+export function getRole(): "admin" | "analyst" | null {
+  try {
+    const raw = localStorage.getItem("reput_user");
+    if (!raw) return null;
+    const u = JSON.parse(raw);
+    return u.role ?? null;
+  } catch { return null; }
+}
+
+export function isAdmin(): boolean {
+  return getRole() === "admin";
+}
+
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 export interface UserProfile {
@@ -185,6 +198,13 @@ async function request<T>(
   });
 
   if (!res.ok) {
+    if (withAuth && res.status === 401) {
+      clearAuth();
+      if (typeof window !== "undefined") {
+        window.location.replace("/login?reason=session_expired");
+        return new Promise(() => {}) as Promise<T>;
+      }
+    }
     const parsed = await res.json().catch(() => null);
     const msg =
       parseFastApiDetail(parsed) || `Request failed with status ${res.status}`;
@@ -237,7 +257,7 @@ export const auth = {
       }
       return res.json() as Promise<{
         access_token: string;
-        web_analyst: { id: string; name: string; email: string };
+        web_analyst: WebAnalyst;
       }>;
     });
   },
@@ -262,6 +282,13 @@ export async function getCachedMe(): Promise<User> {
     }
   } catch {}
   const user = await auth.me();
+  if (!user.is_active) {
+    clearAuth();
+    if (typeof window !== "undefined") {
+      window.location.replace("/login?reason=session_expired");
+    }
+    throw new Error("Session expired.");
+  }
   try {
     sessionStorage.setItem(
       USER_CACHE_KEY,
@@ -455,6 +482,8 @@ export interface WebAnalyst {
   id: string;
   name: string;
   email: string;
+  role: "admin" | "analyst";
+  is_blocked: boolean;
   created_at: string | null;
 }
 
@@ -467,6 +496,20 @@ export const webAnalystsApi = {
       { method: "PATCH", body: JSON.stringify(data) },
       true,
     ),
+  create: (data: { name: string; email: string; password: string; role: "admin" | "analyst" }) =>
+    request<{ id: string }>("/web-analysts/", { method: "POST", body: JSON.stringify(data) }, true),
+  delete: (id: string) =>
+    request<void>(`/web-analysts/${id}`, { method: "DELETE" }, true),
+  setBlocked: (id: string, blocked: boolean) =>
+    request<{ ok: boolean; is_blocked: boolean }>(
+      `/web-analysts/${id}/block`,
+      { method: "PATCH", body: JSON.stringify({ blocked }) },
+      true,
+    ),
+  changePassword: (data: { current_password: string; new_password: string }) =>
+    request<{ ok: boolean }>("/web-analysts/me/password", { method: "PATCH", body: JSON.stringify(data) }, true),
+  deleteMe: () =>
+    request<void>("/web-analysts/me", { method: "DELETE" }, true),
 };
 
 export const dashboard = {
@@ -536,6 +579,8 @@ export interface RecentLead {
   score: number | null;
   scanned_by_name: string | null;
   scanned_by_email: string | null;
+  scanned_by_role: string | null;
+  assigned_to_name: string | null;
   researched_at: string | null;
   scanned_at: string | null;
 }
@@ -584,6 +629,10 @@ export interface ClientListItem {
   name: string;
   country: string;
   company: string | null;
+  scanned_by_name: string | null;
+  scanned_by_role: string | null;
+  assigned_to_id: string | null;
+  assigned_to_name: string | null;
   created_at: string;
   updated_at: string;
   latest_event_type: ClientEventType | null;
@@ -596,6 +645,14 @@ export interface ClientDetail {
   name: string;
   country: string;
   company: string | null;
+  email: string | null;
+  phone: string | null;
+  researched_by_name: string | null;
+  researched_by_role: string | null;
+  scanned_by_name: string | null;
+  scanned_by_role: string | null;
+  assigned_to_id: string | null;
+  assigned_to_name: string | null;
   created_at: string;
   updated_at: string;
   events: ClientEvent[];
@@ -605,6 +662,8 @@ export interface ClientUpsertPayload {
   name: string;
   country: string;
   company?: string;
+  email?: string;
+  phone?: string;
   event_type?: ClientEventType;
   event_data?: Record<string, unknown>;
 }
@@ -640,4 +699,25 @@ export const clientsApi = {
 
   delete: (id: string) =>
     request<{ ok: boolean }>(`/clients/${id}`, { method: "DELETE" }, true),
+
+  assign: (clientId: string, analystId: string | null) =>
+    request<{ ok: boolean; assigned_to: string | null }>(
+      `/clients/${clientId}/assign`,
+      { method: "PATCH", body: JSON.stringify({ analyst_id: analystId }) },
+      true,
+    ),
+};
+
+// ── Web Analysts ──────────────────────────────────────────────────────────────
+
+export interface WebAnalystItem {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  created_at: string;
+}
+
+export const webAnalysts = {
+  list: () => request<WebAnalystItem[]>("/web-analysts/", {}, true),
 };

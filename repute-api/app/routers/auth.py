@@ -15,6 +15,12 @@ class WebAnalystLoginPayload(_BaseModel):
     email: str
     password: str
 
+class WebAnalystRegisterPayload(_BaseModel):
+    name: str | None = None
+    email: str
+    password: str
+    role: str = "analyst"
+
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
@@ -55,8 +61,10 @@ async def register(payload: UserCreate, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/register-web-analyst", status_code=status.HTTP_201_CREATED)
-async def register_web_analyst(payload: UserCreate, db: AsyncSession = Depends(get_db)):
+async def register_web_analyst(payload: WebAnalystRegisterPayload, db: AsyncSession = Depends(get_db)):
     email = payload.email.lower()
+    if payload.role not in ("analyst", "admin"):
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="role must be 'analyst' or 'admin'")
     existing = await db.execute(select(WebAnalyst).where(WebAnalyst.email == email))
     if existing.scalar_one_or_none():
         raise HTTPException(
@@ -67,6 +75,7 @@ async def register_web_analyst(payload: UserCreate, db: AsyncSession = Depends(g
         name=payload.name or email,
         email=email,
         password_hash=hash_password(payload.password),
+        role=payload.role,
     )
     db.add(wa)
     await db.flush()
@@ -83,10 +92,15 @@ async def login_web_analyst(payload: WebAnalystLoginPayload, db: AsyncSession = 
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password.",
         )
+    if wa.is_blocked:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Your account has been temporarily blocked. Please contact an administrator.",
+        )
     token = create_access_token(str(wa.id))
     return {
         "access_token": token,
-        "web_analyst": {"id": str(wa.id), "name": wa.name, "email": wa.email},
+        "web_analyst": {"id": str(wa.id), "name": wa.name, "email": wa.email, "role": wa.role},
     }
 
 

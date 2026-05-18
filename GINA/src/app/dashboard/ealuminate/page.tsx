@@ -1,8 +1,8 @@
 "use client";
 
-import { clientsApi, leads, WebLink } from "@/lib/api";
+import { clientsApi, getToken, leads, WebLink } from "@/lib/api";
 import { COUNTRY_NAME_TO_ISO } from "@/lib/countries";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import Select from "react-select";
 import countryList from "react-select-country-list";
@@ -11,6 +11,7 @@ import { EaluminatePipelinePanel } from "./_components/EaluminatePipelinePanel";
 import { EaluminateResultsPanel } from "./_components/EaluminateResultsPanel";
 import type {
   KeywordFocus,
+  MeetingSummary,
   PreAnalysisProfile,
   RiskLevel,
   ScanResult,
@@ -555,6 +556,7 @@ function KeywordsEditor({
 // ── Main Page ──────────────────────────────────────────────────────────────────
 function EaluminatePageInner() {
   const searchParams = useSearchParams();
+  const router = useRouter();
 
   const [subjectType, setSubjectType] = useState<"individual" | "company">(
     "individual",
@@ -563,6 +565,8 @@ function EaluminatePageInner() {
   const [lastName, setLastName] = useState("");
   const [company, setCompany] = useState("");
   const [countries, setCountries] = useState<string[]>([]);
+  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
   const [description, setDescription] = useState("");
   const [pagesCap, setPagesCap] = useState(2);
   const [keywordsCap, setKeywordsCap] = useState(5);
@@ -814,13 +818,18 @@ function EaluminatePageInner() {
                 ["auto", "en", "it", "es"].includes(d.reportLanguage as string)
               )
                 setReportLanguage(d.reportLanguage as ReportLanguage);
-              if (Array.isArray(d.countries) && (d.countries as string[]).length > 0)
+              if (
+                Array.isArray(d.countries) &&
+                (d.countries as string[]).length > 0
+              )
                 setCountries(d.countries as string[]);
               else if (typeof d.country === "string" && d.country)
                 setCountries([d.country as string]);
             }
             const scanEvents = clientDetail.events.filter(
-              (e) => e.event_type === "scan" && (e.data?.lead_id as string | undefined) === lead.id,
+              (e) =>
+                e.event_type === "scan" &&
+                (e.data?.lead_id as string | undefined) === lead.id,
             );
             const scanEvent = eventId
               ? scanEvents.find((e) => e.id === eventId)
@@ -828,11 +837,17 @@ function EaluminatePageInner() {
             if (scanEvent?.data) {
               scanLinks = scanEvent.data.links as WebLink[] | undefined;
               scanScore = scanEvent.data.score as number | undefined;
-              scanSummary = scanEvent.data.summary as MeetingSummary | undefined;
+              scanSummary = scanEvent.data.summary as
+                | MeetingSummary
+                | undefined;
             }
             if (typeof scanEvent?.data?.useKeywords === "boolean")
               setUseKeywords(scanEvent.data.useKeywords as boolean);
-            if (["all", "negative", "positive", "neutral"].includes(scanEvent?.data?.scanFocus as string))
+            if (
+              ["all", "negative", "positive", "neutral"].includes(
+                scanEvent?.data?.scanFocus as string,
+              )
+            )
               setScanFocus(scanEvent?.data?.scanFocus as KeywordFocus);
           }
         } catch {
@@ -853,9 +868,11 @@ function EaluminatePageInner() {
           setPreAnalysisDone(true);
         }
 
-        const linksToUse = (scanLinks && scanLinks.length > 0 ? scanLinks : null) ?? (lead.links as WebLink[] | undefined);
-        const scoreToUse = scanScore ?? (lead.score ?? undefined);
-        const summaryToUse = scanSummary ?? (lead.summary ?? undefined);
+        const linksToUse =
+          (scanLinks && scanLinks.length > 0 ? scanLinks : null) ??
+          (lead.links as WebLink[] | undefined);
+        const scoreToUse = scanScore ?? lead.score ?? undefined;
+        const summaryToUse = scanSummary ?? lead.summary ?? undefined;
 
         if (linksToUse && linksToUse.length > 0) {
           const negative = linksToUse.filter(
@@ -967,7 +984,10 @@ function EaluminatePageInner() {
     try {
       const res = await fetch("/api/pre-analysis", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${getToken()}`,
+        },
         body: JSON.stringify({
           firstName:
             subjectType === "individual" ? firstName.trim() : undefined,
@@ -982,6 +1002,10 @@ function EaluminatePageInner() {
             reportLanguage !== "auto" ? reportLanguage : undefined,
         }),
       });
+      if (res.status === 401) {
+        router.replace("/login?reason=session_expired");
+        return;
+      }
       const data = await res.json();
       if (!res.ok || data.error) {
         setError(data.error ?? "Research failed. Please try again.");
@@ -1011,6 +1035,8 @@ function EaluminatePageInner() {
           name: fullName,
           country,
           company: company.trim() || undefined,
+          email: email.trim() || undefined,
+          phone: phone.trim() || undefined,
           event_type: "research",
           event_data: {
             profile: profile ?? {},
@@ -1052,7 +1078,10 @@ function EaluminatePageInner() {
     try {
       const res = await fetch("/api/generate-lead", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${getToken()}`,
+        },
         body: JSON.stringify({
           firstName:
             subjectType === "individual" ? firstName.trim() : undefined,
@@ -1068,6 +1097,10 @@ function EaluminatePageInner() {
           scanFocus: scanFocus !== "all" ? scanFocus : undefined,
         }),
       });
+      if (res.status === 401) {
+        router.replace("/login?reason=session_expired");
+        return;
+      }
       const data = await res.json();
       if (!res.ok || data.error) {
         setError(data.error ?? "Scan failed. Please try again.");
@@ -1248,6 +1281,10 @@ function EaluminatePageInner() {
           setCompany={setCompany}
           countries={countries}
           setCountries={setCountries}
+          email={email}
+          setEmail={setEmail}
+          phone={phone}
+          setPhone={setPhone}
           description={description}
           keywordsCap={keywordsCap}
           setKeywordsCap={setKeywordsCap}

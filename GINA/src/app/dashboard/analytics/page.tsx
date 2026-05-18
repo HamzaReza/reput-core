@@ -1,6 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { isAdmin } from "@/lib/api";
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, PieChart, Pie, Cell, BarChart, Bar,
@@ -127,7 +129,12 @@ function SectionCard({ title, subtitle, children, action, cardStyle }: { title: 
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 export default function AnalyticsPage() {
+  const router = useRouter();
   const [tab, setTab] = useState<"Daily" | "Weekly">("Daily");
+
+  useEffect(() => {
+    if (!isAdmin()) router.replace("/dashboard");
+  }, [router]);
 
   return (
     <div style={{ padding: "clamp(1.25rem, 4vw, 2rem)", backgroundColor: "#f8fafc", minHeight: "100%", boxSizing: "border-box" }}>
