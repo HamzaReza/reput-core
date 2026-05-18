@@ -48,6 +48,7 @@ interface EaluminateFormPanelProps {
   handleDescriptionChange: (value: string) => void;
   handleFocusChange: (value: KeywordFocus) => void;
   handleResearch: () => void;
+  handleSkipToScan: () => void;
   preAnalysisProfile: PreAnalysisProfile | null;
   preAnalysisSummary: string;
   onExportReportMaster: () => void;
@@ -322,6 +323,7 @@ export function EaluminateFormPanel(props: EaluminateFormPanelProps) {
     scanFocus,
     setScanFocus,
     pipeline,
+    handleSkipToScan,
   } = props;
 
   return (
@@ -375,7 +377,13 @@ export function EaluminateFormPanel(props: EaluminateFormPanelProps) {
         className="eal-card-body"
         onSubmit={(e) => {
           e.preventDefault();
-          handleResearch();
+          const submitter = (e.nativeEvent as SubmitEvent)
+            .submitter as HTMLButtonElement;
+          if (submitter?.name === "skip") {
+            handleSkipToScan();
+          } else {
+            handleResearch();
+          }
         }}
       >
         <div
@@ -672,7 +680,27 @@ export function EaluminateFormPanel(props: EaluminateFormPanelProps) {
             )}
           </button>
 
-          {preAnalysisDone && (
+          {!preAnalysisDone && !preAnalysisLoading && (
+            <button
+              type="submit"
+              name="skip"
+              style={{
+                background: "none",
+                border: "none",
+                cursor: "pointer",
+                fontSize: "0.8125rem",
+                color: "var(--color-muted, #64748b)",
+                textDecoration: "underline",
+                textDecorationStyle: "dashed",
+                padding: 0,
+                alignSelf: "center",
+              }}
+            >
+              Skip to Scan →
+            </button>
+          )}
+
+          {preAnalysisDone && preAnalysisSummary && (
             <div
               style={{
                 borderRadius: "0.875rem",
