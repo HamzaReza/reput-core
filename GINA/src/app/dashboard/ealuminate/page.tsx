@@ -955,6 +955,57 @@ function EaluminatePageInner() {
     }
   };
 
+  const handleSkipToScan = async () => {
+    setError("");
+    setResult(null);
+    setScore(0);
+    setPreAnalysisLoading(true);
+    setPreAnalysisDone(false);
+    setKeywordsReady(false);
+    setEditableKeywords([]);
+    setPreAnalysisSummary("");
+    setPreAnalysisProfile(null);
+    setLeadId(null);
+
+    try {
+      const ld = await leads.create({
+        name: fullName || undefined,
+        company: company.trim() || undefined,
+        country,
+        background: description.trim(),
+        force_new: true,
+      });
+      if (ld.id) setLeadId(ld.id);
+
+      const cl = await clientsApi.upsert({
+        name: fullName,
+        country,
+        company: company.trim() || undefined,
+        email: email.trim() || undefined,
+        phone: phone.trim() || undefined,
+        event_type: "research",
+        event_data: {
+          skipped: true,
+          background: description.trim(),
+          lead_id: ld.id,
+          subjectType,
+          keywordsCap,
+          keywordFocus,
+          pagesCap,
+          reportLanguage,
+          countries,
+        },
+      });
+      if (cl.id) setClientId(cl.id);
+    } catch {
+      /* non-fatal — scan can still proceed */
+    }
+
+    setKeywordsReady(true);
+    setPreAnalysisDone(true);
+    setPreAnalysisLoading(false);
+  };
+
   const handleResearch = async () => {
     if (
       subjectType === "individual" &&
@@ -1292,6 +1343,7 @@ function EaluminatePageInner() {
           handleDescriptionChange={handleDescriptionChange}
           handleFocusChange={handleFocusChange}
           handleResearch={handleResearch}
+          handleSkipToScan={handleSkipToScan}
           preAnalysisProfile={preAnalysisProfile}
           preAnalysisSummary={preAnalysisSummary}
           onExportReportMaster={handleExportReportMaster}
