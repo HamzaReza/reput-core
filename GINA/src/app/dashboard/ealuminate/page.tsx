@@ -1,8 +1,8 @@
 "use client";
 
-import { clientsApi, leads, WebLink } from "@/lib/api";
+import { clientsApi, getToken, leads, WebLink } from "@/lib/api";
 import { COUNTRY_NAME_TO_ISO } from "@/lib/countries";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import Select from "react-select";
 import countryList from "react-select-country-list";
@@ -11,6 +11,7 @@ import { EaluminatePipelinePanel } from "./_components/EaluminatePipelinePanel";
 import { EaluminateResultsPanel } from "./_components/EaluminateResultsPanel";
 import type {
   KeywordFocus,
+  MeetingSummary,
   PreAnalysisProfile,
   RiskLevel,
   ScanResult,
@@ -36,8 +37,8 @@ declare global {
 }
 
 // ── Constants ──────────────────────────────────────────────────────────────────
-const RESULTS_CAP_OPTIONS = [10, 20, 30, 40, 50];
-const KEYWORDS_CAP_OPTIONS = [3, 4, 5, 6, 7, 8];
+const PAGES_CAP_OPTIONS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+const KEYWORDS_CAP_OPTIONS = [3, 4, 5, 6, 7, 8, 9, 10];
 
 const KEYWORD_FOCUS_OPTIONS = [
   { value: "all", label: "All Coverage" },
@@ -45,6 +46,14 @@ const KEYWORD_FOCUS_OPTIONS = [
   { value: "neutral", label: "Neutral" },
   { value: "positive", label: "Positive" },
 ] as const;
+
+const REPORT_LANGUAGE_OPTIONS = [
+  { value: "auto", label: "Auto" },
+  { value: "en", label: "English" },
+  { value: "it", label: "Italian" },
+  { value: "es", label: "Spanish" },
+] as const;
+type ReportLanguage = (typeof REPORT_LANGUAGE_OPTIONS)[number]["value"];
 
 const PIPELINE_STEPS = [
   {
@@ -547,15 +556,24 @@ function KeywordsEditor({
 // ── Main Page ──────────────────────────────────────────────────────────────────
 function EaluminatePageInner() {
   const searchParams = useSearchParams();
+  const router = useRouter();
 
+  const [subjectType, setSubjectType] = useState<"individual" | "company">(
+    "individual",
+  );
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [company, setCompany] = useState("");
-  const [country, setCountry] = useState("");
+  const [countries, setCountries] = useState<string[]>([]);
+  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
   const [description, setDescription] = useState("");
-  const [resultsCap, setResultsCap] = useState(20);
+  const [pagesCap, setPagesCap] = useState(2);
   const [keywordsCap, setKeywordsCap] = useState(5);
   const [keywordFocus, setKeywordFocus] = useState<KeywordFocus>("all");
+  const [reportLanguage, setReportLanguage] = useState<ReportLanguage>("auto");
+  const [useKeywords, setUseKeywords] = useState(true);
+  const [scanFocus, setScanFocus] = useState<KeywordFocus>("all");
 
   const [editableKeywords, setEditableKeywords] = useState<string[]>([]);
   const [keywordsReady, setKeywordsReady] = useState(false);
@@ -742,6 +760,7 @@ function EaluminatePageInner() {
   useEffect(() => {
     const id = searchParams.get("lead");
     if (!id) return;
+    const eventId = searchParams.get("event");
     // Reset scan state so stale results from a previous lead don't bleed through
     setResult(null);
     setScore(0);
@@ -760,11 +779,15 @@ function EaluminatePageInner() {
         setFirstName(parts[0] ?? "");
         setLastName(parts.slice(1).join(" "));
         setCompany(lead.company ?? "");
-        setCountry(lead.country ?? "");
+        if (lead.country) setCountries([lead.country]);
         setDescription(lead.background ?? "");
         setLeadId(lead.id);
 
         // Resolve the corresponding client so scan events can be appended
+        // and restore form settings saved in the matching research event
+        let scanLinks: WebLink[] | undefined;
+        let scanScore: number | undefined;
+        let scanSummary: MeetingSummary | undefined;
         try {
           const clients = await clientsApi.list(200);
           const match = clients.find(
@@ -772,7 +795,61 @@ function EaluminatePageInner() {
               c.name === (lead.name ?? "").trim() &&
               c.country === (lead.country ?? ""),
           );
-          if (match) setClientId(match.id);
+          if (match) {
+            setClientId(match.id);
+            const clientDetail = await clientsApi.get(match.id);
+            const researchEvent = clientDetail.events
+              .filter((e) => e.event_type === "research")
+              .find((e) => (e.data?.lead_id as string | undefined) === lead.id);
+            if (researchEvent?.data) {
+              const d = researchEvent.data;
+              if (d.subjectType === "individual" || d.subjectType === "company")
+                setSubjectType(d.subjectType as "individual" | "company");
+              if (typeof d.keywordsCap === "number")
+                setKeywordsCap(d.keywordsCap);
+              if (
+                ["all", "negative", "neutral", "positive"].includes(
+                  d.keywordFocus as string,
+                )
+              )
+                setKeywordFocus(d.keywordFocus as KeywordFocus);
+              if (typeof d.pagesCap === "number") setPagesCap(d.pagesCap);
+              if (
+                ["auto", "en", "it", "es"].includes(d.reportLanguage as string)
+              )
+                setReportLanguage(d.reportLanguage as ReportLanguage);
+              if (
+                Array.isArray(d.countries) &&
+                (d.countries as string[]).length > 0
+              )
+                setCountries(d.countries as string[]);
+              else if (typeof d.country === "string" && d.country)
+                setCountries([d.country as string]);
+            }
+            const scanEvents = clientDetail.events.filter(
+              (e) =>
+                e.event_type === "scan" &&
+                (e.data?.lead_id as string | undefined) === lead.id,
+            );
+            const scanEvent = eventId
+              ? scanEvents.find((e) => e.id === eventId)
+              : scanEvents.at(-1);
+            if (scanEvent?.data) {
+              scanLinks = scanEvent.data.links as WebLink[] | undefined;
+              scanScore = scanEvent.data.score as number | undefined;
+              scanSummary = scanEvent.data.summary as
+                | MeetingSummary
+                | undefined;
+            }
+            if (typeof scanEvent?.data?.useKeywords === "boolean")
+              setUseKeywords(scanEvent.data.useKeywords as boolean);
+            if (
+              ["all", "negative", "positive", "neutral"].includes(
+                scanEvent?.data?.scanFocus as string,
+              )
+            )
+              setScanFocus(scanEvent?.data?.scanFocus as KeywordFocus);
+          }
         } catch {
           /* non-fatal */
         }
@@ -791,33 +868,38 @@ function EaluminatePageInner() {
           setPreAnalysisDone(true);
         }
 
-        if (lead.links && lead.links.length > 0) {
-          const links = lead.links as WebLink[];
-          const negative = links.filter(
+        const linksToUse =
+          (scanLinks && scanLinks.length > 0 ? scanLinks : null) ??
+          (lead.links as WebLink[] | undefined);
+        const scoreToUse = scanScore ?? lead.score ?? undefined;
+        const summaryToUse = scanSummary ?? lead.summary ?? undefined;
+
+        if (linksToUse && linksToUse.length > 0) {
+          const negative = linksToUse.filter(
             (l) =>
               l.sentiment === "negative" ||
               l.risk === "high" ||
               l.risk === "medium",
           );
-          const positive = links.filter(
+          const positive = linksToUse.filter(
             (l) =>
               l.sentiment === "positive" ||
               l.risk === "low" ||
               l.risk === "none",
           );
-          const neutral = links.filter((l) => l.sentiment === "neutral");
+          const neutral = linksToUse.filter((l) => l.sentiment === "neutral");
           setResult({
-            links,
+            links: linksToUse,
             negative,
             positive,
             neutral,
-            summary: lead.summary ?? undefined,
+            summary: summaryToUse,
           });
           setUsedKeywords(lead.keywords_suggested);
         }
 
-        if (lead.score !== null) {
-          setScore(lead.score);
+        if (scoreToUse !== undefined && scoreToUse !== null) {
+          setScore(scoreToUse);
           setScanComplete(true);
         }
       })
@@ -825,6 +907,8 @@ function EaluminatePageInner() {
   }, [searchParams]);
 
   const fullName = `${firstName.trim()} ${lastName.trim()}`.trim();
+
+  const country = countries[0] ?? "";
 
   const handleExportSummaryPdf = () => {
     exportSummaryPdf({
@@ -871,14 +955,71 @@ function EaluminatePageInner() {
     }
   };
 
+  const handleSkipToScan = async () => {
+    setError("");
+    setResult(null);
+    setScore(0);
+    setPreAnalysisLoading(true);
+    setPreAnalysisDone(false);
+    setKeywordsReady(false);
+    setEditableKeywords([]);
+    setPreAnalysisSummary("");
+    setPreAnalysisProfile(null);
+    setLeadId(null);
+
+    try {
+      const ld = await leads.create({
+        name: fullName || undefined,
+        company: company.trim() || undefined,
+        country,
+        background: description.trim(),
+        force_new: true,
+      });
+      if (ld.id) setLeadId(ld.id);
+
+      const cl = await clientsApi.upsert({
+        name: fullName,
+        country,
+        company: company.trim() || undefined,
+        email: email.trim() || undefined,
+        phone: phone.trim() || undefined,
+        event_type: "research",
+        event_data: {
+          skipped: true,
+          background: description.trim(),
+          lead_id: ld.id,
+          subjectType,
+          keywordsCap,
+          keywordFocus,
+          pagesCap,
+          reportLanguage,
+          countries,
+        },
+      });
+      if (cl.id) setClientId(cl.id);
+    } catch {
+      /* non-fatal — scan can still proceed */
+    }
+
+    setKeywordsReady(true);
+    setPreAnalysisDone(true);
+    setPreAnalysisLoading(false);
+  };
+
   const handleResearch = async () => {
     if (
-      !firstName.trim() ||
-      !lastName.trim() ||
-      !country ||
-      !description.trim()
+      subjectType === "individual" &&
+      (!firstName.trim() || !lastName.trim())
     ) {
-      setError("First name, last name, country and description are required.");
+      setError("First name and last name are required.");
+      return;
+    }
+    if (subjectType === "company" && !company.trim()) {
+      setError("Company name is required.");
+      return;
+    }
+    if (!countries.length || !description.trim()) {
+      setError("At least one country and description are required.");
       return;
     }
     setError("");
@@ -894,17 +1035,28 @@ function EaluminatePageInner() {
     try {
       const res = await fetch("/api/pre-analysis", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${getToken()}`,
+        },
         body: JSON.stringify({
-          firstName: firstName.trim(),
-          lastName: lastName.trim(),
+          firstName:
+            subjectType === "individual" ? firstName.trim() : undefined,
+          lastName: subjectType === "individual" ? lastName.trim() : undefined,
           company: company.trim() || undefined,
-          country,
+          countries,
           description: description.trim(),
           keywordsCap,
           keywordFocus,
+          subjectType,
+          reportLanguage:
+            reportLanguage !== "auto" ? reportLanguage : undefined,
         }),
       });
+      if (res.status === 401) {
+        router.replace("/login?reason=session_expired");
+        return;
+      }
       const data = await res.json();
       if (!res.ok || data.error) {
         setError(data.error ?? "Research failed. Please try again.");
@@ -934,12 +1086,20 @@ function EaluminatePageInner() {
           name: fullName,
           country,
           company: company.trim() || undefined,
+          email: email.trim() || undefined,
+          phone: phone.trim() || undefined,
           event_type: "research",
           event_data: {
             profile: profile ?? {},
             keywords: data.keywords ?? [],
             background: description.trim(),
             lead_id: ld.id,
+            subjectType,
+            keywordsCap,
+            keywordFocus,
+            pagesCap,
+            reportLanguage,
+            countries,
           },
         });
         if (cl.id) setClientId(cl.id);
@@ -954,7 +1114,7 @@ function EaluminatePageInner() {
   };
 
   const handleRunScan = async () => {
-    if (!editableKeywords.length) {
+    if (useKeywords && !editableKeywords.length) {
       setError("Add at least one keyword.");
       return;
     }
@@ -969,15 +1129,29 @@ function EaluminatePageInner() {
     try {
       const res = await fetch("/api/generate-lead", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${getToken()}`,
+        },
         body: JSON.stringify({
-          firstName: firstName.trim(),
-          lastName: lastName.trim(),
-          country,
+          firstName:
+            subjectType === "individual" ? firstName.trim() : undefined,
+          lastName: subjectType === "individual" ? lastName.trim() : undefined,
+          company: company.trim() || undefined,
+          countries,
           keywords: editableKeywords,
-          resultsCap,
+          pagesCap,
+          subjectType,
+          reportLanguage:
+            reportLanguage !== "auto" ? reportLanguage : undefined,
+          useKeywords,
+          scanFocus: scanFocus !== "all" ? scanFocus : undefined,
         }),
       });
+      if (res.status === 401) {
+        router.replace("/login?reason=session_expired");
+        return;
+      }
       const data = await res.json();
       if (!res.ok || data.error) {
         setError(data.error ?? "Scan failed. Please try again.");
@@ -1057,6 +1231,9 @@ function EaluminatePageInner() {
               keywords: editableKeywords,
               lead_id: currentLeadId ?? undefined,
               links: scanResult.links,
+              useKeywords,
+              scanFocus: scanFocus !== "all" ? scanFocus : undefined,
+              countries,
             },
           });
         } catch {
@@ -1138,14 +1315,27 @@ function EaluminatePageInner() {
           preAnalysisDone={preAnalysisDone}
           preAnalysisLoading={preAnalysisLoading}
           error={error}
+          subjectType={subjectType}
+          setSubjectType={(t) => {
+            setSubjectType(t);
+            if (t === "company") {
+              setFirstName("");
+              setLastName("");
+            }
+            if (t === "individual") setCompany("");
+          }}
           firstName={firstName}
           setFirstName={setFirstName}
           lastName={lastName}
           setLastName={setLastName}
           company={company}
           setCompany={setCompany}
-          country={country}
-          setCountry={setCountry}
+          countries={countries}
+          setCountries={setCountries}
+          email={email}
+          setEmail={setEmail}
+          phone={phone}
+          setPhone={setPhone}
           description={description}
           keywordsCap={keywordsCap}
           setKeywordsCap={setKeywordsCap}
@@ -1153,14 +1343,15 @@ function EaluminatePageInner() {
           handleDescriptionChange={handleDescriptionChange}
           handleFocusChange={handleFocusChange}
           handleResearch={handleResearch}
+          handleSkipToScan={handleSkipToScan}
           preAnalysisProfile={preAnalysisProfile}
           preAnalysisSummary={preAnalysisSummary}
           onExportReportMaster={handleExportReportMaster}
           keywordsReady={keywordsReady}
           editableKeywords={editableKeywords}
           setEditableKeywords={setEditableKeywords}
-          resultsCap={resultsCap}
-          setResultsCap={setResultsCap}
+          pagesCap={pagesCap}
+          setPagesCap={setPagesCap}
           handleRunScan={handleRunScan}
           loading={loading}
           CountryPicker={CountryPicker}
@@ -1170,7 +1361,14 @@ function EaluminatePageInner() {
           labelStyle={labelStyle}
           keywordsCapOptions={KEYWORDS_CAP_OPTIONS}
           keywordFocusOptions={KEYWORD_FOCUS_OPTIONS}
-          resultsCapOptions={RESULTS_CAP_OPTIONS}
+          pagesCapOptions={PAGES_CAP_OPTIONS}
+          reportLanguage={reportLanguage}
+          setReportLanguage={(v) => setReportLanguage(v as ReportLanguage)}
+          reportLanguageOptions={REPORT_LANGUAGE_OPTIONS}
+          useKeywords={useKeywords}
+          setUseKeywords={setUseKeywords}
+          scanFocus={scanFocus}
+          setScanFocus={setScanFocus}
           pipeline={
             <EaluminatePipelinePanel
               pipelineStep={pipelineStep}
@@ -1186,6 +1384,7 @@ function EaluminatePageInner() {
           score={score}
           scoreLabel={scoreLabel}
           usedKeywords={usedKeywords}
+          useKeywords={useKeywords}
           tipVisible={tipVisible}
           tipIdx={tipIdx}
           tips={DID_YOU_KNOW}

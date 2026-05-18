@@ -49,19 +49,131 @@ function riskLabel(risk: string): { label: string; color: string } {
   return { label: "Good", color: "#4CAF50" };
 }
 
-function openPrintWindow(title: string): Window | null {
-  const win = window.open("", "_blank");
-  if (!win) return null;
-  win.document.title = title;
-  return win;
+function sanitize(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 40);
 }
 
-export function exportSummaryPdf(params: ExportSummaryPdfParams): void {
-  const { fullName, company, country, webAnalystName, score, result } = params;
-  const win = openPrintWindow("Ealuminate Report");
-  if (!win) return;
+// FIXED: Improved logo loading with better error handling and timeout
+async function fetchLogoBase64(src: string): Promise<string> {
+  return new Promise<string>((resolve) => {
+    const img = new Image();
+    img.crossOrigin = "anonymous";
 
+    // Set a timeout to prevent indefinite waiting
+    const timeout = setTimeout(() => {
+      resolve(""); // Return empty string on timeout
+    }, 5000);
+
+    img.onload = () => {
+      clearTimeout(timeout);
+      try {
+        const canvas = document.createElement("canvas");
+        canvas.width = img.naturalWidth;
+        canvas.height = img.naturalHeight;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) {
+          resolve("");
+          return;
+        }
+        ctx.drawImage(img, 0, 0);
+        resolve(canvas.toDataURL("image/png"));
+      } catch {
+        resolve("");
+      }
+    };
+
+    img.onerror = () => {
+      clearTimeout(timeout);
+      resolve(""); // Return empty on error instead of src
+    };
+
+    img.src = src;
+  });
+}
+
+async function downloadAsPdf(
+  css: string,
+  bodyHtml: string,
+  filename: string,
+): Promise<void> {
+  const { default: html2canvas } = await import("html2canvas");
+  const { jsPDF } = await import("jspdf");
+
+  const style = document.createElement("style");
+  style.textContent = css;
+  document.head.appendChild(style);
+
+  const container = document.createElement("div");
+  container.style.cssText =
+    "position:fixed;left:-9999px;top:0;z-index:-1;background:#f0f4f8;";
+  container.innerHTML = bodyHtml;
+  document.body.appendChild(container);
+
+  // Wait for all images to fully load before capturing
+  await Promise.all(
+    Array.from(container.querySelectorAll("img")).map((img) =>
+      img.complete
+        ? Promise.resolve()
+        : new Promise<void>((resolve) => {
+            img.onload = () => resolve();
+            img.onerror = () => resolve();
+          }),
+    ),
+  );
+
+  const page = container.querySelector(".page") as HTMLElement;
+
+  try {
+    const canvas = await html2canvas(page, {
+      scale: 2,
+      useCORS: true,
+      allowTaint: true,
+      logging: false,
+      backgroundColor: "#ffffff",
+    });
+
+    const imgData = canvas.toDataURL("image/jpeg", 0.95);
+    const pdf = new jsPDF({
+      orientation: "portrait",
+      unit: "mm",
+      format: "a4",
+    });
+    const pdfW = pdf.internal.pageSize.getWidth();
+    const pdfH = pdf.internal.pageSize.getHeight();
+    const imgH = (canvas.height / canvas.width) * pdfW;
+
+    let remaining = imgH;
+    let yOffset = 0;
+
+    pdf.addImage(imgData, "JPEG", 0, yOffset, pdfW, imgH);
+    remaining -= pdfH;
+
+    while (remaining > 0) {
+      yOffset -= pdfH;
+      pdf.addPage();
+      pdf.addImage(imgData, "JPEG", 0, yOffset, pdfW, imgH);
+      remaining -= pdfH;
+    }
+
+    pdf.save(filename);
+  } finally {
+    document.head.removeChild(style);
+    document.body.removeChild(container);
+  }
+}
+
+export async function exportSummaryPdf(
+  params: ExportSummaryPdfParams,
+): Promise<void> {
+  const { fullName, company, country, webAnalystName, score, result } = params;
   const dateStr = getDateStr();
+  const logoSrc = await fetchLogoBase64(
+    `${window.location.origin}/images/Ealixir.png`,
+  );
   const sl = scoreLabel(score);
   const scoreColor =
     sl.label === "Good"
@@ -120,23 +232,13 @@ export function exportSummaryPdf(params: ExportSummaryPdfParams): void {
           .join("")
       : `<p style="color:#94a3b8;font-size:0.8125rem;">No links available.</p>`;
 
-  win.document.write(`<!DOCTYPE html><html lang="en"><head>
-<meta charset="utf-8"/>
-<title>Ealuminate Report — ${esc(fullName)}</title>
-<style>
+  const css = `
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-  body {
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
-    background: #f0f4f8;
-    color: #1e293b;
-    -webkit-print-color-adjust: exact;
-    print-color-adjust: exact;
-  }
   .page {
-    width: 210mm;
-    min-height: 297mm;
-    margin: 0 auto;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+    width: 794px;
     background: #ffffff;
+    color: #1e293b;
     display: flex;
     flex-direction: column;
   }
@@ -161,8 +263,18 @@ export function exportSummaryPdf(params: ExportSummaryPdfParams): void {
     padding: 0.625rem 1.5rem;
     border-radius: 0.375rem;
     margin-bottom: 1.5rem;
+    min-height: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
   }
   .header-logo { display: block; height: 48px; width: auto; }
+  .header-logo-placeholder {
+    width: 48px;
+    height: 48px;
+    background: #e2e8f0;
+    border-radius: 0.25rem;
+  }
   .header-eyebrow {
     font-size: 0.5625rem;
     font-weight: 700;
@@ -189,6 +301,7 @@ export function exportSummaryPdf(params: ExportSummaryPdfParams): void {
   }
   .meta-cell {
     flex: 1;
+    min-width: 0;
     padding: 0.75rem 1.25rem;
     border-right: 1px solid #e2e8f0;
   }
@@ -201,21 +314,27 @@ export function exportSummaryPdf(params: ExportSummaryPdfParams): void {
     color: #94a3b8;
     margin-bottom: 0.2rem;
   }
-  .meta-value { font-size: 0.8125rem; font-weight: 600; color: #1e293b; }
+  .meta-value { 
+    font-size: 0.8125rem; 
+    font-weight: 600; 
+    color: #1e293b;
+    word-break: break-word;
+    line-height: 1.4;
+  }
   .body { padding: 2rem 2.5rem; flex: 1; }
   .section { margin-bottom: 2rem; }
   .section-head {
     display: flex;
     align-items: center;
-    gap: 0.625rem;
+    justify-content: space-between;
     padding-bottom: 0.625rem;
     margin-bottom: 1rem;
     border-bottom: 1px solid #e2e8f0;
   }
+  .section-head-left { display: flex; align-items: center; gap: 0.625rem; }
   .section-num { font-size: 0.5625rem; font-weight: 700; letter-spacing: 0.15em; color: #48D4B8; }
   .section-name { font-size: 0.625rem; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; color: #64748b; }
   .badge {
-    margin-left: auto;
     padding: 0.2rem 0.625rem;
     background: rgba(255,61,0,0.07);
     border: 1px solid rgba(255,61,0,0.18);
@@ -224,6 +343,7 @@ export function exportSummaryPdf(params: ExportSummaryPdfParams): void {
     font-weight: 700;
     letter-spacing: 0.14em;
     text-transform: uppercase;
+    white-space: nowrap;
   }
   .score-block {
     display: flex;
@@ -270,7 +390,7 @@ export function exportSummaryPdf(params: ExportSummaryPdfParams): void {
   .link-accent { width: 4px; flex-shrink: 0; }
   .link-body { flex: 1; padding: 0.625rem 0.875rem; min-width: 0; }
   .link-title { font-size: 0.875rem; font-weight: 600; color: #1e293b; margin-bottom: 0.25rem; line-height: 1.35; }
-  .link-meta { display: flex; align-items: center; gap: 0.375rem; margin-bottom: 0.25rem; }
+  .link-meta { display: flex; align-items: center; gap: 0.375rem; margin-bottom: 0.25rem; flex-wrap: wrap; }
   .link-domain { font-size: 0.6875rem; color: #94a3b8; }
   .link-sep { font-size: 0.6875rem; color: #cbd5e1; }
   .link-risk { font-size: 0.6875rem; font-weight: 600; }
@@ -286,73 +406,84 @@ export function exportSummaryPdf(params: ExportSummaryPdfParams): void {
   }
   .footer-brand { font-size: 0.5625rem; font-weight: 700; letter-spacing: 0.15em; text-transform: uppercase; color: #94a3b8; }
   .footer-date { font-size: 0.6875rem; color: #94a3b8; }
-  @media print {
-    body { background: #ffffff; }
-    .page { margin: 0; width: 100%; }
-    @page { margin: 0; size: A4; }
-  }
-</style>
-</head><body>
-<div class="page">
-  <div class="header">
-    <div class="header-logo-wrap">
-      <img class="header-logo" src="${window.location.origin}/images/Ealixir.png" alt="Ealixir"/>
-    </div>
-    <div class="header-eyebrow">Ealuminate Intelligence Module</div>
-    <div class="header-title">Ealuminate Report</div>
-  </div>
-  <div class="accent-bar"></div>
-  <div class="meta-strip">
-    <div class="meta-cell"><div class="meta-label">Subject</div><div class="meta-value">${esc(fullName)}</div></div>
-    ${company ? `<div class="meta-cell"><div class="meta-label">Company</div><div class="meta-value">${esc(company)}</div></div>` : ""}
-    ${country ? `<div class="meta-cell"><div class="meta-label">Country</div><div class="meta-value">${esc(country)}</div></div>` : ""}
-    ${webAnalystName ? `<div class="meta-cell"><div class="meta-label">Prepared by</div><div class="meta-value">${esc(webAnalystName)}</div></div>` : ""}
-    <div class="meta-cell"><div class="meta-label">Generated</div><div class="meta-value">${esc(dateStr)}</div></div>
-  </div>
-  <div class="body">
-    <div class="section">
-      <div class="section-head">
-        <span class="section-num">01</span>
-        <span class="section-name">Reputation Score</span>
+  `;
+
+  // FIXED: Conditionally render logo or placeholder
+  const logoHtml = logoSrc
+    ? `<img class="header-logo" src="${logoSrc}" alt="Ealixir"/>`
+    : `<div class="header-logo-placeholder"></div>`;
+
+  const bodyHtml = `
+  <div class="page">
+    <div class="header">
+      <div class="header-logo-wrap">
+        ${logoHtml}
       </div>
-      <div class="score-block">
-        <div class="score-num">${score}</div>
-        <div>
-          <div class="score-label">${esc(sl.label)}</div>
-          <div class="score-desc">
-            ${sl.label === "Good" ? "No significant adverse findings. Subject presents a positive public profile." : sl.label === "Mediocre" ? "Some mixed signals detected. Review findings before proceeding." : sl.label === "Poor" ? "Notable adverse findings. Exercise caution and review sources carefully." : "Significant adverse findings detected. High reputational risk identified."}
+      <div class="header-eyebrow">Ealuminate Intelligence Module</div>
+      <div class="header-title">Ealuminate Report</div>
+    </div>
+    <div class="accent-bar"></div>
+    <div class="meta-strip">
+      <div class="meta-cell"><div class="meta-label">Subject</div><div class="meta-value">${esc(fullName)}</div></div>
+      ${company ? `<div class="meta-cell"><div class="meta-label">Company</div><div class="meta-value">${esc(company)}</div></div>` : ""}
+      ${country ? `<div class="meta-cell"><div class="meta-label">Country</div><div class="meta-value">${esc(country)}</div></div>` : ""}
+      ${webAnalystName ? `<div class="meta-cell"><div class="meta-label">Prepared by</div><div class="meta-value">${esc(webAnalystName)}</div></div>` : ""}
+      <div class="meta-cell"><div class="meta-label">Generated</div><div class="meta-value">${esc(dateStr)}</div></div>
+    </div>
+    <div class="body">
+      <div class="section">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding-bottom:0.625rem;margin-bottom:1rem;border-bottom:1px solid #e2e8f0;">
+          <div style="display:flex;align-items:center;gap:0.5rem;">
+            <span style="font-size:9px;font-weight:700;letter-spacing:0.15em;color:#48D4B8;">01</span>
+            <span style="font-size:10px;font-weight:700;letter-spacing:0.16em;text-transform:uppercase;color:#64748b;">Reputation Score</span>
+          </div>
+        </div>
+        <div class="score-block">
+          <div class="score-num">${score}</div>
+          <div>
+            <div class="score-label">${esc(sl.label)}</div>
+            <div class="score-desc">
+              ${sl.label === "Good" ? "No significant adverse findings. Subject presents a positive public profile." : sl.label === "Mediocre" ? "Some mixed signals detected. Review findings before proceeding." : sl.label === "Poor" ? "Notable adverse findings. Exercise caution and review sources carefully." : "Significant adverse findings detected. High reputational risk identified."}
+            </div>
           </div>
         </div>
       </div>
-    </div>
-    <div class="section">
-      <div class="section-head">
-        <span class="section-num">02</span>
-        <span class="section-name">Internal Meeting Brief</span>
-        <span class="badge">Internal Only</span>
+      <div class="section">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding-bottom:0.625rem;margin-bottom:1rem;border-bottom:1px solid #e2e8f0;">
+          <div style="display:flex;align-items:center;gap:0.5rem;">
+            <span style="font-size:9px;font-weight:700;letter-spacing:0.15em;color:#48D4B8;">02</span>
+            <span style="font-size:10px;font-weight:700;letter-spacing:0.16em;text-transform:uppercase;color:#64748b;">Internal Meeting Brief</span>
+          </div>
+          <span style="padding:3px 10px;background:rgba(255,61,0,0.07);border:1px solid rgba(255,61,0,0.18);color:#FF6B4A;font-size:8px;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;white-space:nowrap;">Internal Only</span>
+        </div>
+        ${briefHtml}
       </div>
-      ${briefHtml}
-    </div>
-    <div class="section">
-      <div class="section-head">
-        <span class="section-num">03</span>
-        <span class="section-name">Source Intelligence</span>
+      <div class="section">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding-bottom:0.625rem;margin-bottom:1rem;border-bottom:1px solid #e2e8f0;">
+          <div style="display:flex;align-items:center;gap:0.5rem;">
+            <span style="font-size:9px;font-weight:700;letter-spacing:0.15em;color:#48D4B8;">03</span>
+            <span style="font-size:10px;font-weight:700;letter-spacing:0.16em;text-transform:uppercase;color:#64748b;">Source Intelligence</span>
+          </div>
+        </div>
+        ${linksHtml}
       </div>
-      ${linksHtml}
     </div>
-  </div>
-  <div class="footer">
-    <span class="footer-brand">Ealuminate &nbsp;·&nbsp; Ealixir &nbsp;·&nbsp; Confidential &amp; Proprietary</span>
-    <span class="footer-date">${esc(dateStr)}</span>
-  </div>
-</div>
-</body></html>`);
-  win.document.close();
-  win.focus();
-  setTimeout(() => win.print(), 400);
+    <div class="footer">
+      <span class="footer-brand">Ealuminate &nbsp;·&nbsp; Ealixir &nbsp;·&nbsp; Confidential &amp; Proprietary</span>
+      <span class="footer-date">${esc(dateStr)}</span>
+    </div>
+  </div>`;
+
+  await downloadAsPdf(
+    css,
+    bodyHtml,
+    `ealuminate-report-${sanitize(fullName)}.pdf`,
+  );
 }
 
-export function exportReportMasterPdf(params: ExportReportMasterPdfParams): void {
+export async function exportReportMasterPdf(
+  params: ExportReportMasterPdfParams,
+): Promise<void> {
   const {
     fullName,
     company,
@@ -362,9 +493,10 @@ export function exportReportMasterPdf(params: ExportReportMasterPdfParams): void
     preAnalysisSummary,
     editableKeywords,
   } = params;
-  const win = openPrintWindow("Report Master");
-  if (!win) return;
   const dateStr = getDateStr();
+  const logoSrc = await fetchLogoBase64(
+    `${window.location.origin}/images/Ealixir.png`,
+  );
 
   const profileRows = preAnalysisProfile
     ? [
@@ -386,26 +518,18 @@ export function exportReportMasterPdf(params: ExportReportMasterPdfParams): void
 
   const keywordPills =
     editableKeywords.length > 0
-      ? editableKeywords.map((kw) => `<span class="kw-pill">${esc(kw)}</span>`).join("")
+      ? editableKeywords
+          .map((kw) => `<span class="kw-pill">${esc(kw)}</span>`)
+          .join("")
       : `<span style="color:#94a3b8;font-size:0.8125rem;">No keywords.</span>`;
 
-  win.document.write(`<!DOCTYPE html><html lang="en"><head>
-<meta charset="utf-8"/>
-<title>Report Master — ${esc(fullName)}</title>
-<style>
+  const css = `
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-  body {
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
-    background: #f0f4f8;
-    color: #1e293b;
-    -webkit-print-color-adjust: exact;
-    print-color-adjust: exact;
-  }
   .page {
-    width: 210mm;
-    min-height: 297mm;
-    margin: 0 auto;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+    width: 794px;
     background: #ffffff;
+    color: #1e293b;
     display: flex;
     flex-direction: column;
   }
@@ -431,11 +555,21 @@ export function exportReportMasterPdf(params: ExportReportMasterPdfParams): void
     padding: 0.625rem;
     border-radius: 0.375rem;
     margin-bottom: 1.5rem;
+    min-height: 60px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
   }
   .header-logo {
     display: block;
     height: 60px;
     width: auto;
+  }
+  .header-logo-placeholder {
+    width: 60px;
+    height: 60px;
+    background: #e2e8f0;
+    border-radius: 0.25rem;
   }
   .header-eyebrow {
     font-size: 0.5625rem;
@@ -464,6 +598,7 @@ export function exportReportMasterPdf(params: ExportReportMasterPdfParams): void
   }
   .meta-cell {
     flex: 1;
+    min-width: 0;
     padding: 0.75rem 1.25rem;
     border-right: 1px solid #e2e8f0;
   }
@@ -480,17 +615,20 @@ export function exportReportMasterPdf(params: ExportReportMasterPdfParams): void
     font-size: 0.8125rem;
     font-weight: 600;
     color: #1e293b;
+    word-break: break-word;
+    line-height: 1.4;
   }
   .body { padding: 2rem 2.5rem; flex: 1; }
   .section { margin-bottom: 2rem; }
   .section-head {
     display: flex;
     align-items: center;
-    gap: 0.625rem;
+    justify-content: space-between;
     padding-bottom: 0.625rem;
     margin-bottom: 1rem;
     border-bottom: 1px solid #e2e8f0;
   }
+  .section-head-left { display: flex; align-items: center; gap: 0.625rem; }
   .section-num {
     font-size: 0.5625rem;
     font-weight: 700;
@@ -505,7 +643,6 @@ export function exportReportMasterPdf(params: ExportReportMasterPdfParams): void
     color: #64748b;
   }
   .badge {
-    margin-left: auto;
     padding: 0.2rem 0.625rem;
     background: rgba(255,61,0,0.07);
     border: 1px solid rgba(255,61,0,0.18);
@@ -514,6 +651,7 @@ export function exportReportMasterPdf(params: ExportReportMasterPdfParams): void
     font-weight: 700;
     letter-spacing: 0.14em;
     text-transform: uppercase;
+    white-space: nowrap;
   }
   .profile-grid { display: flex; flex-direction: column; gap: 0.75rem; }
   .profile-field {
@@ -535,8 +673,13 @@ export function exportReportMasterPdf(params: ExportReportMasterPdfParams): void
     font-size: 0.8125rem;
     color: #334155;
     line-height: 1.65;
+    word-break: break-word;
   }
-  .kw-list { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+  .kw-list { 
+    display: flex; 
+    flex-wrap: wrap; 
+    gap: 0.5rem;
+  }
   .kw-pill {
     padding: 0.375rem 0.875rem;
     background: rgba(68,121,218,0.07);
@@ -562,53 +705,56 @@ export function exportReportMasterPdf(params: ExportReportMasterPdfParams): void
     color: #94a3b8;
   }
   .footer-date { font-size: 0.6875rem; color: #94a3b8; }
-  @media print {
-    body { background: #ffffff; }
-    .page { margin: 0; width: 100%; }
-    @page { margin: 0; size: A4; }
-  }
-</style>
-</head><body>
-<div class="page">
-  <div class="header">
-    <div class="header-logo-wrap">
-      <img class="header-logo" src="${window.location.origin}/images/Ealixir.png" alt="Ealixir"/>
-    </div>
-    <div class="header-eyebrow">Ealuminate Intelligence Module</div>
-    <div class="header-title">Report Master</div>
-  </div>
-  <div class="accent-bar"></div>
-  <div class="meta-strip">
-    <div class="meta-cell"><div class="meta-label">Subject</div><div class="meta-value">${esc(fullName)}</div></div>
-    ${company ? `<div class="meta-cell"><div class="meta-label">Company</div><div class="meta-value">${esc(company)}</div></div>` : ""}
-    ${country ? `<div class="meta-cell"><div class="meta-label">Country</div><div class="meta-value">${esc(country)}</div></div>` : ""}
-    ${webAnalystName ? `<div class="meta-cell"><div class="meta-label">Prepared by</div><div class="meta-value">${esc(webAnalystName)}</div></div>` : ""}
-    <div class="meta-cell"><div class="meta-label">Generated</div><div class="meta-value">${esc(dateStr)}</div></div>
-  </div>
-  <div class="body">
-    <div class="section">
-      <div class="section-head">
-        <span class="section-num">01</span>
-        <span class="section-name">Research Profile</span>
-        <span class="badge">Confidential</span>
+  `;
+
+  // FIXED: Conditionally render logo or placeholder
+  const logoHtml = logoSrc
+    ? `<img class="header-logo" src="${logoSrc}" alt="Ealixir"/>`
+    : `<div class="header-logo-placeholder"></div>`;
+
+  const bodyHtml = `
+  <div class="page">
+    <div class="header">
+      <div class="header-logo-wrap">
+        ${logoHtml}
       </div>
-      <div class="profile-grid">${profileRows}</div>
+      <div class="header-eyebrow">Ealuminate Intelligence Module</div>
+      <div class="header-title">Report Master</div>
     </div>
-    <div class="section">
-      <div class="section-head">
-        <span class="section-num">02</span>
-        <span class="section-name">Search Keywords</span>
+    <div class="accent-bar"></div>
+    <div class="meta-strip">
+      <div class="meta-cell"><div class="meta-label">Subject</div><div class="meta-value">${esc(fullName)}</div></div>
+      ${company ? `<div class="meta-cell"><div class="meta-label">Company</div><div class="meta-value">${esc(company)}</div></div>` : ""}
+      ${country ? `<div class="meta-cell"><div class="meta-label">Country</div><div class="meta-value">${esc(country)}</div></div>` : ""}
+      ${webAnalystName ? `<div class="meta-cell"><div class="meta-label">Prepared by</div><div class="meta-value">${esc(webAnalystName)}</div></div>` : ""}
+      <div class="meta-cell"><div class="meta-label">Generated</div><div class="meta-value">${esc(dateStr)}</div></div>
+    </div>
+    <div class="body">
+      <div class="section">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding-bottom:0.625rem;margin-bottom:1rem;border-bottom:1px solid #e2e8f0;">
+          <div style="display:flex;align-items:center;gap:0.5rem;">
+            <span style="font-size:9px;font-weight:700;letter-spacing:0.15em;color:#48D4B8;">01</span>
+            <span style="font-size:10px;font-weight:700;letter-spacing:0.16em;text-transform:uppercase;color:#64748b;">Research Profile</span>
+          </div>
+          <span style="padding:3px 10px;background:rgba(255,61,0,0.07);border:1px solid rgba(255,61,0,0.18);color:#FF6B4A;font-size:8px;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;white-space:nowrap;">Confidential</span>
+        </div>
+        <div class="profile-grid">${profileRows}</div>
       </div>
-      <div class="kw-list">${keywordPills}</div>
+      <div class="section">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding-bottom:0.625rem;margin-bottom:1rem;border-bottom:1px solid #e2e8f0;">
+          <div style="display:flex;align-items:center;gap:0.5rem;">
+            <span style="font-size:9px;font-weight:700;letter-spacing:0.15em;color:#48D4B8;">02</span>
+            <span style="font-size:10px;font-weight:700;letter-spacing:0.16em;text-transform:uppercase;color:#64748b;">Search Keywords</span>
+          </div>
+        </div>
+        <div class="kw-list">${keywordPills}</div>
+      </div>
     </div>
-  </div>
-  <div class="footer">
-    <span class="footer-brand">Ealuminate &nbsp;·&nbsp; Ealixir &nbsp;·&nbsp; Confidential &amp; Proprietary</span>
-    <span class="footer-date">${esc(dateStr)}</span>
-  </div>
-</div>
-</body></html>`);
-  win.document.close();
-  win.focus();
-  setTimeout(() => win.print(), 400);
+    <div class="footer">
+      <span class="footer-brand">Ealuminate &nbsp;·&nbsp; Ealixir &nbsp;·&nbsp; Confidential &amp; Proprietary</span>
+      <span class="footer-date">${esc(dateStr)}</span>
+    </div>
+  </div>`;
+
+  await downloadAsPdf(css, bodyHtml, `report-master-${sanitize(fullName)}.pdf`);
 }

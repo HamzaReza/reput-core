@@ -207,6 +207,62 @@ const COUNTRY_TO_LANGUAGE: Record<string, string> = {
   IE: "en",
 };
 
+const MONTH_MAP: Record<string, number> = {
+  // English
+  jan: 1,
+  feb: 2,
+  mar: 3,
+  apr: 4,
+  may: 5,
+  jun: 6,
+  jul: 7,
+  aug: 8,
+  sep: 9,
+  oct: 10,
+  nov: 11,
+  dec: 12,
+  // Italian
+  gen: 1,
+  mag: 5,
+  giu: 6,
+  lug: 7,
+  ago: 8,
+  set: 9,
+  ott: 10,
+  dic: 12,
+  // Spanish
+  ene: 1,
+  abr: 4,
+  ago_es: 8, // ago already covered
+  // French
+  fév: 2,
+  avr: 4,
+  aoû: 8,
+  // German
+  mär: 3,
+  okt: 10,
+  // Portuguese
+  fev: 2,
+  out: 10,
+};
+
+function parseSerperDate(dateStr: string): number {
+  // Try native parse first (works for ISO / English formats)
+  const native = Date.parse(dateStr);
+  if (!isNaN(native)) return native;
+
+  // Try "DD MMM YYYY" or "D MMM YYYY" in any supported locale
+  const m = dateStr
+    .trim()
+    .match(/^(\d{1,2})\s+([a-záàâäéèêëíìîïóòôöúùûüñç]+)\.?\s+(\d{4})$/i);
+  if (m) {
+    const month = MONTH_MAP[m[2].toLowerCase()];
+    if (month) return new Date(Number(m[3]), month - 1, Number(m[1])).getTime();
+  }
+
+  return NaN;
+}
+
 function countryCodeFromName(country: string): string | null {
   const k = country.toLowerCase().trim();
   return COUNTRY_NAME_TO_ISO[k] ?? NATIONALITY_ALIASES[k] ?? null;
@@ -233,35 +289,54 @@ function dedupeLinks(all: WebLink[]): WebLink[] {
   return Array.from(map.values());
 }
 
+function sleep(ms: number) {
+  return new Promise<void>((resolve) => setTimeout(resolve, ms));
+}
+
 async function searchSerper(
   query: string,
   countryCode: string | null,
   languageCode: string | null,
-  numResults = 20,
-): Promise<SerperResult[]> {
+  numPages = 2,
+): Promise<{ organic: SerperResult[]; raw: SerperResponse[] }> {
   const serperKey = process.env.SERPER_API_KEY;
   if (!serperKey) throw new Error("SERPER_API_KEY not configured");
 
-  const payload: Record<string, unknown> = { q: query, num: numResults };
-  if (countryCode) payload.gl = countryCode.toLowerCase();
-  const lang =
-    languageCode ??
-    (countryCode ? COUNTRY_TO_LANGUAGE[countryCode.toUpperCase()] : null);
-  if (lang) payload.hl = lang;
+  const makePayload = (page: number) => {
+    const payload: Record<string, unknown> = { q: query, page };
+    if (countryCode) payload.gl = countryCode.toLowerCase();
+    const lang =
+      languageCode ??
+      (countryCode ? COUNTRY_TO_LANGUAGE[countryCode.toUpperCase()] : null);
+    if (lang) payload.hl = lang;
+    return payload;
+  };
 
-  const res = await fetch("https://google.serper.dev/search", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "X-API-KEY": serperKey },
-    body: JSON.stringify(payload),
-  });
+  const fetchPage = async (
+    page: number,
+    attempt = 0,
+  ): Promise<SerperResponse> => {
+    const res = await fetch("https://google.serper.dev/search", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-API-KEY": serperKey },
+      body: JSON.stringify(makePayload(page)),
+    });
+    if (res.status === 429 && attempt < 3) {
+      await sleep(800 * (attempt + 1));
+      return fetchPage(page, attempt + 1);
+    }
+    if (!res.ok) throw new Error(`Search service error (${res.status})`);
+    return res.json() as Promise<SerperResponse>;
+  };
 
-  if (!res.ok) {
-    const body = await res.text();
-    throw new Error(`Search service error (${res.status}): ${body}`);
+  const raw: SerperResponse[] = [];
+  for (let i = 0; i < numPages; i++) {
+    if (i > 0) await sleep(300);
+    raw.push(await fetchPage(i + 1));
   }
 
-  const data = (await res.json()) as SerperResponse;
-  return data.organic ?? [];
+  const organic = raw.flatMap((r) => r.organic ?? []);
+  return { organic, raw };
 }
 
 async function isPdf(url: string): Promise<boolean> {
@@ -307,7 +382,7 @@ async function scrapeWithFirecrawl(url: string): Promise<string | null> {
     if (!res.ok) return null;
     const data = (await res.json()) as FirecrawlResponse;
     if (!data.success || !data.data?.markdown) return null;
-    return data.data.markdown.slice(0, 4000);
+    return data.data.markdown.slice(0, 8000);
   } catch (err) {
     console.error(
       `[firecrawl] Failed to scrape ${url}:`,
@@ -321,8 +396,11 @@ async function classifyWithClaude(
   client: Anthropic,
   articles: ArticleForClassification[],
   name: string,
-  country: string | null,
+  countries: string[],
   keywords: string[],
+  subjectType: "individual" | "company" = "individual",
+  languageName = "English",
+  scanFocus?: string,
 ): Promise<WebLink[]> {
   if (articles.length === 0) return [];
 
@@ -333,19 +411,63 @@ async function classifyWithClaude(
     )
     .join("\n\n---\n\n");
 
-  const lastName = name.split(" ").pop() ?? name;
-  const firstName = name.split(" ").shift() ?? name;
-  const countryLine = country
-    ? `The subject is from ${country}. Only include results clearly relevant to this person and their region.`
-    : "";
+  const nameParts = name.split(" ").filter(Boolean);
+  const firstName = nameParts[0] ?? name;
+  const lastName = nameParts.slice(1).join(" ");
+
+  const countriesLabel = countries.join(", ");
+  const countryLine =
+    countries.length > 0
+      ? subjectType === "company"
+        ? `The subject is a company from ${countriesLabel}. Only include results clearly relevant to this company and these regions.`
+        : `The subject is from ${countriesLabel}. Only include results clearly relevant to this person and these regions.`
+      : "";
+
   const keywordList =
     keywords.length > 0 ? keywords.join(", ") : "general reputation";
+
+  const nameFilter =
+    subjectType === "company"
+      ? `MANDATORY NAME FILTER:
+Before classifying, check whether the company "${name}" is clearly identifiable in the title, snippet, or content.
+
+INCLUDE the article if:
+• The company name "${name}" appears (case-insensitive)
+
+EXCLUDE the article if:
+• The article clearly refers to a different company with a similar name, OR
+• The company name does not appear at all
+
+If EXCLUDED → do not include this article in the output array at all.`
+      : `MANDATORY NAME FILTER:
+Before classifying, check whether the subject "${name}" is clearly identifiable in the title, snippet, or content.
+
+INCLUDE the article if:
+• The full name "${name}" appears (case-insensitive), OR
+• Both "${firstName}" AND "${lastName}" appear in close proximity (within the same sentence or paragraph)
+
+EXCLUDE the article if:
+• Only the first name appears without the last name, OR
+• Only the last name appears without the first name, OR
+• The article is clearly about a different person with a similar name OR
+• Neither appears at all
+
+If EXCLUDED → do not include this article in the output array at all.`;
+
+  const scanFocusRule =
+    scanFocus && scanFocus !== "all"
+      ? ({
+          negative: `\nSCAN FOCUS: Return ONLY articles with NEGATIVE sentiment or HIGH/MEDIUM risk. Exclude all positive and neutral articles from the output entirely.\n`,
+          positive: `\nSCAN FOCUS: Return ONLY articles with POSITIVE sentiment. Exclude all negative and neutral articles from the output entirely.\n`,
+          neutral: `\nSCAN FOCUS: Return ONLY articles with NEUTRAL sentiment (purely informational). Exclude all negative and positive articles from the output entirely.\n`,
+        }[scanFocus] ?? "")
+      : "";
 
   const prompt = `You are a reputation intelligence analyst. Classify the following ${articles.length} articles about "${name}".
 
 ${countryLine}
 Search context keywords used: ${keywordList}
-
+${scanFocusRule}
 CLASSIFICATION RULES:
 
 NEGATIVE sentiment — classify if the article contains ANY of:
@@ -374,19 +496,7 @@ RISK CLASSIFICATION:
 - "low": minor criticism or weak negative mentions
 - "none": positive or neutral content
 
-MANDATORY NAME FILTER:
-Before classifying, check whether the subject "${name}" is clearly identifiable in the title, snippet, or content.
-
-INCLUDE the article if:
-• The full name "${name}" appears (case-insensitive), OR
-• Both "${firstName}" AND "${lastName}" appear in close proximity (within the same sentence or paragraph)
-
-EXCLUDE the article if:
-• Only the first name appears without the last name, OR
-• Only the last name appears without the first name, OR
-• Neither appears at all
-
-If EXCLUDED → do not include this article in the output array at all.
+${nameFilter}
 
 ARTICLES TO CLASSIFY:
 ${articleList}
@@ -395,7 +505,7 @@ Return a JSON array only — no explanation, no markdown code fences. Each eleme
 {
   "url": "...",
   "title": "...",
-  "snippet": "3 sentence explanation of the reputational significance of this article, written in your own words based on the title and content — not copied from the source. Write the snippet in the same language as the article.",
+  "snippet": "3 sentence explanation of the reputational significance of this article, written in your own words based on the title and content — not copied from the source. Write the snippet in ${languageName}.",
   "sentiment": "negative" | "positive" | "neutral",
   "risk": "high" | "medium" | "low" | "none",
   "source": "domain.com",
@@ -404,11 +514,12 @@ Return a JSON array only — no explanation, no markdown code fences. Each eleme
 
 Return ONLY the JSON array. If no valid articles, return [].`;
 
-  const response = await client.messages.create({
+  const stream = client.messages.stream({
     model: "claude-sonnet-4-6",
-    max_tokens: 16000,
+    max_tokens: 64000,
     messages: [{ role: "user", content: prompt }],
   });
+  const response = await stream.finalMessage();
 
   if (response.stop_reason === "max_tokens") {
     console.warn("[classify] Claude hit max_tokens — JSON may be truncated");
@@ -461,6 +572,8 @@ function fallbackSummary(score: number) {
       "Discuss their current online presence",
       "Highlight risks of unmanaged reputation",
     ],
+    riskIndicators: [] as string[],
+    objectionHandlers: [] as string[],
   };
 }
 
@@ -469,42 +582,70 @@ async function generateMeetingSummary(
   name: string,
   score: number,
   links: WebLink[],
-): Promise<{ headline: string; issues: string[]; talkingPoints: string[] }> {
+  languageName = "English",
+): Promise<{
+  headline: string;
+  issues: string[];
+  talkingPoints: string[];
+  riskIndicators?: string[];
+  objectionHandlers?: string[];
+}> {
   const negLinks = links.filter(
     (l) =>
       l.sentiment === "negative" || l.risk === "high" || l.risk === "medium",
   );
   const posLinks = links.filter((l) => l.sentiment === "positive");
-  const findingsSummary = [
+  const highLinks = links.filter((l) => l.risk === "high");
+  const medLinks = links.filter((l) => l.risk === "medium");
+  const neutralLinks = links.filter((l) => l.sentiment === "neutral");
+
+  const scoreBreakdown = `Score: ${score}/100 | High-risk: ${highLinks.length} | Medium-risk: ${medLinks.length} | Positive: ${posLinks.length} | Neutral: ${neutralLinks.length}`;
+
+  const negSummary =
     negLinks.length > 0
-      ? `Negative:\n${negLinks
-          .slice(0, 6)
-          .map((l) => `- ${l.title} (${l.source}, risk: ${l.risk})`)
+      ? `Negative/Risk findings:\n${negLinks
+          .slice(0, 8)
+          .map(
+            (l) =>
+              `- [${l.risk.toUpperCase()}] "${l.title}" — ${l.source}${l.date ? ` (${l.date})` : ""}\n  ${l.snippet}`,
+          )
           .join("\n")}`
-      : "No negative results found.",
+      : "No negative results found.";
+
+  const posSummary =
     posLinks.length > 0
-      ? `Positive:\n${posLinks
+      ? `Positive findings:\n${posLinks
           .slice(0, 4)
-          .map((l) => `- ${l.title} (${l.source})`)
+          .map(
+            (l) =>
+              `- "${l.title}" — ${l.source}${l.date ? ` (${l.date})` : ""}`,
+          )
           .join("\n")}`
-      : "No positive results found.",
-  ].join("\n\n");
+      : "No positive results found.";
 
-  const prompt = `You are an analyst at a reputation management firm. A scan for "${name}" returned a ReputScore of ${score}/100.
+  const prompt = `You are a senior analyst at a reputation management firm preparing an internal sales brief.
 
-Findings:
-${findingsSummary}
+Subject: "${name}"
+${scoreBreakdown}
 
-Return a JSON object (no markdown, no explanation) with:
+${negSummary}
+
+${posSummary}
+
+Return ONLY a JSON object with these 5 fields (no markdown, no explanation):
 {
-  "headline": "one-line assessment for the sales team",
-  "issues": ["up to 4 key points about their reputation (positive or negative), or 1 entry if nothing found"],
-  "talkingPoints": ["2-3 suggested opening lines for a client meeting focused on why they need reputation management"]
-}`;
+  "headline": "one sharp sentence summarising the reputational situation for the sales team",
+  "issues": ["5-8 specific key reputation points — cite article titles or sources where relevant"],
+  "talkingPoints": ["4-6 opening lines for the client meeting — reference their actual situation, not generic phrases"],
+  "riskIndicators": ["4-6 concrete risk flags drawn from the findings above — include source name and date where available"],
+  "objectionHandlers": ["4-5 sharp, specific rebuttals for when the prospect says they don't need reputation management — reference their actual findings"]
+}
+
+Write all output in ${languageName}.`;
 
   const response = await client.messages.create({
     model: "claude-sonnet-4-6",
-    max_tokens: 512,
+    max_tokens: 4096,
     messages: [{ role: "user", content: prompt }],
   });
 
@@ -518,6 +659,18 @@ Return a JSON object (no markdown, no explanation) with:
 }
 
 export async function POST(req: NextRequest) {
+  const token = req.headers.get("Authorization");
+  if (!token) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
+  const authCheck = await fetch(`${apiUrl}/web-analysts/me`, {
+    headers: { Authorization: token },
+  }).catch(() => null);
+  if (!authCheck || !authCheck.ok) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
     return NextResponse.json(
@@ -529,51 +682,144 @@ export async function POST(req: NextRequest) {
   const {
     firstName,
     lastName,
-    country,
-    keywords,
-    resultsCap,
+    company,
+    country: countrySingle,
+    countries: countriesRaw,
+    keywords = [],
+    pagesCap,
+    subjectType = "individual",
+    reportLanguage,
+    useKeywords = true,
+    scanFocus,
   } = (await req.json()) as {
-    firstName: string;
-    lastName: string;
-    country: string;
+    firstName?: string;
+    lastName?: string;
+    company?: string;
+    country?: string;
+    countries?: string[];
     keywords: string[];
-    resultsCap?: number;
+    pagesCap?: number;
+    subjectType?: "individual" | "company";
+    reportLanguage?: string;
+    useKeywords?: boolean;
+    scanFocus?: "negative" | "positive" | "neutral";
   };
 
-  if (!firstName || !lastName || !country || !keywords?.length) {
+  // Normalize to array — accept both legacy `country` string and new `countries` array
+  const countries: string[] =
+    Array.isArray(countriesRaw) && countriesRaw.length > 0
+      ? countriesRaw
+      : countrySingle
+        ? [countrySingle]
+        : [];
+
+  if (!countries.length || (useKeywords && !keywords?.length)) {
     return NextResponse.json(
       { error: "Required fields missing" },
       { status: 400 },
     );
   }
 
-  const name = `${firstName.trim()} ${lastName.trim()}`.trim();
-  const sanitizedName = name.slice(0, 200).replace(/[\r\n]/g, " ");
+  const searchSubject =
+    subjectType === "company" && company
+      ? company.trim()
+      : `${(firstName ?? "").trim()} ${(lastName ?? "").trim()}`.trim();
+  const sanitizedSubject = searchSubject.slice(0, 200).replace(/[\r\n]/g, " ");
 
   const client = new Anthropic({ apiKey });
-  const countryCode = countryCodeFromName(country);
+  // Use first country for language/region detection
+  const primaryCountry = countries[0] ?? "";
+  const countryCode = countryCodeFromName(primaryCountry);
   const languageCode = countryCode
     ? (COUNTRY_TO_LANGUAGE[countryCode.toUpperCase()] ?? null)
     : null;
 
+  const REPORT_LANG_MAP: Record<string, string> = {
+    en: "English",
+    it: "Italian",
+    es: "Spanish",
+  };
+  const LANG_CODE_TO_NAME: Record<string, string> = {
+    en: "English",
+    it: "Italian",
+    es: "Spanish",
+    fr: "French",
+    de: "German",
+    pt: "Portuguese",
+    nl: "Dutch",
+    pl: "Polish",
+    ro: "Romanian",
+    hu: "Hungarian",
+    cs: "Czech",
+    ru: "Russian",
+    uk: "Ukrainian",
+    tr: "Turkish",
+    ja: "Japanese",
+    ko: "Korean",
+    "zh-CN": "Chinese",
+    ar: "Arabic",
+    hi: "Hindi",
+    th: "Thai",
+    vi: "Vietnamese",
+    id: "Indonesian",
+    ms: "Malay",
+    el: "Greek",
+    sv: "Swedish",
+    no: "Norwegian",
+    fi: "Finnish",
+    da: "Danish",
+  };
+  const outputLanguageName = reportLanguage
+    ? (REPORT_LANG_MAP[reportLanguage] ?? "English")
+    : languageCode
+      ? (LANG_CODE_TO_NAME[languageCode] ?? "English")
+      : "English";
+
   try {
     // ── Phase 1: Parallel Serper searches ─────────────────────────────────────
-    const searchQueries = keywords.map(
-      (kw: string) => `${sanitizedName} ${kw}`,
-    );
+    const FOCUS_QUERY_SUFFIX: Record<string, string> = {
+      negative: "scandal fraud lawsuit complaint allegations",
+      positive: "award recognition achievement success",
+    };
+    const focusSuffix = scanFocus ? (FOCUS_QUERY_SUFFIX[scanFocus] ?? "") : "";
+    const searchQueries = useKeywords
+      ? keywords.map((kw: string) => `${sanitizedSubject} ${kw}`)
+      : [focusSuffix ? `${sanitizedSubject} ${focusSuffix}` : sanitizedSubject];
 
-    const cap = resultsCap ?? 20;
+    const countryConfigs = countries.map((c) => {
+      const code = countryCodeFromName(c);
+      return {
+        countryCode: code,
+        languageCode: code
+          ? (COUNTRY_TO_LANGUAGE[code.toUpperCase()] ?? null)
+          : null,
+      };
+    });
 
-    const allResults = await Promise.all(
-      searchQueries.map((q) => searchSerper(q, countryCode, languageCode, cap)),
+    const allSearches = searchQueries.flatMap((q) =>
+      countryConfigs.map(({ countryCode: cc, languageCode: lc }) => ({
+        q,
+        cc,
+        lc,
+      })),
     );
+    const serperResults: Awaited<ReturnType<typeof searchSerper>>[] = [];
+    for (const { q, cc, lc } of allSearches) {
+      if (serperResults.length > 0) await sleep(300);
+      serperResults.push(await searchSerper(q, cc, lc, pagesCap ?? 2));
+    }
+    const allResults = serperResults.map((s) => s.organic);
+    const allRaw = serperResults.map((s) => s.raw);
 
     // ── Phase 2: Deduplicate URLs, scrape with Firecrawl in parallel ──────────
     const seenUrls = new Set<string>();
     const articles: ArticleForClassification[] = [];
     const dateMap = new Map<string, string>();
+    const keywordMap = new Map<string, string>(); // url → first keyword that found it
+    const countryMap = new Map<string, string>(); // url → country that first found it
 
-    for (const results of allResults) {
+    allResults.forEach((results, kwIdx) => {
+      const countryIdx = kwIdx % (countryConfigs.length || 1);
       for (const r of results) {
         if (!seenUrls.has(r.link)) {
           seenUrls.add(r.link);
@@ -584,44 +830,82 @@ export async function POST(req: NextRequest) {
             content: r.snippet,
           });
           if (r.date) dateMap.set(r.link, r.date);
+          if (useKeywords && keywords[kwIdx])
+            keywordMap.set(r.link, keywords[kwIdx]!);
+          if (countries[countryIdx])
+            countryMap.set(r.link, countries[countryIdx]!);
         }
       }
+    });
+
+    const urlsSentToFirecrawl = articles.map((a) => a.url);
+
+    // Scrape in batches of 15 to avoid overwhelming Firecrawl's rate limiter
+    const BATCH_SIZE = 15;
+    const scrapeResults: PromiseSettledResult<string | null>[] = [];
+    for (let b = 0; b < articles.length; b += BATCH_SIZE) {
+      if (b > 0) await sleep(500);
+      const batch = articles.slice(b, b + BATCH_SIZE);
+      const batchResults = await Promise.allSettled(
+        batch.map(async (a) =>
+          (await isPdf(a.url)) ? null : scrapeWithFirecrawl(a.url),
+        ),
+      );
+      scrapeResults.push(...batchResults);
     }
 
-    const scrapeResults = await Promise.allSettled(
-      articles.map(async (a) =>
-        (await isPdf(a.url)) ? null : scrapeWithFirecrawl(a.url),
-      ),
-    );
-
+    const firecrawlSuccess: string[] = [];
+    const firecrawlFailed: string[] = [];
     scrapeResults.forEach((result, i) => {
       if (result.status === "fulfilled" && result.value) {
         articles[i].content = result.value;
+        firecrawlSuccess.push(articles[i].url);
+      } else {
+        firecrawlFailed.push(articles[i].url);
       }
     });
+
+    const urlsSentToClaude = articles.map((a) => a.url);
 
     // ── Phase 3: Claude classification ───────────────────────────────────────
     const classified = await classifyWithClaude(
       client,
       articles,
-      sanitizedName,
-      country,
+      sanitizedSubject,
+      countries,
       keywords,
+      subjectType,
+      outputLanguageName,
+      scanFocus,
     );
 
-    const deduped = dedupeLinks(classified).map((link) => ({
-      ...link,
-      date: dateMap.get(link.url),
-    }));
+    const deduped = dedupeLinks(classified)
+      .map((link) => ({
+        ...link,
+        date: dateMap.get(link.url),
+        keyword: keywordMap.get(link.url),
+        country: countryMap.get(link.url),
+      }))
+      .sort((a, b) => {
+        const da = a.date ? parseSerperDate(a.date) : NaN;
+        const db = b.date ? parseSerperDate(b.date) : NaN;
+        const validA = !isNaN(da);
+        const validB = !isNaN(db);
+        if (validA && validB) return db - da;
+        if (validA) return -1;
+        if (validB) return 1;
+        return 0;
+      });
     const negative = deduped.filter((l) => l.sentiment === "negative");
     const positive = deduped.filter((l) => l.sentiment === "positive");
     const neutral = deduped.filter((l) => l.sentiment === "neutral");
 
     const summary = await generateMeetingSummary(
       client,
-      sanitizedName,
+      sanitizedSubject,
       deriveScoreServer(negative.length, positive.length),
       deduped,
+      outputLanguageName,
     );
 
     return NextResponse.json({
@@ -631,6 +915,30 @@ export async function POST(req: NextRequest) {
       neutral,
       summary,
       score: deriveScoreServer(negative.length, positive.length),
+      _serper: allSearches.map(({ q }, i) => {
+        const numCountries = countryConfigs.length || 1;
+        const kwIdx = Math.floor(i / numCountries);
+        const cIdx = i % numCountries;
+        return {
+          keyword: keywords[kwIdx] ?? q,
+          country: countries[cIdx] ?? "unknown",
+          query: q,
+          count: allResults[i]?.length ?? 0,
+          links: allRaw[i]?.flatMap((page) =>
+            (page.organic ?? []).map((r) => r.link),
+          ) ?? [],
+        };
+      }),
+      _firecrawl: keywords.map((kw) => ({
+        keyword: kw,
+        sent: urlsSentToFirecrawl.filter((u) => keywordMap.get(u) === kw),
+        success: firecrawlSuccess.filter((u) => keywordMap.get(u) === kw),
+        failed: firecrawlFailed.filter((u) => keywordMap.get(u) === kw),
+      })),
+      _claude: keywords.map((kw) => ({
+        keyword: kw,
+        sent: urlsSentToClaude.filter((u) => keywordMap.get(u) === kw),
+      })),
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";

@@ -2,7 +2,83 @@
 
 import type { WebLink } from "@/lib/api";
 import type { ComponentType } from "react";
+import { useState } from "react";
 import type { RiskLevel, ScanResult } from "./types";
+
+const BRIEF_SECTION_COLORS: Record<string, string> = {
+  "Key Points": "#4479DA",
+  "Meeting Angles": "#6366f1",
+  "Risk Indicators": "#ef4444",
+  "Objection Handlers": "#48D4B8",
+};
+
+function BriefCollapse({
+  label,
+  items,
+  ordered,
+  open,
+  onToggle,
+  itemColor,
+}: {
+  label: string;
+  items: string[];
+  ordered?: boolean;
+  open: boolean;
+  onToggle: () => void;
+  itemColor?: string;
+}) {
+  const color = BRIEF_SECTION_COLORS[label] ?? "#4479DA";
+  const List = ordered ? "ol" : "ul";
+  return (
+    <div
+      onClick={onToggle}
+      style={{
+        display: "flex",
+        borderRadius: "0.875rem",
+        overflow: "hidden",
+        background: "#fff",
+        border: "1px solid #e2e8f0",
+        cursor: "pointer",
+        transition: "border-color 0.15s ease",
+      }}
+      onMouseEnter={(e) => (e.currentTarget.style.borderColor = "#b6c4d4")}
+      onMouseLeave={(e) => (e.currentTarget.style.borderColor = "#e2e8f0")}
+    >
+      <div style={{ width: 4, flexShrink: 0, backgroundColor: color }} />
+      <div style={{ flex: 1, padding: "0.75rem 0.875rem", minWidth: 0 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.75rem" }}>
+          <p style={{ margin: 0, fontSize: "0.875rem", fontWeight: 600, color: "#1e293b", lineHeight: 1.4 }}>
+            {label}
+          </p>
+          <svg
+            width="12"
+            height="12"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="#cbd5e1"
+            strokeWidth="2.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            style={{ flexShrink: 0, transition: "transform 0.2s ease", transform: open ? "rotate(180deg)" : "rotate(0deg)" }}
+          >
+            <path d="M6 9l6 6 6-6" />
+          </svg>
+        </div>
+        {open && (
+          <List
+            style={{ margin: "0.625rem 0 0", paddingLeft: "1.1rem", display: "flex", flexDirection: "column", gap: "0.25rem", borderTop: "1px solid #f1f5f9", paddingTop: "0.625rem" }}
+          >
+            {items.map((item, i) => (
+              <li key={i} style={{ fontSize: "0.8125rem", color: itemColor ?? "#475569", lineHeight: 1.5 }}>
+                {item}
+              </li>
+            ))}
+          </List>
+        )}
+      </div>
+    </div>
+  );
+}
 
 interface EaluminateResultsPanelProps {
   loading: boolean;
@@ -21,6 +97,72 @@ interface EaluminateResultsPanelProps {
   riskColors: Record<RiskLevel, { bg: string; color: string; border: string }>;
   onExportSummary: () => void;
   GaugeComponent: ComponentType<{ score: number }>;
+  useKeywords: boolean;
+}
+
+function KeywordsUsed({
+  usedKeywords,
+  allLinks,
+  useKeywords,
+}: {
+  usedKeywords: string[];
+  allLinks: WebLink[];
+  useKeywords: boolean;
+}) {
+  return (
+    <div style={{ marginTop: "1.25rem" }}>
+      {useKeywords && usedKeywords.length > 0 && (
+        <>
+          <p
+            style={{
+              fontSize: "0.6875rem",
+              fontWeight: 700,
+              letterSpacing: "0.1em",
+              textTransform: "uppercase",
+              color: "#94a3b8",
+              marginBottom: "0.5rem",
+            }}
+          >
+            Keywords Found
+          </p>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem", justifyContent: "center" }}>
+            {usedKeywords.map((kw) => (
+              <span
+                key={kw}
+                style={{
+                  padding: "0.25rem 0.75rem",
+                  borderRadius: "999px",
+                  backgroundColor: "rgba(68,121,218,0.08)",
+                  border: "1px solid rgba(29, 65, 133, 0.2)",
+                  color: "#4479DA",
+                  fontSize: "0.8125rem",
+                  fontWeight: 500,
+                }}
+              >
+                {kw}
+              </span>
+            ))}
+          </div>
+        </>
+      )}
+      {allLinks.length > 0 && (
+        <p
+          style={{
+            marginTop: "0.6rem",
+            fontSize: "0.9375rem",
+            color: "#64748b",
+          }}
+        >
+          We retrieved{" "}
+          <strong style={{ color: "#1e293b" }}>{allLinks.length}</strong>{" "}
+          relevant {allLinks.length === 1 ? "link" : "links"}{" "}
+          {useKeywords
+            ? "across all keyword searches."
+            : "from the direct name search."}
+        </p>
+      )}
+    </div>
+  );
 }
 
 export function EaluminateResultsPanel({
@@ -40,7 +182,10 @@ export function EaluminateResultsPanel({
   riskColors,
   onExportSummary,
   GaugeComponent,
+  useKeywords,
 }: EaluminateResultsPanelProps) {
+  const [openBriefSection, setOpenBriefSection] = useState<string | null>(null);
+
   return (
     <div
       className="animate-scale-in"
@@ -226,40 +371,11 @@ export function EaluminateResultsPanel({
             </p>
           </div>
 
-          {usedKeywords.length > 0 && (
-            <div style={{ marginTop: "1.25rem", textAlign: "left" }}>
-              <p
-                style={{
-                  fontSize: "0.6875rem",
-                  fontWeight: 700,
-                  letterSpacing: "0.1em",
-                  textTransform: "uppercase",
-                  color: "#94a3b8",
-                  marginBottom: "0.5rem",
-                }}
-              >
-                Keywords Used
-              </p>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
-                {usedKeywords.map((kw) => (
-                  <span
-                    key={kw}
-                    style={{
-                      padding: "0.25rem 0.75rem",
-                      borderRadius: "999px",
-                      backgroundColor: "rgba(68,121,218,0.08)",
-                      border: "1px solid rgba(29, 65, 133, 0.2)",
-                      color: "#4479DA",
-                      fontSize: "0.8125rem",
-                      fontWeight: 500,
-                    }}
-                  >
-                    {kw}
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
+          <KeywordsUsed
+            usedKeywords={usedKeywords}
+            allLinks={allLinks}
+            useKeywords={useKeywords}
+          />
 
           {result.summary && (
             <div
@@ -342,87 +458,26 @@ export function EaluminateResultsPanel({
                 </button>
               </div>
               <div style={{ padding: "1rem" }}>
-                <p
-                  style={{
-                    fontSize: "0.9375rem",
-                    fontWeight: 700,
-                    color: "#1e293b",
-                    margin: "0 0 0.875rem",
-                  }}
-                >
+                <p style={{ fontSize: "0.9375rem", fontWeight: 700, color: "#1e293b", margin: "0 0 0.875rem" }}>
                   {result.summary.headline}
                 </p>
-                <div style={{ marginBottom: "0.875rem" }}>
-                  <p
-                    style={{
-                      fontSize: "0.6875rem",
-                      fontWeight: 700,
-                      letterSpacing: "0.1em",
-                      textTransform: "uppercase",
-                      color: "#94a3b8",
-                      marginBottom: "0.375rem",
-                    }}
-                  >
-                    Key Points
-                  </p>
-                  <ul
-                    style={{
-                      margin: 0,
-                      paddingLeft: "1.1rem",
-                      display: "flex",
-                      flexDirection: "column",
-                      gap: "0.25rem",
-                    }}
-                  >
-                    {result.summary.issues.map((issue, i) => (
-                      <li
-                        key={i}
-                        style={{
-                          fontSize: "0.8125rem",
-                          color: "#475569",
-                          lineHeight: 1.5,
-                        }}
-                      >
-                        {issue}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-                <div>
-                  <p
-                    style={{
-                      fontSize: "0.6875rem",
-                      fontWeight: 700,
-                      letterSpacing: "0.1em",
-                      textTransform: "uppercase",
-                      color: "#94a3b8",
-                      marginBottom: "0.375rem",
-                    }}
-                  >
-                    Meeting Angles
-                  </p>
-                  <ol
-                    style={{
-                      margin: 0,
-                      paddingLeft: "1.1rem",
-                      display: "flex",
-                      flexDirection: "column",
-                      gap: "0.25rem",
-                    }}
-                  >
-                    {result.summary.talkingPoints.map((point, i) => (
-                      <li
-                        key={i}
-                        style={{
-                          fontSize: "0.8125rem",
-                          color: "#475569",
-                          lineHeight: 1.5,
-                        }}
-                      >
-                        {point}
-                      </li>
-                    ))}
-                  </ol>
+                <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+                  {([
+                    { label: "Key Points",        items: result.summary.issues,                                             ordered: false, itemColor: "#475569" },
+                    { label: "Meeting Angles",     items: result.summary.talkingPoints,                                      ordered: true,  itemColor: "#475569" },
+                    ...(result.summary.riskIndicators?.length    ? [{ label: "Risk Indicators",   items: result.summary.riskIndicators,   ordered: false, itemColor: "#ef4444" }] : []),
+                    ...(result.summary.objectionHandlers?.length ? [{ label: "Objection Handlers", items: result.summary.objectionHandlers, ordered: true,  itemColor: "#475569" }] : []),
+                  ] as { label: string; items: string[]; ordered: boolean; itemColor: string }[]).map(({ label, items, ordered, itemColor }) => (
+                    <BriefCollapse
+                      key={label}
+                      label={label}
+                      items={items}
+                      ordered={ordered}
+                      itemColor={itemColor}
+                      open={openBriefSection === label}
+                      onToggle={() => setOpenBriefSection(openBriefSection === label ? null : label)}
+                    />
+                  ))}
                 </div>
               </div>
             </div>
@@ -518,6 +573,15 @@ export function EaluminateResultsPanel({
                             letterSpacing: "-0.01em",
                           }}
                         >
+                          <span
+                            style={{
+                              color: "#94a3b8",
+                              fontWeight: 400,
+                              marginRight: "0.35rem",
+                            }}
+                          >
+                            {i + 1}.
+                          </span>
                           {item.title}
                         </p>
                         <div
@@ -611,6 +675,54 @@ export function EaluminateResultsPanel({
                           >
                             {uiRisk}
                           </span>
+                          {useKeywords && item.keyword && (
+                            <>
+                              <span
+                                style={{
+                                  fontSize: "0.6875rem",
+                                  color: "#cbd5e1",
+                                }}
+                              >
+                                ·
+                              </span>
+                              <span
+                                style={{
+                                  fontSize: "0.6875rem",
+                                  fontWeight: 500,
+                                  color: "#6366f1",
+                                  backgroundColor: "rgba(99,102,241,0.08)",
+                                  padding: "0.125rem 0.5rem",
+                                  borderRadius: "999px",
+                                }}
+                              >
+                                {item.keyword}
+                              </span>
+                            </>
+                          )}
+                          {item.country && (
+                            <>
+                              <span
+                                style={{
+                                  fontSize: "0.6875rem",
+                                  color: "#cbd5e1",
+                                }}
+                              >
+                                ·
+                              </span>
+                              <span
+                                style={{
+                                  fontSize: "0.6875rem",
+                                  fontWeight: 500,
+                                  color: "#0ea5e9",
+                                  backgroundColor: "rgba(14,165,233,0.08)",
+                                  padding: "0.125rem 0.5rem",
+                                  borderRadius: "999px",
+                                }}
+                              >
+                                {item.country}
+                              </span>
+                            </>
+                          )}
                         </div>
                         {item.date && (
                           <span

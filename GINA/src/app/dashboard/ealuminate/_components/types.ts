@@ -3,6 +3,8 @@ import type { WebLink } from "@/lib/api";
 export interface PreAnalysisProfile {
   identity: string;
   background: string;
+  associations?: string;
+  recent_news?: string;
   negative_findings: string;
   positive_presence: string;
   reputation_notes: string;
@@ -12,6 +14,8 @@ export interface MeetingSummary {
   headline: string;
   issues: string[];
   talkingPoints: string[];
+  riskIndicators?: string[];
+  objectionHandlers?: string[];
 }
 
 export interface ScanResult {

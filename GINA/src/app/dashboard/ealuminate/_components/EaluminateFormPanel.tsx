@@ -7,6 +7,7 @@ import type {
   ReactNode,
   SetStateAction,
 } from "react";
+import { useState } from "react";
 import type { KeywordFocus, PreAnalysisProfile } from "./types";
 
 interface CountryPickerProps {
@@ -26,14 +27,20 @@ interface EaluminateFormPanelProps {
   preAnalysisDone: boolean;
   preAnalysisLoading: boolean;
   error: string;
+  subjectType: "individual" | "company";
+  setSubjectType: (value: "individual" | "company") => void;
   firstName: string;
   setFirstName: (value: string) => void;
   lastName: string;
   setLastName: (value: string) => void;
   company: string;
   setCompany: (value: string) => void;
-  country: string;
-  setCountry: (value: string) => void;
+  countries: string[];
+  setCountries: (value: string[]) => void;
+  email: string;
+  setEmail: (value: string) => void;
+  phone: string;
+  setPhone: (value: string) => void;
   description: string;
   keywordsCap: number;
   setKeywordsCap: (value: number) => void;
@@ -41,14 +48,15 @@ interface EaluminateFormPanelProps {
   handleDescriptionChange: (value: string) => void;
   handleFocusChange: (value: KeywordFocus) => void;
   handleResearch: () => void;
+  handleSkipToScan: () => void;
   preAnalysisProfile: PreAnalysisProfile | null;
   preAnalysisSummary: string;
   onExportReportMaster: () => void;
   keywordsReady: boolean;
   editableKeywords: string[];
   setEditableKeywords: Dispatch<SetStateAction<string[]>>;
-  resultsCap: number;
-  setResultsCap: (value: number) => void;
+  pagesCap: number;
+  setPagesCap: (value: number) => void;
   handleRunScan: () => void;
   loading: boolean;
   CountryPicker: ComponentType<CountryPickerProps>;
@@ -58,24 +66,230 @@ interface EaluminateFormPanelProps {
   labelStyle: CSSProperties;
   keywordsCapOptions: readonly number[];
   keywordFocusOptions: readonly { value: KeywordFocus; label: string }[];
-  resultsCapOptions: readonly number[];
+  pagesCapOptions: readonly number[];
+  reportLanguage: string;
+  setReportLanguage: (value: string) => void;
+  reportLanguageOptions: readonly { value: string; label: string }[];
+  useKeywords: boolean;
+  setUseKeywords: (value: boolean) => void;
+  scanFocus: KeywordFocus;
+  setScanFocus: (value: KeywordFocus) => void;
   pipeline: ReactNode;
 }
 
+const PROFILE_FIELD_COLORS: Record<string, string> = {
+  Identity: "#4479DA",
+  Background: "#6366f1",
+  Associations: "#f59e0b",
+  "Recent News": "#48D4B8",
+  "Negative Findings": "#ef4444",
+  "Positive Presence": "#4CAF50",
+  "Reputation Notes": "#94a3b8",
+};
+
+function ProfileCollapse({
+  label,
+  text,
+  open,
+  onToggle,
+}: {
+  label: string;
+  text: string;
+  open: boolean;
+  onToggle: () => void;
+}) {
+  const color = PROFILE_FIELD_COLORS[label] ?? "#4479DA";
+  return (
+    <div
+      onClick={onToggle}
+      style={{
+        display: "flex",
+        borderRadius: "0.875rem",
+        overflow: "hidden",
+        background: "#fff",
+        border: "1px solid #e2e8f0",
+        cursor: "pointer",
+        transition: "border-color 0.15s ease",
+      }}
+      onMouseEnter={(e) => (e.currentTarget.style.borderColor = "#b6c4d4")}
+      onMouseLeave={(e) => (e.currentTarget.style.borderColor = "#e2e8f0")}
+    >
+      <div style={{ width: 4, flexShrink: 0, backgroundColor: color }} />
+      <div style={{ flex: 1, padding: "0.75rem 0.875rem", minWidth: 0 }}>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: "0.75rem",
+          }}
+        >
+          <p
+            style={{
+              margin: 0,
+              fontSize: "0.875rem",
+              fontWeight: 600,
+              color: "#1e293b",
+              lineHeight: 1.4,
+            }}
+          >
+            {label}
+          </p>
+          <svg
+            width="12"
+            height="12"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="#cbd5e1"
+            strokeWidth="2.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            style={{
+              flexShrink: 0,
+              transition: "transform 0.2s ease",
+              transform: open ? "rotate(180deg)" : "rotate(0deg)",
+            }}
+          >
+            <path d="M6 9l6 6 6-6" />
+          </svg>
+        </div>
+        {open && (
+          <p
+            style={{
+              margin: "0.625rem 0 0",
+              fontSize: "0.8125rem",
+              color: "#64748b",
+              lineHeight: 1.65,
+              borderTop: "1px solid #f1f5f9",
+              paddingTop: "0.625rem",
+            }}
+          >
+            {text}
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function CountryMultiPicker({
+  countries,
+  setCountries,
+  CountryPicker,
+  labelStyle,
+}: {
+  countries: string[];
+  setCountries: (v: string[]) => void;
+  CountryPicker: ComponentType<{
+    value: string;
+    onChange: (v: string) => void;
+    required?: boolean;
+  }>;
+  labelStyle: CSSProperties;
+}) {
+  const [pickerValue, setPickerValue] = useState("");
+
+  const addCountry = (v: string) => {
+    if (!v || countries.includes(v)) return;
+    setCountries([...countries, v]);
+    setPickerValue("");
+  };
+
+  const removeCountry = (v: string) =>
+    setCountries(countries.filter((c) => c !== v));
+
+  return (
+    <div>
+      <label style={labelStyle}>Country *</label>
+      <CountryPicker
+        value={pickerValue}
+        onChange={(v) => {
+          setPickerValue(v);
+          addCountry(v);
+        }}
+      />
+      {countries.length > 0 && (
+        <div
+          style={{
+            display: "flex",
+            flexWrap: "wrap",
+            gap: "0.4rem",
+            marginTop: "0.5rem",
+          }}
+        >
+          {countries.map((c) => (
+            <span
+              key={c}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "0.3rem",
+                padding: "0.2rem 0.65rem",
+                borderRadius: "999px",
+                backgroundColor: "#4479DA",
+                color: "#fff",
+                fontSize: "0.8125rem",
+                fontWeight: 500,
+              }}
+            >
+              {c}
+              <button
+                type="button"
+                onClick={() => removeCountry(c)}
+                style={{
+                  background: "none",
+                  border: "none",
+                  cursor: "pointer",
+                  padding: 0,
+                  lineHeight: 1,
+                  color: "rgba(255,255,255,0.8)",
+                  fontSize: "1rem",
+                  display: "flex",
+                  alignItems: "center",
+                }}
+                aria-label={`Remove ${c}`}
+              >
+                ×
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+      {countries.length === 0 && (
+        <input
+          aria-hidden="true"
+          value=""
+          onChange={() => {}}
+          required
+          style={{ position: "absolute", opacity: 0, width: 0, height: 0 }}
+        />
+      )}
+    </div>
+  );
+}
+
 export function EaluminateFormPanel(props: EaluminateFormPanelProps) {
+  const [openProfileField, setOpenProfileField] = useState<string | null>(null);
+
   const {
     scanComplete,
     preAnalysisDone,
     preAnalysisLoading,
     error,
+    subjectType,
+    setSubjectType,
     firstName,
     setFirstName,
     lastName,
     setLastName,
     company,
     setCompany,
-    country,
-    setCountry,
+    countries,
+    setCountries,
+    email,
+    setEmail,
+    phone,
+    setPhone,
     description,
     keywordsCap,
     setKeywordsCap,
@@ -89,8 +303,8 @@ export function EaluminateFormPanel(props: EaluminateFormPanelProps) {
     keywordsReady,
     editableKeywords,
     setEditableKeywords,
-    resultsCap,
-    setResultsCap,
+    pagesCap,
+    setPagesCap,
     handleRunScan,
     loading,
     CountryPicker,
@@ -100,8 +314,16 @@ export function EaluminateFormPanel(props: EaluminateFormPanelProps) {
     labelStyle,
     keywordsCapOptions,
     keywordFocusOptions,
-    resultsCapOptions,
+    pagesCapOptions,
+    reportLanguage,
+    setReportLanguage,
+    reportLanguageOptions,
+    useKeywords,
+    setUseKeywords,
+    scanFocus,
+    setScanFocus,
     pipeline,
+    handleSkipToScan,
   } = props;
 
   return (
@@ -155,7 +377,13 @@ export function EaluminateFormPanel(props: EaluminateFormPanelProps) {
         className="eal-card-body"
         onSubmit={(e) => {
           e.preventDefault();
-          handleResearch();
+          const submitter = (e.nativeEvent as SubmitEvent)
+            .submitter as HTMLButtonElement;
+          if (submitter?.name === "skip") {
+            handleSkipToScan();
+          } else {
+            handleResearch();
+          }
         }}
       >
         <div
@@ -167,45 +395,113 @@ export function EaluminateFormPanel(props: EaluminateFormPanelProps) {
             gap: "1.25rem",
           }}
         >
-          <div className="lead-name-grid">
-            <div>
-              <label style={labelStyle}>First Name *</label>
-              <input
-                type="text"
-                value={firstName}
-                onChange={(e) => setFirstName(e.target.value)}
-                placeholder="e.g. John"
-                required
-                style={inputStyle}
-              />
-            </div>
-            <div>
-              <label style={labelStyle}>Last Name *</label>
-              <input
-                type="text"
-                value={lastName}
-                onChange={(e) => setLastName(e.target.value)}
-                placeholder="e.g. Smith"
-                required
-                style={inputStyle}
-              />
+          <div>
+            <label style={labelStyle}>Subject Type</label>
+            <div style={{ display: "flex", gap: "0.5rem" }}>
+              {(["individual", "company"] as const).map((type) => (
+                <button
+                  key={type}
+                  type="button"
+                  onClick={() => setSubjectType(type)}
+                  style={{
+                    padding: "0.4rem 1rem",
+                    borderRadius: "999px",
+                    fontSize: "0.875rem",
+                    fontWeight: 500,
+                    cursor: "pointer",
+                    transition: "all 0.15s",
+                    border: "1.5px solid",
+                    borderColor:
+                      subjectType === type
+                        ? "#4479DA"
+                        : "var(--color-border, #e2e8f0)",
+                    backgroundColor:
+                      subjectType === type ? "#eef3ff" : "#ffffff",
+                    color:
+                      subjectType === type
+                        ? "#4479DA"
+                        : "var(--color-muted, #64748b)",
+                    textTransform: "capitalize",
+                  }}
+                >
+                  {type}
+                </button>
+              ))}
             </div>
           </div>
 
+          {subjectType === "individual" && (
+            <div className="lead-name-grid">
+              <div>
+                <label style={labelStyle}>First Name *</label>
+                <input
+                  type="text"
+                  value={firstName}
+                  onChange={(e) => setFirstName(e.target.value)}
+                  placeholder="e.g. John"
+                  required
+                  style={inputStyle}
+                />
+              </div>
+              <div>
+                <label style={labelStyle}>Last Name *</label>
+                <input
+                  type="text"
+                  value={lastName}
+                  onChange={(e) => setLastName(e.target.value)}
+                  placeholder="e.g. Smith"
+                  required
+                  style={inputStyle}
+                />
+              </div>
+            </div>
+          )}
+
           <div>
-            <label style={labelStyle}>Company</label>
+            <label style={labelStyle}>
+              Company{subjectType === "individual" ? " (optional)" : " *"}
+            </label>
             <input
               type="text"
               value={company}
               onChange={(e) => setCompany(e.target.value)}
-              placeholder="e.g. Acme Corp (optional)"
+              placeholder={
+                subjectType === "company"
+                  ? "e.g. Acme Corp"
+                  : "e.g. Acme Corp (optional)"
+              }
+              required={subjectType === "company"}
               style={inputStyle}
             />
           </div>
 
-          <div>
-            <label style={labelStyle}>Country *</label>
-            <CountryPicker value={country} onChange={setCountry} required />
+          <CountryMultiPicker
+            countries={countries}
+            setCountries={setCountries}
+            CountryPicker={CountryPicker}
+            labelStyle={labelStyle}
+          />
+          <div className="lead-name-grid">
+            <div>
+              <label style={labelStyle}>Email</label>
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="e.g. john@example.com (optional)"
+                style={inputStyle}
+              />
+            </div>
+            <div>
+              <label style={labelStyle}>Phone</label>
+              <input
+                type="tel"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                placeholder="e.g. +1 555 000 0000 (optional)"
+                style={inputStyle}
+              />
+            </div>
           </div>
 
           <div>
@@ -310,6 +606,49 @@ export function EaluminateFormPanel(props: EaluminateFormPanelProps) {
             </p>
           </div>
 
+          <div>
+            <label style={labelStyle}>Report Language</label>
+            <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+              {reportLanguageOptions.map((opt) => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => setReportLanguage(opt.value)}
+                  style={{
+                    padding: "0.4rem 1rem",
+                    borderRadius: "999px",
+                    fontSize: "0.875rem",
+                    fontWeight: 500,
+                    cursor: "pointer",
+                    transition: "all 0.15s",
+                    border: "1.5px solid",
+                    borderColor:
+                      reportLanguage === opt.value
+                        ? "#4479DA"
+                        : "var(--color-border, #e2e8f0)",
+                    backgroundColor:
+                      reportLanguage === opt.value ? "#eef3ff" : "#ffffff",
+                    color:
+                      reportLanguage === opt.value
+                        ? "#4479DA"
+                        : "var(--color-muted, #64748b)",
+                  }}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+            <p
+              style={{
+                margin: "0.375rem 0 0",
+                fontSize: "0.75rem",
+                color: "#94a3b8",
+              }}
+            >
+              Language used for all AI-generated report text
+            </p>
+          </div>
+
           {error && (
             <p style={{ margin: 0, fontSize: "0.875rem", color: "#ef4444" }}>
               {error}
@@ -341,7 +680,27 @@ export function EaluminateFormPanel(props: EaluminateFormPanelProps) {
             )}
           </button>
 
-          {preAnalysisDone && (
+          {!preAnalysisDone && !preAnalysisLoading && (
+            <button
+              type="submit"
+              name="skip"
+              style={{
+                cursor: "pointer",
+                fontSize: "0.9375rem",
+                fontWeight: 600,
+                color: "#4479da",
+                background: "rgba(68,121,218,0.07)",
+                border: "1.5px solid rgba(68,121,218,0.25)",
+                borderRadius: "999px",
+                padding: "0.55rem 1.5rem",
+                alignSelf: "center",
+              }}
+            >
+              Skip to Scan →
+            </button>
+          )}
+
+          {preAnalysisDone && preAnalysisSummary && (
             <div
               style={{
                 borderRadius: "0.875rem",
@@ -420,13 +779,19 @@ export function EaluminateFormPanel(props: EaluminateFormPanelProps) {
                   style={{
                     display: "flex",
                     flexDirection: "column",
-                    gap: "0.625rem",
+                    gap: "0.5rem",
                   }}
                 >
                   {(
                     [
                       ["Identity", preAnalysisProfile.identity],
                       ["Background", preAnalysisProfile.background],
+                      preAnalysisProfile.associations
+                        ? ["Associations", preAnalysisProfile.associations]
+                        : null,
+                      preAnalysisProfile.recent_news
+                        ? ["Recent News", preAnalysisProfile.recent_news]
+                        : null,
                       [
                         "Negative Findings",
                         preAnalysisProfile.negative_findings,
@@ -436,30 +801,19 @@ export function EaluminateFormPanel(props: EaluminateFormPanelProps) {
                         preAnalysisProfile.positive_presence,
                       ],
                       ["Reputation Notes", preAnalysisProfile.reputation_notes],
-                    ] as [string, string][]
+                    ].filter(Boolean) as [string, string][]
                   ).map(([label, text]) => (
-                    <div key={label}>
-                      <p
-                        style={{
-                          fontSize: "0.75rem",
-                          fontWeight: 600,
-                          margin: "0 0 0.125rem",
-                          color: "var(--color-foreground, #1e293b)",
-                        }}
-                      >
-                        {label}
-                      </p>
-                      <p
-                        style={{
-                          fontSize: "0.8125rem",
-                          color: "var(--color-muted, #64748b)",
-                          lineHeight: 1.65,
-                          margin: 0,
-                        }}
-                      >
-                        {text}
-                      </p>
-                    </div>
+                    <ProfileCollapse
+                      key={label}
+                      label={label}
+                      text={text}
+                      open={openProfileField === label}
+                      onToggle={() =>
+                        setOpenProfileField(
+                          openProfileField === label ? null : label,
+                        )
+                      }
+                    />
                   ))}
                 </div>
               ) : (
@@ -480,24 +834,18 @@ export function EaluminateFormPanel(props: EaluminateFormPanelProps) {
           {keywordsReady && (
             <>
               <div>
-                <label style={labelStyle}>
-                  Keywords — edit or add your own
-                </label>
-                <KeywordsEditor
-                  keywords={editableKeywords}
-                  setKeywords={setEditableKeywords}
-                />
-              </div>
-              <div>
-                <label style={labelStyle}>Results Cap</label>
-                <div
-                  style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}
-                >
-                  {resultsCapOptions.map((cap) => (
+                <label style={labelStyle}>Use Keywords</label>
+                <div style={{ display: "flex", gap: "0.5rem" }}>
+                  {(
+                    [
+                      { value: true, label: "Yes" },
+                      { value: false, label: "No" },
+                    ] as const
+                  ).map((opt) => (
                     <button
-                      key={cap}
+                      key={String(opt.value)}
                       type="button"
-                      onClick={() => setResultsCap(cap)}
+                      onClick={() => setUseKeywords(opt.value)}
                       style={{
                         padding: "0.4rem 1rem",
                         borderRadius: "999px",
@@ -507,18 +855,18 @@ export function EaluminateFormPanel(props: EaluminateFormPanelProps) {
                         transition: "all 0.15s",
                         border: "1.5px solid",
                         borderColor:
-                          resultsCap === cap
+                          useKeywords === opt.value
                             ? "#4479DA"
                             : "var(--color-border, #e2e8f0)",
                         backgroundColor:
-                          resultsCap === cap ? "#eef3ff" : "#ffffff",
+                          useKeywords === opt.value ? "#eef3ff" : "#ffffff",
                         color:
-                          resultsCap === cap
+                          useKeywords === opt.value
                             ? "#4479DA"
                             : "var(--color-muted, #64748b)",
                       }}
                     >
-                      {cap}
+                      {opt.label}
                     </button>
                   ))}
                 </div>
@@ -529,12 +877,121 @@ export function EaluminateFormPanel(props: EaluminateFormPanelProps) {
                     color: "#94a3b8",
                   }}
                 >
-                  Results fetched and analysed per keyword
+                  {useKeywords
+                    ? "Searches using keyword-based queries"
+                    : "Searches by name/company only — no keywords"}
+                </p>
+              </div>
+              <div>
+                <label style={labelStyle}>Scan Focus</label>
+                <div
+                  style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}
+                >
+                  {keywordFocusOptions
+                    .filter(({ value }) => value !== "neutral")
+                    .map(({ value, label }) => (
+                      <button
+                        key={value}
+                        type="button"
+                        onClick={() => setScanFocus(value)}
+                        style={{
+                          padding: "0.4rem 1rem",
+                          borderRadius: "999px",
+                          fontSize: "0.875rem",
+                          fontWeight: 500,
+                          cursor: "pointer",
+                          transition: "all 0.15s",
+                          border: "1.5px solid",
+                          borderColor:
+                            scanFocus === value
+                              ? "#4479DA"
+                              : "var(--color-border, #e2e8f0)",
+                          backgroundColor:
+                            scanFocus === value ? "#eef3ff" : "#ffffff",
+                          color:
+                            scanFocus === value
+                              ? "#4479DA"
+                              : "var(--color-muted, #64748b)",
+                        }}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                </div>
+                <p
+                  style={{
+                    margin: "0.375rem 0 0",
+                    fontSize: "0.75rem",
+                    color: "#94a3b8",
+                  }}
+                >
+                  Filter scan results by sentiment type
+                </p>
+              </div>
+              <div
+                style={{
+                  opacity: useKeywords ? 1 : 0.4,
+                  pointerEvents: useKeywords ? "auto" : "none",
+                  transition: "opacity 0.15s",
+                }}
+              >
+                <label style={labelStyle}>
+                  Keywords — edit or add your own
+                </label>
+                <KeywordsEditor
+                  keywords={editableKeywords}
+                  setKeywords={setEditableKeywords}
+                />
+              </div>
+              <div>
+                <label style={labelStyle}>Pages per Keyword/Country Pair</label>
+                <div
+                  style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}
+                >
+                  {pagesCapOptions.map((page) => (
+                    <button
+                      key={page}
+                      type="button"
+                      onClick={() => setPagesCap(page)}
+                      style={{
+                        padding: "0.4rem 1rem",
+                        borderRadius: "999px",
+                        fontSize: "0.875rem",
+                        fontWeight: 500,
+                        cursor: "pointer",
+                        transition: "all 0.15s",
+                        border: "1.5px solid",
+                        borderColor:
+                          pagesCap === page
+                            ? "#4479DA"
+                            : "var(--color-border, #e2e8f0)",
+                        backgroundColor:
+                          pagesCap === page ? "#eef3ff" : "#ffffff",
+                        color:
+                          pagesCap === page
+                            ? "#4479DA"
+                            : "var(--color-muted, #64748b)",
+                      }}
+                    >
+                      {page}
+                    </button>
+                  ))}
+                </div>
+                <p
+                  style={{
+                    margin: "0.375rem 0 0",
+                    fontSize: "0.75rem",
+                    color: "#94a3b8",
+                  }}
+                >
+                  Results fetched and analysed per keyword/country pair
                 </p>
               </div>
               <button
                 type="button"
-                disabled={loading || editableKeywords.length === 0}
+                disabled={
+                  loading || (useKeywords && editableKeywords.length === 0)
+                }
                 onClick={handleRunScan}
                 className="glow-button"
                 style={{
@@ -542,7 +999,10 @@ export function EaluminateFormPanel(props: EaluminateFormPanelProps) {
                   padding: "0.75rem",
                   fontWeight: 700,
                   borderRadius: "999px",
-                  opacity: loading || editableKeywords.length === 0 ? 0.5 : 1,
+                  opacity:
+                    loading || (useKeywords && editableKeywords.length === 0)
+                      ? 0.5
+                      : 1,
                   cursor: "pointer",
                 }}
               >

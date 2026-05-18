@@ -2,16 +2,6 @@ import { COUNTRY_NAME_TO_ISO } from "@/lib/countries";
 import Anthropic from "@anthropic-ai/sdk";
 import { NextRequest, NextResponse } from "next/server";
 
-interface SerperResult {
-  title: string;
-  link: string;
-  snippet: string;
-}
-
-interface SerperResponse {
-  organic: SerperResult[];
-}
-
 const NATIONALITY_ALIASES: Record<string, string> = {
   american: "US",
   australian: "AU",
@@ -106,13 +96,34 @@ const COUNTRY_TO_LANGUAGE: Record<string, string> = {
 };
 
 const LANGUAGE_CODE_TO_NAME: Record<string, string> = {
-  en: "English", it: "Italian", es: "Spanish", fr: "French",
-  de: "German", pt: "Portuguese", nl: "Dutch", pl: "Polish",
-  ro: "Romanian", hu: "Hungarian", cs: "Czech", ru: "Russian",
-  uk: "Ukrainian", tr: "Turkish", ja: "Japanese", ko: "Korean",
-  "zh-CN": "Chinese", ar: "Arabic", hi: "Hindi", th: "Thai",
-  vi: "Vietnamese", id: "Indonesian", ms: "Malay", el: "Greek",
-  sv: "Swedish", no: "Norwegian", fi: "Finnish", da: "Danish",
+  en: "English",
+  it: "Italian",
+  es: "Spanish",
+  fr: "French",
+  de: "German",
+  pt: "Portuguese",
+  nl: "Dutch",
+  pl: "Polish",
+  ro: "Romanian",
+  hu: "Hungarian",
+  cs: "Czech",
+  ru: "Russian",
+  uk: "Ukrainian",
+  tr: "Turkish",
+  ja: "Japanese",
+  ko: "Korean",
+  "zh-CN": "Chinese",
+  ar: "Arabic",
+  hi: "Hindi",
+  th: "Thai",
+  vi: "Vietnamese",
+  id: "Indonesian",
+  ms: "Malay",
+  el: "Greek",
+  sv: "Swedish",
+  no: "Norwegian",
+  fi: "Finnish",
+  da: "Danish",
 };
 
 function countryCodeFromName(country: string): string | null {
@@ -120,35 +131,11 @@ function countryCodeFromName(country: string): string | null {
   return COUNTRY_NAME_TO_ISO[k] ?? NATIONALITY_ALIASES[k] ?? null;
 }
 
-async function searchSerper(
-  query: string,
-  countryCode: string | null,
-  numResults = 5,
-): Promise<SerperResult[]> {
-  const serperKey = process.env.SERPER_API_KEY;
-  if (!serperKey) throw new Error("SERPER_API_KEY not configured");
-
-  const payload: Record<string, unknown> = { q: query, num: numResults };
-  if (countryCode) payload.gl = countryCode.toLowerCase();
-  const lang = countryCode
-    ? COUNTRY_TO_LANGUAGE[countryCode.toUpperCase()]
-    : null;
-  if (lang) payload.hl = lang;
-
-  const res = await fetch("https://google.serper.dev/search", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "X-API-KEY": serperKey },
-    body: JSON.stringify(payload),
-  });
-
-  if (!res.ok) return [];
-  const data = (await res.json()) as SerperResponse;
-  return data.organic ?? [];
-}
-
 interface PreAnalysisProfile {
   identity: string;
   background: string;
+  associations: string;
+  recent_news: string;
   negative_findings: string;
   positive_presence: string;
   reputation_notes: string;
@@ -156,8 +143,9 @@ interface PreAnalysisProfile {
 
 const FALLBACK_PROFILE: PreAnalysisProfile = {
   identity: "No public information found for this subject.",
-  background:
-    "Either no public information found or the context provided is not enough to generate a profile.",
+  background: "Either no public information found or the context provided is not enough to generate a profile.",
+  associations: "No known associations found in available sources.",
+  recent_news: "No recent news found in available sources.",
   negative_findings: "No negative findings in available sources.",
   positive_presence: "No positive coverage found in available sources.",
   reputation_notes: "Insufficient data to assess reputation.",
@@ -166,149 +154,188 @@ const FALLBACK_PROFILE: PreAnalysisProfile = {
 const FALLBACK = {
   profile: FALLBACK_PROFILE,
   keywords: [],
-  sources: [],
 };
 
 export async function POST(req: NextRequest) {
+  const token = req.headers.get("Authorization");
+  if (!token) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
+  const authCheck = await fetch(`${apiUrl}/web-analysts/me`, {
+    headers: { Authorization: token },
+  }).catch(() => null);
+  if (!authCheck || !authCheck.ok) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   try {
     const body = await req.json();
     const {
       firstName,
       lastName,
       company,
-      country,
+      country: countrySingle,
+      countries: countriesRaw,
       description,
       keywordsCap = 5,
       keywordFocus = "all",
+      subjectType = "individual",
+      reportLanguage,
     } = body as {
-      firstName: string;
-      lastName: string;
+      firstName?: string;
+      lastName?: string;
       company?: string;
-      country: string;
+      country?: string;
+      countries?: string[];
       description: string;
       keywordsCap?: number;
       keywordFocus?: string;
+      subjectType?: "individual" | "company";
+      reportLanguage?: string;
     };
 
-    if (!firstName || !lastName || !country) {
+    // Normalize to array — accept both legacy `country` string and new `countries` array
+    const countries: string[] = Array.isArray(countriesRaw) && countriesRaw.length > 0
+      ? countriesRaw
+      : countrySingle ? [countrySingle] : [];
+    const country = countries[0] ?? "";
+
+    if (!countries.length) {
       return NextResponse.json(
-        { error: "firstName, lastName and country are required." },
+        { error: "At least one country is required." },
+        { status: 400 },
+      );
+    }
+    if (subjectType === "individual" && (!firstName || !lastName)) {
+      return NextResponse.json(
+        {
+          error: "firstName and lastName are required for individual subjects.",
+        },
+        { status: 400 },
+      );
+    }
+    if (subjectType === "company" && !company) {
+      return NextResponse.json(
+        { error: "company is required for company subjects." },
         { status: 400 },
       );
     }
 
     const cap = Math.min(8, Math.max(3, Number(keywordsCap) || 5));
+    const REPORT_LANG_MAP: Record<string, string> = {
+      en: "English",
+      it: "Italian",
+      es: "Spanish",
+    };
     const countryCode = countryCodeFromName(country);
-    const lang = countryCode ? COUNTRY_TO_LANGUAGE[countryCode.toUpperCase()] : null;
-    const languageName = (lang ? LANGUAGE_CODE_TO_NAME[lang] : null) ?? "English";
-    const fullName = `${firstName.trim()} ${lastName.trim()}`;
+    const lang = countryCode
+      ? COUNTRY_TO_LANGUAGE[countryCode.toUpperCase()]
+      : null;
+    const languageName = reportLanguage
+      ? (REPORT_LANG_MAP[reportLanguage] ?? "English")
+      : ((lang ? LANGUAGE_CODE_TO_NAME[lang] : null) ?? "English");
+    const fullName =
+      `${(firstName ?? "").trim()} ${(lastName ?? "").trim()}`.trim();
+    const subjectLabel =
+      subjectType === "company" ? (company ?? fullName) : fullName;
 
-    // Build 2–3 search queries
-    const queries: string[] = [`"${fullName}"`];
-    if (company?.trim()) queries.push(`"${fullName}" "${company.trim()}"`);
-    if (description?.trim()) {
-      const words = description.trim().split(/\s+/).slice(0, 6).join(" ");
-      queries.push(`"${fullName}" ${words}`);
-    }
-
-    // Run searches in parallel
-    const resultsPerQuery = await Promise.allSettled(
-      queries.map((q) => searchSerper(q, countryCode, 5)),
-    );
-
-    // Deduplicate by URL, collect up to 10
-    const seen = new Set<string>();
-    const organic: { title: string; url: string; snippet: string }[] = [];
-    for (const r of resultsPerQuery) {
-      if (r.status !== "fulfilled") continue;
-      for (const item of r.value) {
-        if (!seen.has(item.link) && organic.length < 10) {
-          seen.add(item.link);
-          organic.push({
-            title: item.title,
-            url: item.link,
-            snippet: item.snippet,
-          });
-        }
-      }
-    }
-
-    if (organic.length === 0) {
-      return NextResponse.json(FALLBACK);
-    }
-
-    // Ask Claude to summarise and suggest keywords
     const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-    const searchContext = organic
-      .map((r, i) => `[${i + 1}] ${r.title}\n${r.snippet}\nURL: ${r.url}`)
-      .join("\n\n");
+    const noNameInstruction =
+      subjectType === "company"
+        ? `Do NOT include the company name itself as a keyword.`
+        : `Do NOT include the person's name.`;
 
-    const userPrompt = `Subject: ${fullName}${company ? ` (${company})` : ""}
-Country: ${country}
-Description: ${description || "N/A"}
-
-Web search results:
-${searchContext}
-
-Respond ONLY with valid JSON in this exact shape:
-{
-  "profile": {
-    "identity": "<1-2 sentences: full name, known roles, nationality, area of operation>",
-    "background": "<2-3 sentences: professional history, companies, sector, notable activities>",
-    "negative_findings": "<2-4 sentences: legal issues, controversies, accusations, proceedings — if none found write 'No negative findings in available sources'>",
-    "positive_presence": "<2-3 sentences: positive coverage, awards, interviews, neutral public mentions>",
-    "reputation_notes": "<1-2 sentences: overall reputational assessment based solely on what was found>"
-  },
-  "keywords": ["<keyword1>", "<keyword2>", ...]
-}
-
-Rules:
-- Every field in profile must be populated — never return null or empty string
-- Base every statement strictly on the search results provided — do not invent facts
-- negative_findings: if operator description mentions specific issues, prioritise those
-- ${
+    const keywordFocusRule =
       {
-        negative: `keywords: up to ${cap} items (return as many as are well-supported, minimum 1) — ADVERSE reputation search terms only: legal disputes, fraud, misconduct, scandal, complaints, litigation. Surface negative coverage. Do NOT include the person's name. All keywords must be in ${languageName}.`,
-        positive: `keywords: up to ${cap} items (return as many as are well-supported, minimum 1) — POSITIVE reputation search terms only: achievements, awards, leadership, philanthropy, recognition. Surface positive coverage. Do NOT include the person's name. All keywords must be in ${languageName}.`,
-        neutral: `keywords: up to ${cap} items (return as many as are well-supported, minimum 1) — NEUTRAL factual search terms only: role, organisation, sector, projects. Objective, no sentiment bias. Do NOT include the person's name. All keywords must be in ${languageName}.`,
-        all: `keywords: up to ${cap} items (return as many as are well-supported, minimum 1), 1-2 words each, balanced mix across positive, negative and neutral reputation angles. Do NOT include the person's name. All keywords must be in ${languageName}.`,
+        negative: `keywords: up to ${cap} items (minimum 1) — ADVERSE terms only: legal disputes, fraud, misconduct, scandal, complaints, litigation. ${noNameInstruction} All keywords in ${languageName}.`,
+        positive: `keywords: up to ${cap} items (minimum 1) — POSITIVE terms only: achievements, awards, leadership, philanthropy, recognition. ${noNameInstruction} All keywords in ${languageName}.`,
+        neutral: `keywords: up to ${cap} items (minimum 1) — NEUTRAL factual terms only: role, organisation, sector, projects. ${noNameInstruction} All keywords in ${languageName}.`,
+        all: `keywords: up to ${cap} items (minimum 1), 1-2 words each, balanced mix across positive, negative and neutral reputation angles. ${noNameInstruction} All keywords in ${languageName}.`,
       }[keywordFocus] ??
-      `keywords: up to ${cap} items (minimum 1), reputation-relevant, do NOT include the person's name. All keywords must be in ${languageName}.`
-    }`;
+      `keywords: up to ${cap} items (minimum 1), reputation-relevant. ${noNameInstruction} All keywords in ${languageName}.`;
+
+    const countriesLabel = countries.join(", ");
+    const searchSystem =
+      subjectType === "company"
+        ? `You are a senior investigative research analyst with web search access. Search thoroughly for public information about the company described. Run multiple searches: company name alone, company name + country (run for each country listed: ${countriesLabel}), company name + industry, company name + legal or controversy keywords, company name + key executives, company name + news ${new Date().getFullYear()}. For each search, look for: founding history and ownership, business model and revenue streams, key executives and leadership, regulatory filings or sanctions, litigation or legal disputes, customer reviews or complaints, financial performance, industry reputation, media coverage, partnerships and affiliations. Also explicitly search for the latest news — recent articles, press releases, announcements, incidents, or developments from the past 12 months. Write a detailed, comprehensive factual summary covering all angles — leave no dimension unexplored. Write in ${languageName}.`
+        : `You are a senior investigative research analyst with web search access. Search thoroughly for public information about the person described. Run multiple searches: full name alone, name + company, name + each country (${countriesLabel}), name + industry, name + legal or controversy keywords, name + news ${new Date().getFullYear()}. For each search, look for: career history and current role, educational background, company affiliations and business ventures, legal proceedings or regulatory actions, media mentions and interviews, social media presence, awards or public recognition, controversies or allegations, known associates and partners. Also explicitly search for the latest news — recent articles, interviews, public statements, incidents, or developments involving this person from the past 12 months. Write a detailed, comprehensive factual summary covering all angles — leave no dimension unexplored. Write in ${languageName}.`;
+
+    const searchContent =
+      subjectType === "company"
+        ? `Research this company:\n\nCompany: ${company}\nCountry: ${countriesLabel}${description?.trim() ? `\nContext: ${description.trim()}` : ""}`
+        : `Research this person:\n\nName: ${fullName}${company ? `\nCompany: ${company}` : ""}\nCountry: ${countriesLabel}${description?.trim() ? `\nContext: ${description.trim()}` : ""}`;
+
+    const formatIdentityHint =
+      subjectType === "company"
+        ? "<2-3 sentences: company name, industry, country of origin, area of operation, size or scale indicator>"
+        : "<2-3 sentences: full name, known professional roles, nationality, geographic base, industry sector>";
+    const formatBackgroundHint =
+      subjectType === "company"
+        ? "<5-7 sentences: founding story, business model, growth trajectory, key products or services, market position, major clients or partnerships, geographic reach>"
+        : "<5-7 sentences: career arc from early career to present, key employers, roles held, major projects or deals, educational background if known, industry standing>";
+    const formatAssociationsHint =
+      subjectType === "company"
+        ? "<3-5 sentences: parent company or subsidiaries, key investors or shareholders, notable clients or partners, industry associations, executive network>"
+        : "<3-5 sentences: known business partners, employers, investors, political or professional affiliations, notable co-founders or collaborators, family business connections>";
 
     let profile: PreAnalysisProfile = FALLBACK_PROFILE;
     let keywords: string[] = [];
 
     try {
-      const msg = await anthropic.messages.create({
+      // Call 1: web search → prose research summary
+      const searchMsg = await anthropic.messages.create({
         model: "claude-sonnet-4-6",
-        max_tokens: 1024,
-        system:
-          `You are a research analyst. Analyse web search results about a person and produce a structured reputation profile. IMPORTANT: Write ALL profile field values and ALL keywords in ${languageName}. Output only valid JSON, no markdown fences, no extra keys.`,
-        messages: [{ role: "user", content: userPrompt }],
+        max_tokens: 4096,
+        system: searchSystem,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        tools: [{ type: "web_search_20260209", name: "web_search" } as any],
+        messages: [{ role: "user", content: searchContent }],
       });
 
-      const raw =
-        msg.content[0].type === "text" ? msg.content[0].text.trim() : "";
-      const text = raw.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
-      const parsed = JSON.parse(text) as {
-        profile: PreAnalysisProfile;
-        keywords: string[];
-      };
-      profile = parsed.profile ?? profile;
-      keywords = Array.isArray(parsed.keywords)
-        ? parsed.keywords.slice(0, cap)
-        : [];
-    } catch {
-      // Claude failed — return fallback profile without keywords
+      const researchSummary = searchMsg.content
+        .filter((b) => b.type === "text")
+        .map((b) => (b as { type: "text"; text: string }).text)
+        .join("\n")
+        .trim();
+
+      if (!researchSummary) {
+        return NextResponse.json({ profile, keywords });
+      }
+
+      // Call 2: format prose → structured JSON (no tools)
+      const formatMsg = await anthropic.messages.create({
+        model: "claude-sonnet-4-6",
+        max_tokens: 2048,
+        system: `You are a data formatter. Convert the research summary into the specified JSON shape. Write ALL field values and ALL keywords in ${languageName}. Output ONLY valid JSON — no markdown fences, no explanation, no extra keys.`,
+        messages: [
+          {
+            role: "user",
+            content: `Research summary about ${subjectLabel}:\n${researchSummary}\n\nReturn ONLY this JSON (no explanation, no markdown):\n{\n  "profile": {\n    "identity": "${formatIdentityHint}",\n    "background": "${formatBackgroundHint}",\n    "associations": "${formatAssociationsHint}",\n    "recent_news": "<3-6 sentences: latest news, articles, announcements, incidents, or developments from the past 12 months — include dates where available; if none found write 'No recent news found in available sources'>",\n    "negative_findings": "<4-8 sentences: legal proceedings, regulatory sanctions, fraud allegations, controversies, scandals, complaints — include dates and specifics where available; if none write 'No negative findings in available sources'>",\n    "positive_presence": "<3-6 sentences: awards, recognitions, successful ventures, positive media coverage, industry leadership, philanthropic activities>",\n    "reputation_notes": "<2-4 sentences: overall reputational standing, key risk indicators, public perception summary, recommended scrutiny level>"\n  },\n  "keywords": ["<keyword1>", ...]\n}\nRules: every field fully populated with detail, based only on the summary above, ${keywordFocusRule}`,
+          },
+        ],
+      });
+
+      const textBlock = formatMsg.content.find((b) => b.type === "text");
+      if (textBlock && textBlock.type === "text") {
+        const jsonMatch = textBlock.text.trim().match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          const parsed = JSON.parse(jsonMatch[0]) as {
+            profile: PreAnalysisProfile;
+            keywords: string[];
+          };
+          profile = parsed.profile ?? profile;
+          keywords = Array.isArray(parsed.keywords)
+            ? parsed.keywords.slice(0, cap)
+            : [];
+        }
+      }
+    } catch (e) {
+      console.error("[pre-analysis] error:", e);
     }
 
-    return NextResponse.json({
-      profile,
-      keywords,
-      sources: organic.slice(0, 5),
-    });
+    return NextResponse.json({ profile, keywords });
   } catch (err) {
     console.error("[pre-analysis]", err);
     return NextResponse.json(FALLBACK);
