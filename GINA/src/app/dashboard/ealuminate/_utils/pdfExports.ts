@@ -19,7 +19,8 @@ interface ExportReportMasterPdfParams {
   editableKeywords: string[];
 }
 
-function esc(v: string): string {
+function esc(v: string | null | undefined): string {
+  if (!v) return "";
   return v
     .replaceAll("&", "&amp;")
     .replaceAll("<", "&lt;")
