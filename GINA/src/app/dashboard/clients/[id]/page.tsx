@@ -5,6 +5,9 @@ import {
   ClientDetail,
   ClientEventType,
   clientsApi,
+  isAdmin,
+  WebAnalystItem,
+  webAnalysts,
 } from "@/lib/api";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
@@ -989,6 +992,12 @@ export default function ClientDetailPage() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
 
+  const adminView = isAdmin();
+  const [analystsList, setAnalystsList] = useState<WebAnalystItem[]>([]);
+  const [reassignOpen, setReassignOpen] = useState(false);
+  const [reassignId, setReassignId] = useState<string>("");
+  const [reassigning, setReassigning] = useState(false);
+
   const reload = async () => {
     const data = await clientsApi.get(id).catch(() => null);
     if (data) setClient(data);
@@ -1001,6 +1010,27 @@ export default function ClientDetailPage() {
       .catch(() => {})
       .finally(() => setLoading(false));
   }, [id]);
+
+  useEffect(() => {
+    if (adminView)
+      webAnalysts
+        .list()
+        .then(setAnalystsList)
+        .catch(() => {});
+  }, [adminView]);
+
+  const handleReassign = async () => {
+    setReassigning(true);
+    try {
+      await clientsApi.assign(id, reassignId || null);
+      setReassignOpen(false);
+      await reload();
+    } catch {
+      /* non-fatal */
+    } finally {
+      setReassigning(false);
+    }
+  };
 
   const handleAddEvent = async (payload: ClientAddEventPayload) => {
     setSubmitting(true);
@@ -1272,6 +1302,214 @@ ${timelineRows || "<p>No timeline events available.</p>"}
       </div>
 
       <div style={{ maxWidth: "42rem" }}>
+        {/* Admin-only: assignment info + reassign */}
+        {adminView && (
+          <div
+            className="glass glow-border"
+            style={{
+              borderRadius: "0.875rem",
+              padding: "1.25rem",
+              marginBottom: "1.25rem",
+            }}
+          >
+            <p
+              style={{
+                fontSize: "0.875rem",
+                fontWeight: 700,
+                color: "var(--color-foreground, #1e293b)",
+                margin: "0 0 0.875rem",
+              }}
+            >
+              Assignment Info
+            </p>
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                gap: "0.5rem",
+                marginBottom: "0.875rem",
+              }}
+            >
+              <div
+                style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}
+              >
+                <span
+                  style={{
+                    fontSize: "0.75rem",
+                    fontWeight: 600,
+                    color: "#94a3b8",
+                    minWidth: 140,
+                  }}
+                >
+                  Researched by
+                </span>
+                <span style={{ fontSize: "0.8125rem", color: "#1e293b" }}>
+                  {client.researched_by_name ?? "—"}
+                  {client.researched_by_role && (
+                    <span
+                      style={{
+                        marginLeft: "0.375rem",
+                        fontSize: "0.6875rem",
+                        fontWeight: 600,
+                        color: "#4479da",
+                        backgroundColor: "rgba(68,121,218,0.08)",
+                        padding: "0.1rem 0.5rem",
+                        borderRadius: "999px",
+                        border: "1px solid rgba(68,121,218,0.2)",
+                      }}
+                    >
+                      {client.researched_by_role}
+                    </span>
+                  )}
+                </span>
+              </div>
+              {client.scanned_by_name && (
+                <div
+                  style={{
+                    display: "flex",
+                    gap: "0.5rem",
+                    alignItems: "center",
+                  }}
+                >
+                  <span
+                    style={{
+                      fontSize: "0.75rem",
+                      fontWeight: 600,
+                      color: "#94a3b8",
+                      minWidth: 140,
+                    }}
+                  >
+                    Scanned by
+                  </span>
+                  <span style={{ fontSize: "0.8125rem", color: "#1e293b" }}>
+                    {client.scanned_by_name}
+                    {client.scanned_by_role && (
+                      <span
+                        style={{
+                          marginLeft: "0.375rem",
+                          fontSize: "0.6875rem",
+                          fontWeight: 600,
+                          color: "#4479da",
+                          backgroundColor: "rgba(68,121,218,0.08)",
+                          padding: "0.1rem 0.5rem",
+                          borderRadius: "999px",
+                          border: "1px solid rgba(68,121,218,0.2)",
+                        }}
+                      >
+                        {client.scanned_by_role}
+                      </span>
+                    )}
+                  </span>
+                </div>
+              )}
+              <div
+                style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}
+              >
+                <span
+                  style={{
+                    fontSize: "0.75rem",
+                    fontWeight: 600,
+                    color: "#94a3b8",
+                    minWidth: 140,
+                  }}
+                >
+                  Assigned to
+                </span>
+                <span style={{ fontSize: "0.8125rem", color: "#1e293b" }}>
+                  {client.assigned_to_name ?? (
+                    <span style={{ color: "#94a3b8", fontStyle: "italic" }}>
+                      Unassigned
+                    </span>
+                  )}
+                </span>
+              </div>
+            </div>
+
+            {!reassignOpen ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setReassignId(client.assigned_to_id ?? "");
+                  setReassignOpen(true);
+                }}
+                style={{
+                  padding: "0.4rem 1rem",
+                  borderRadius: "999px",
+                  fontSize: "0.8125rem",
+                  fontWeight: 600,
+                  border: "1.5px solid #e2e8f0",
+                  backgroundColor: "#fff",
+                  color: "#1e293b",
+                  cursor: "pointer",
+                }}
+              >
+                {client.assigned_to_id ? "Reassign" : "Assign"}
+              </button>
+            ) : (
+              <div
+                style={{
+                  display: "flex",
+                  gap: "0.5rem",
+                  alignItems: "center",
+                  flexWrap: "wrap",
+                }}
+              >
+                <select
+                  value={reassignId}
+                  onChange={(e) => setReassignId(e.target.value)}
+                  style={{
+                    ...inputStyle,
+                    width: "auto",
+                    minWidth: 180,
+                    flex: 1,
+                  }}
+                >
+                  <option value="">— Unassign —</option>
+                  {analystsList
+                    .filter((a) => a.role === "analyst")
+                    .map((a) => (
+                      <option key={a.id} value={a.id}>
+                        {a.name}
+                      </option>
+                    ))}
+                </select>
+                <button
+                  type="button"
+                  onClick={handleReassign}
+                  disabled={reassigning}
+                  className="glow-button"
+                  style={{
+                    padding: "0.4rem 1rem",
+                    fontWeight: 700,
+                    borderRadius: "999px",
+                    fontSize: "0.8125rem",
+                    opacity: reassigning ? 0.6 : 1,
+                    cursor: reassigning ? "default" : "pointer",
+                  }}
+                >
+                  {reassigning ? "Saving…" : "Confirm"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setReassignOpen(false)}
+                  style={{
+                    padding: "0.4rem 0.875rem",
+                    borderRadius: "999px",
+                    fontSize: "0.8125rem",
+                    fontWeight: 600,
+                    border: "1.5px solid #e2e8f0",
+                    backgroundColor: "#fff",
+                    color: "#64748b",
+                    cursor: "pointer",
+                  }}
+                >
+                  Cancel
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Action panel (contextual) */}
         <div style={{ marginBottom: "1.25rem" }}>
           <ActionPanel
@@ -1422,7 +1660,11 @@ ${timelineRows || "<p>No timeline events available.</p>"}
                       </>
                     )}
                     {event.event_type === "scan" && (
-                      <ScanDetail data={data} router={router} eventId={event.id} />
+                      <ScanDetail
+                        data={data}
+                        router={router}
+                        eventId={event.id}
+                      />
                     )}
                     {event.event_type === "quote_sent" && (
                       <QuoteSentDetail data={data} />

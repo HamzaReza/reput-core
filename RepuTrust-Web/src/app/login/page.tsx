@@ -5,7 +5,7 @@ import Header from "@/components/common/Header";
 import { Toast, useToast } from "@/components/common/Toast";
 import { auth, setToken } from "@/lib/api";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 const inputStyle: React.CSSProperties = {
   width: "100%",
@@ -56,6 +56,13 @@ export default function LoginPage() {
   const [loginLoading, setLoginLoading] = useState(false);
   const [error, setError] = useState("");
   const toast = useToast();
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("reason") === "session_expired") {
+      toast.show("The session has expired");
+    }
+  }, []);
 
   const handleLogin = async (e: React.SyntheticEvent<HTMLFormElement>) => {
     e.preventDefault();

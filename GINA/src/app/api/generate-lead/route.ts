@@ -659,6 +659,18 @@ Write all output in ${languageName}.`;
 }
 
 export async function POST(req: NextRequest) {
+  const token = req.headers.get("Authorization");
+  if (!token) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
+  const authCheck = await fetch(`${apiUrl}/web-analysts/me`, {
+    headers: { Authorization: token },
+  }).catch(() => null);
+  if (!authCheck || !authCheck.ok) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
     return NextResponse.json(
@@ -673,7 +685,7 @@ export async function POST(req: NextRequest) {
     company,
     country: countrySingle,
     countries: countriesRaw,
-    keywords,
+    keywords = [],
     pagesCap,
     subjectType = "individual",
     reportLanguage,
@@ -903,14 +915,20 @@ export async function POST(req: NextRequest) {
       neutral,
       summary,
       score: deriveScoreServer(negative.length, positive.length),
-      _serper: keywords.map((kw, i) => ({
-        keyword: kw,
-        query: searchQueries[i]!,
-        count: allResults[i].length,
-        links: allRaw[i].flatMap((page) =>
-          (page.organic ?? []).map((r) => r.link),
-        ),
-      })),
+      _serper: allSearches.map(({ q }, i) => {
+        const numCountries = countryConfigs.length || 1;
+        const kwIdx = Math.floor(i / numCountries);
+        const cIdx = i % numCountries;
+        return {
+          keyword: keywords[kwIdx] ?? q,
+          country: countries[cIdx] ?? "unknown",
+          query: q,
+          count: allResults[i]?.length ?? 0,
+          links: allRaw[i]?.flatMap((page) =>
+            (page.organic ?? []).map((r) => r.link),
+          ) ?? [],
+        };
+      }),
       _firecrawl: keywords.map((kw) => ({
         keyword: kw,
         sent: urlsSentToFirecrawl.filter((u) => keywordMap.get(u) === kw),

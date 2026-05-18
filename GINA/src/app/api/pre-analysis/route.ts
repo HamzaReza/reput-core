@@ -157,6 +157,18 @@ const FALLBACK = {
 };
 
 export async function POST(req: NextRequest) {
+  const token = req.headers.get("Authorization");
+  if (!token) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
+  const authCheck = await fetch(`${apiUrl}/web-analysts/me`, {
+    headers: { Authorization: token },
+  }).catch(() => null);
+  if (!authCheck || !authCheck.ok) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   try {
     const body = await req.json();
     const {

@@ -37,6 +37,10 @@ interface EaluminateFormPanelProps {
   setCompany: (value: string) => void;
   countries: string[];
   setCountries: (value: string[]) => void;
+  email: string;
+  setEmail: (value: string) => void;
+  phone: string;
+  setPhone: (value: string) => void;
   description: string;
   keywordsCap: number;
   setKeywordsCap: (value: number) => void;
@@ -73,16 +77,26 @@ interface EaluminateFormPanelProps {
 }
 
 const PROFILE_FIELD_COLORS: Record<string, string> = {
-  "Identity": "#4479DA",
-  "Background": "#6366f1",
-  "Associations": "#f59e0b",
+  Identity: "#4479DA",
+  Background: "#6366f1",
+  Associations: "#f59e0b",
   "Recent News": "#48D4B8",
   "Negative Findings": "#ef4444",
   "Positive Presence": "#4CAF50",
   "Reputation Notes": "#94a3b8",
 };
 
-function ProfileCollapse({ label, text, open, onToggle }: { label: string; text: string; open: boolean; onToggle: () => void }) {
+function ProfileCollapse({
+  label,
+  text,
+  open,
+  onToggle,
+}: {
+  label: string;
+  text: string;
+  open: boolean;
+  onToggle: () => void;
+}) {
   const color = PROFILE_FIELD_COLORS[label] ?? "#4479DA";
   return (
     <div
@@ -101,8 +115,23 @@ function ProfileCollapse({ label, text, open, onToggle }: { label: string; text:
     >
       <div style={{ width: 4, flexShrink: 0, backgroundColor: color }} />
       <div style={{ flex: 1, padding: "0.75rem 0.875rem", minWidth: 0 }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.75rem" }}>
-          <p style={{ margin: 0, fontSize: "0.875rem", fontWeight: 600, color: "#1e293b", lineHeight: 1.4 }}>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: "0.75rem",
+          }}
+        >
+          <p
+            style={{
+              margin: 0,
+              fontSize: "0.875rem",
+              fontWeight: 600,
+              color: "#1e293b",
+              lineHeight: 1.4,
+            }}
+          >
             {label}
           </p>
           <svg
@@ -114,13 +143,26 @@ function ProfileCollapse({ label, text, open, onToggle }: { label: string; text:
             strokeWidth="2.5"
             strokeLinecap="round"
             strokeLinejoin="round"
-            style={{ flexShrink: 0, transition: "transform 0.2s ease", transform: open ? "rotate(180deg)" : "rotate(0deg)" }}
+            style={{
+              flexShrink: 0,
+              transition: "transform 0.2s ease",
+              transform: open ? "rotate(180deg)" : "rotate(0deg)",
+            }}
           >
             <path d="M6 9l6 6 6-6" />
           </svg>
         </div>
         {open && (
-          <p style={{ margin: "0.625rem 0 0", fontSize: "0.8125rem", color: "#64748b", lineHeight: 1.65, borderTop: "1px solid #f1f5f9", paddingTop: "0.625rem" }}>
+          <p
+            style={{
+              margin: "0.625rem 0 0",
+              fontSize: "0.8125rem",
+              color: "#64748b",
+              lineHeight: 1.65,
+              borderTop: "1px solid #f1f5f9",
+              paddingTop: "0.625rem",
+            }}
+          >
             {text}
           </p>
         )}
@@ -137,7 +179,11 @@ function CountryMultiPicker({
 }: {
   countries: string[];
   setCountries: (v: string[]) => void;
-  CountryPicker: ComponentType<{ value: string; onChange: (v: string) => void; required?: boolean }>;
+  CountryPicker: ComponentType<{
+    value: string;
+    onChange: (v: string) => void;
+    required?: boolean;
+  }>;
   labelStyle: CSSProperties;
 }) {
   const [pickerValue, setPickerValue] = useState("");
@@ -148,17 +194,28 @@ function CountryMultiPicker({
     setPickerValue("");
   };
 
-  const removeCountry = (v: string) => setCountries(countries.filter((c) => c !== v));
+  const removeCountry = (v: string) =>
+    setCountries(countries.filter((c) => c !== v));
 
   return (
     <div>
       <label style={labelStyle}>Country *</label>
       <CountryPicker
         value={pickerValue}
-        onChange={(v) => { setPickerValue(v); addCountry(v); }}
+        onChange={(v) => {
+          setPickerValue(v);
+          addCountry(v);
+        }}
       />
       {countries.length > 0 && (
-        <div style={{ display: "flex", flexWrap: "wrap", gap: "0.4rem", marginTop: "0.5rem" }}>
+        <div
+          style={{
+            display: "flex",
+            flexWrap: "wrap",
+            gap: "0.4rem",
+            marginTop: "0.5rem",
+          }}
+        >
           {countries.map((c) => (
             <span
               key={c}
@@ -228,6 +285,10 @@ export function EaluminateFormPanel(props: EaluminateFormPanelProps) {
     setCompany,
     countries,
     setCountries,
+    email,
+    setEmail,
+    phone,
+    setPhone,
     description,
     keywordsCap,
     setKeywordsCap,
@@ -342,9 +403,16 @@ export function EaluminateFormPanel(props: EaluminateFormPanelProps) {
                     cursor: "pointer",
                     transition: "all 0.15s",
                     border: "1.5px solid",
-                    borderColor: subjectType === type ? "#4479DA" : "var(--color-border, #e2e8f0)",
-                    backgroundColor: subjectType === type ? "#eef3ff" : "#ffffff",
-                    color: subjectType === type ? "#4479DA" : "var(--color-muted, #64748b)",
+                    borderColor:
+                      subjectType === type
+                        ? "#4479DA"
+                        : "var(--color-border, #e2e8f0)",
+                    backgroundColor:
+                      subjectType === type ? "#eef3ff" : "#ffffff",
+                    color:
+                      subjectType === type
+                        ? "#4479DA"
+                        : "var(--color-muted, #64748b)",
                     textTransform: "capitalize",
                   }}
                 >
@@ -389,7 +457,11 @@ export function EaluminateFormPanel(props: EaluminateFormPanelProps) {
               type="text"
               value={company}
               onChange={(e) => setCompany(e.target.value)}
-              placeholder={subjectType === "company" ? "e.g. Acme Corp" : "e.g. Acme Corp (optional)"}
+              placeholder={
+                subjectType === "company"
+                  ? "e.g. Acme Corp"
+                  : "e.g. Acme Corp (optional)"
+              }
               required={subjectType === "company"}
               style={inputStyle}
             />
@@ -401,6 +473,28 @@ export function EaluminateFormPanel(props: EaluminateFormPanelProps) {
             CountryPicker={CountryPicker}
             labelStyle={labelStyle}
           />
+          <div className="lead-name-grid">
+            <div>
+              <label style={labelStyle}>Email</label>
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="e.g. john@example.com (optional)"
+                style={inputStyle}
+              />
+            </div>
+            <div>
+              <label style={labelStyle}>Phone</label>
+              <input
+                type="tel"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                placeholder="e.g. +1 555 000 0000 (optional)"
+                style={inputStyle}
+              />
+            </div>
+          </div>
 
           <div>
             <label style={labelStyle}>Background &amp; Context *</label>
@@ -520,9 +614,16 @@ export function EaluminateFormPanel(props: EaluminateFormPanelProps) {
                     cursor: "pointer",
                     transition: "all 0.15s",
                     border: "1.5px solid",
-                    borderColor: reportLanguage === opt.value ? "#4479DA" : "var(--color-border, #e2e8f0)",
-                    backgroundColor: reportLanguage === opt.value ? "#eef3ff" : "#ffffff",
-                    color: reportLanguage === opt.value ? "#4479DA" : "var(--color-muted, #64748b)",
+                    borderColor:
+                      reportLanguage === opt.value
+                        ? "#4479DA"
+                        : "var(--color-border, #e2e8f0)",
+                    backgroundColor:
+                      reportLanguage === opt.value ? "#eef3ff" : "#ffffff",
+                    color:
+                      reportLanguage === opt.value
+                        ? "#4479DA"
+                        : "var(--color-muted, #64748b)",
                   }}
                 >
                   {opt.label}
@@ -646,15 +747,31 @@ export function EaluminateFormPanel(props: EaluminateFormPanelProps) {
                 </button>
               </div>
               {preAnalysisProfile ? (
-                <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+                <div
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "0.5rem",
+                  }}
+                >
                   {(
                     [
                       ["Identity", preAnalysisProfile.identity],
                       ["Background", preAnalysisProfile.background],
-                      preAnalysisProfile.associations ? ["Associations", preAnalysisProfile.associations] : null,
-                      preAnalysisProfile.recent_news ? ["Recent News", preAnalysisProfile.recent_news] : null,
-                      ["Negative Findings", preAnalysisProfile.negative_findings],
-                      ["Positive Presence", preAnalysisProfile.positive_presence],
+                      preAnalysisProfile.associations
+                        ? ["Associations", preAnalysisProfile.associations]
+                        : null,
+                      preAnalysisProfile.recent_news
+                        ? ["Recent News", preAnalysisProfile.recent_news]
+                        : null,
+                      [
+                        "Negative Findings",
+                        preAnalysisProfile.negative_findings,
+                      ],
+                      [
+                        "Positive Presence",
+                        preAnalysisProfile.positive_presence,
+                      ],
                       ["Reputation Notes", preAnalysisProfile.reputation_notes],
                     ].filter(Boolean) as [string, string][]
                   ).map(([label, text]) => (
@@ -663,7 +780,11 @@ export function EaluminateFormPanel(props: EaluminateFormPanelProps) {
                       label={label}
                       text={text}
                       open={openProfileField === label}
-                      onToggle={() => setOpenProfileField(openProfileField === label ? null : label)}
+                      onToggle={() =>
+                        setOpenProfileField(
+                          openProfileField === label ? null : label,
+                        )
+                      }
                     />
                   ))}
                 </div>
@@ -687,10 +808,12 @@ export function EaluminateFormPanel(props: EaluminateFormPanelProps) {
               <div>
                 <label style={labelStyle}>Use Keywords</label>
                 <div style={{ display: "flex", gap: "0.5rem" }}>
-                  {([
-                    { value: true,  label: "Yes" },
-                    { value: false, label: "No"  },
-                  ] as const).map((opt) => (
+                  {(
+                    [
+                      { value: true, label: "Yes" },
+                      { value: false, label: "No" },
+                    ] as const
+                  ).map((opt) => (
                     <button
                       key={String(opt.value)}
                       type="button"
@@ -703,16 +826,29 @@ export function EaluminateFormPanel(props: EaluminateFormPanelProps) {
                         cursor: "pointer",
                         transition: "all 0.15s",
                         border: "1.5px solid",
-                        borderColor: useKeywords === opt.value ? "#4479DA" : "var(--color-border, #e2e8f0)",
-                        backgroundColor: useKeywords === opt.value ? "#eef3ff" : "#ffffff",
-                        color: useKeywords === opt.value ? "#4479DA" : "var(--color-muted, #64748b)",
+                        borderColor:
+                          useKeywords === opt.value
+                            ? "#4479DA"
+                            : "var(--color-border, #e2e8f0)",
+                        backgroundColor:
+                          useKeywords === opt.value ? "#eef3ff" : "#ffffff",
+                        color:
+                          useKeywords === opt.value
+                            ? "#4479DA"
+                            : "var(--color-muted, #64748b)",
                       }}
                     >
                       {opt.label}
                     </button>
                   ))}
                 </div>
-                <p style={{ margin: "0.375rem 0 0", fontSize: "0.75rem", color: "#94a3b8" }}>
+                <p
+                  style={{
+                    margin: "0.375rem 0 0",
+                    fontSize: "0.75rem",
+                    color: "#94a3b8",
+                  }}
+                >
                   {useKeywords
                     ? "Searches using keyword-based queries"
                     : "Searches by name/company only — no keywords"}
@@ -720,34 +856,57 @@ export function EaluminateFormPanel(props: EaluminateFormPanelProps) {
               </div>
               <div>
                 <label style={labelStyle}>Scan Focus</label>
-                <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-                  {keywordFocusOptions.filter(({ value }) => value !== "neutral").map(({ value, label }) => (
-                    <button
-                      key={value}
-                      type="button"
-                      onClick={() => setScanFocus(value)}
-                      style={{
-                        padding: "0.4rem 1rem",
-                        borderRadius: "999px",
-                        fontSize: "0.875rem",
-                        fontWeight: 500,
-                        cursor: "pointer",
-                        transition: "all 0.15s",
-                        border: "1.5px solid",
-                        borderColor: scanFocus === value ? "#4479DA" : "var(--color-border, #e2e8f0)",
-                        backgroundColor: scanFocus === value ? "#eef3ff" : "#ffffff",
-                        color: scanFocus === value ? "#4479DA" : "var(--color-muted, #64748b)",
-                      }}
-                    >
-                      {label}
-                    </button>
-                  ))}
+                <div
+                  style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}
+                >
+                  {keywordFocusOptions
+                    .filter(({ value }) => value !== "neutral")
+                    .map(({ value, label }) => (
+                      <button
+                        key={value}
+                        type="button"
+                        onClick={() => setScanFocus(value)}
+                        style={{
+                          padding: "0.4rem 1rem",
+                          borderRadius: "999px",
+                          fontSize: "0.875rem",
+                          fontWeight: 500,
+                          cursor: "pointer",
+                          transition: "all 0.15s",
+                          border: "1.5px solid",
+                          borderColor:
+                            scanFocus === value
+                              ? "#4479DA"
+                              : "var(--color-border, #e2e8f0)",
+                          backgroundColor:
+                            scanFocus === value ? "#eef3ff" : "#ffffff",
+                          color:
+                            scanFocus === value
+                              ? "#4479DA"
+                              : "var(--color-muted, #64748b)",
+                        }}
+                      >
+                        {label}
+                      </button>
+                    ))}
                 </div>
-                <p style={{ margin: "0.375rem 0 0", fontSize: "0.75rem", color: "#94a3b8" }}>
+                <p
+                  style={{
+                    margin: "0.375rem 0 0",
+                    fontSize: "0.75rem",
+                    color: "#94a3b8",
+                  }}
+                >
                   Filter scan results by sentiment type
                 </p>
               </div>
-              <div style={{ opacity: useKeywords ? 1 : 0.4, pointerEvents: useKeywords ? "auto" : "none", transition: "opacity 0.15s" }}>
+              <div
+                style={{
+                  opacity: useKeywords ? 1 : 0.4,
+                  pointerEvents: useKeywords ? "auto" : "none",
+                  transition: "opacity 0.15s",
+                }}
+              >
                 <label style={labelStyle}>
                   Keywords — edit or add your own
                 </label>
@@ -757,7 +916,7 @@ export function EaluminateFormPanel(props: EaluminateFormPanelProps) {
                 />
               </div>
               <div>
-                <label style={labelStyle}>Pages per Keyword</label>
+                <label style={labelStyle}>Pages per Keyword/Country Pair</label>
                 <div
                   style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}
                 >
@@ -797,12 +956,14 @@ export function EaluminateFormPanel(props: EaluminateFormPanelProps) {
                     color: "#94a3b8",
                   }}
                 >
-                  Results fetched and analysed per keyword
+                  Results fetched and analysed per keyword/country pair
                 </p>
               </div>
               <button
                 type="button"
-                disabled={loading || (useKeywords && editableKeywords.length === 0)}
+                disabled={
+                  loading || (useKeywords && editableKeywords.length === 0)
+                }
                 onClick={handleRunScan}
                 className="glow-button"
                 style={{
@@ -810,7 +971,10 @@ export function EaluminateFormPanel(props: EaluminateFormPanelProps) {
                   padding: "0.75rem",
                   fontWeight: 700,
                   borderRadius: "999px",
-                  opacity: loading || (useKeywords && editableKeywords.length === 0) ? 0.5 : 1,
+                  opacity:
+                    loading || (useKeywords && editableKeywords.length === 0)
+                      ? 0.5
+                      : 1,
                   cursor: "pointer",
                 }}
               >

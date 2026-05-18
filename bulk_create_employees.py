@@ -27,7 +27,10 @@ ENVIRONMENTS = {
 }
 
 WEB_ANALYSTS = [
-    {"name": "Web Analyst 1", "email": "Analyst1@test.com", "password": "Analyst12345"},
+    {"name": "Web Analyst 1", "email": "Analyst1@test.com", "password": "Analyst12345", "role": "analyst"},
+    {"name": "Web Analyst 2", "email": "Analyst2@test.com", "password": "Analyst22345", "role": "analyst"},
+    {"name": "Admin 1",       "email": "Admin1@test.com",   "password": "Admin12345",   "role": "admin"},
+    {"name": "Admin 2",       "email": "Admin2@test.com",   "password": "Admin22345",   "role": "admin"},
 ]
 
 def register_all(env_name, api_url):

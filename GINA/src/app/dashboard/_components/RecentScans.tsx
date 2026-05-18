@@ -1,6 +1,6 @@
 "use client";
 
-import { leads, RecentLead } from "@/lib/api";
+import { leads, isAdmin, RecentLead } from "@/lib/api";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -101,6 +101,7 @@ export default function RecentScans() {
   const [scans, setScans] = useState<RecentLead[]>([]);
   const [loading, setLoading] = useState(true);
   const [hasMore, setHasMore] = useState(false);
+  const adminView = isAdmin();
 
   useEffect(() => {
     leads
@@ -275,6 +276,15 @@ export default function RecentScans() {
                               }}
                             >
                               {[scan.company, scan.country].filter(Boolean).join(" · ")}
+                            </p>
+                          )}
+                          {adminView && (scan.scanned_by_name || scan.assigned_to_name) && (
+                            <p style={{ margin: 0, fontSize: "0.6875rem", color: "#94a3b8", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 160 }}>
+                              {scan.scanned_by_name && (
+                                <span>by {scan.scanned_by_name}{scan.scanned_by_role ? ` (${scan.scanned_by_role})` : ""}</span>
+                              )}
+                              {scan.scanned_by_name && scan.assigned_to_name && <span> · </span>}
+                              {scan.assigned_to_name && <span>→ {scan.assigned_to_name}</span>}
                             </p>
                           )}
                         </div>
