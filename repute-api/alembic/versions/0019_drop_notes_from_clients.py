@@ -14,7 +14,7 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.drop_column("clients", "notes")
+    op.execute("ALTER TABLE clients DROP COLUMN IF EXISTS notes")
 
 
 def downgrade() -> None:
