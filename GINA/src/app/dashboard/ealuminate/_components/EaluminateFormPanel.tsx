@@ -685,14 +685,14 @@ export function EaluminateFormPanel(props: EaluminateFormPanelProps) {
               type="submit"
               name="skip"
               style={{
-                background: "none",
-                border: "none",
                 cursor: "pointer",
-                fontSize: "0.8125rem",
-                color: "var(--color-muted, #64748b)",
-                textDecoration: "underline",
-                textDecorationStyle: "dashed",
-                padding: 0,
+                fontSize: "0.9375rem",
+                fontWeight: 600,
+                color: "#4479da",
+                background: "rgba(68,121,218,0.07)",
+                border: "1.5px solid rgba(68,121,218,0.25)",
+                borderRadius: "999px",
+                padding: "0.55rem 1.5rem",
                 alignSelf: "center",
               }}
             >
