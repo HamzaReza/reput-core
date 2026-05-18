@@ -14,6 +14,8 @@ export interface MeetingSummary {
   headline: string;
   issues: string[];
   talkingPoints: string[];
+  riskIndicators?: string[];
+  objectionHandlers?: string[];
 }
 
 export interface ScanResult {
