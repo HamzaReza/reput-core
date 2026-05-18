@@ -503,6 +503,7 @@ export interface WebLink {
   type: string;
   date?: string;
   keyword?: string;
+  country?: string;
 }
 
 export interface FullLead {

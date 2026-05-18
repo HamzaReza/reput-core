@@ -72,6 +72,63 @@ interface EaluminateFormPanelProps {
   pipeline: ReactNode;
 }
 
+const PROFILE_FIELD_COLORS: Record<string, string> = {
+  "Identity": "#4479DA",
+  "Background": "#6366f1",
+  "Associations": "#f59e0b",
+  "Recent News": "#48D4B8",
+  "Negative Findings": "#ef4444",
+  "Positive Presence": "#4CAF50",
+  "Reputation Notes": "#94a3b8",
+};
+
+function ProfileCollapse({ label, text, open, onToggle }: { label: string; text: string; open: boolean; onToggle: () => void }) {
+  const color = PROFILE_FIELD_COLORS[label] ?? "#4479DA";
+  return (
+    <div
+      onClick={onToggle}
+      style={{
+        display: "flex",
+        borderRadius: "0.875rem",
+        overflow: "hidden",
+        background: "#fff",
+        border: "1px solid #e2e8f0",
+        cursor: "pointer",
+        transition: "border-color 0.15s ease",
+      }}
+      onMouseEnter={(e) => (e.currentTarget.style.borderColor = "#b6c4d4")}
+      onMouseLeave={(e) => (e.currentTarget.style.borderColor = "#e2e8f0")}
+    >
+      <div style={{ width: 4, flexShrink: 0, backgroundColor: color }} />
+      <div style={{ flex: 1, padding: "0.75rem 0.875rem", minWidth: 0 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.75rem" }}>
+          <p style={{ margin: 0, fontSize: "0.875rem", fontWeight: 600, color: "#1e293b", lineHeight: 1.4 }}>
+            {label}
+          </p>
+          <svg
+            width="12"
+            height="12"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="#cbd5e1"
+            strokeWidth="2.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            style={{ flexShrink: 0, transition: "transform 0.2s ease", transform: open ? "rotate(180deg)" : "rotate(0deg)" }}
+          >
+            <path d="M6 9l6 6 6-6" />
+          </svg>
+        </div>
+        {open && (
+          <p style={{ margin: "0.625rem 0 0", fontSize: "0.8125rem", color: "#64748b", lineHeight: 1.65, borderTop: "1px solid #f1f5f9", paddingTop: "0.625rem" }}>
+            {text}
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function CountryMultiPicker({
   countries,
   setCountries,
@@ -154,6 +211,8 @@ function CountryMultiPicker({
 }
 
 export function EaluminateFormPanel(props: EaluminateFormPanelProps) {
+  const [openProfileField, setOpenProfileField] = useState<string | null>(null);
+
   const {
     scanComplete,
     preAnalysisDone,
@@ -587,13 +646,7 @@ export function EaluminateFormPanel(props: EaluminateFormPanelProps) {
                 </button>
               </div>
               {preAnalysisProfile ? (
-                <div
-                  style={{
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: "0.625rem",
-                  }}
-                >
+                <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
                   {(
                     [
                       ["Identity", preAnalysisProfile.identity],
@@ -605,28 +658,13 @@ export function EaluminateFormPanel(props: EaluminateFormPanelProps) {
                       ["Reputation Notes", preAnalysisProfile.reputation_notes],
                     ].filter(Boolean) as [string, string][]
                   ).map(([label, text]) => (
-                    <div key={label}>
-                      <p
-                        style={{
-                          fontSize: "0.75rem",
-                          fontWeight: 600,
-                          margin: "0 0 0.125rem",
-                          color: "var(--color-foreground, #1e293b)",
-                        }}
-                      >
-                        {label}
-                      </p>
-                      <p
-                        style={{
-                          fontSize: "0.8125rem",
-                          color: "var(--color-muted, #64748b)",
-                          lineHeight: 1.65,
-                          margin: 0,
-                        }}
-                      >
-                        {text}
-                      </p>
-                    </div>
+                    <ProfileCollapse
+                      key={label}
+                      label={label}
+                      text={text}
+                      open={openProfileField === label}
+                      onToggle={() => setOpenProfileField(openProfileField === label ? null : label)}
+                    />
                   ))}
                 </div>
               ) : (

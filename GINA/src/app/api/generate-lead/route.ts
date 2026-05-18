@@ -289,6 +289,10 @@ function dedupeLinks(all: WebLink[]): WebLink[] {
   return Array.from(map.values());
 }
 
+function sleep(ms: number) {
+  return new Promise<void>((resolve) => setTimeout(resolve, ms));
+}
+
 async function searchSerper(
   query: string,
   countryCode: string | null,
@@ -308,18 +312,28 @@ async function searchSerper(
     return payload;
   };
 
-  const raw = await Promise.all(
-    Array.from({ length: numPages }, (_, i) =>
-      fetch("https://google.serper.dev/search", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-API-KEY": serperKey },
-        body: JSON.stringify(makePayload(i + 1)),
-      }).then((res) => {
-        if (!res.ok) throw new Error(`Search service error (${res.status})`);
-        return res.json() as Promise<SerperResponse>;
-      }),
-    ),
-  );
+  const fetchPage = async (
+    page: number,
+    attempt = 0,
+  ): Promise<SerperResponse> => {
+    const res = await fetch("https://google.serper.dev/search", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-API-KEY": serperKey },
+      body: JSON.stringify(makePayload(page)),
+    });
+    if (res.status === 429 && attempt < 3) {
+      await sleep(800 * (attempt + 1));
+      return fetchPage(page, attempt + 1);
+    }
+    if (!res.ok) throw new Error(`Search service error (${res.status})`);
+    return res.json() as Promise<SerperResponse>;
+  };
+
+  const raw: SerperResponse[] = [];
+  for (let i = 0; i < numPages; i++) {
+    if (i > 0) await sleep(300);
+    raw.push(await fetchPage(i + 1));
+  }
 
   const organic = raw.flatMap((r) => r.organic ?? []);
   return { organic, raw };
@@ -402,17 +416,19 @@ async function classifyWithClaude(
   const lastName = nameParts.slice(1).join(" ");
 
   const countriesLabel = countries.join(", ");
-  const countryLine = countries.length > 0
-    ? subjectType === "company"
-      ? `The subject is a company from ${countriesLabel}. Only include results clearly relevant to this company and these regions.`
-      : `The subject is from ${countriesLabel}. Only include results clearly relevant to this person and these regions.`
-    : "";
+  const countryLine =
+    countries.length > 0
+      ? subjectType === "company"
+        ? `The subject is a company from ${countriesLabel}. Only include results clearly relevant to this company and these regions.`
+        : `The subject is from ${countriesLabel}. Only include results clearly relevant to this person and these regions.`
+      : "";
 
   const keywordList =
     keywords.length > 0 ? keywords.join(", ") : "general reputation";
 
-  const nameFilter = subjectType === "company"
-    ? `MANDATORY NAME FILTER:
+  const nameFilter =
+    subjectType === "company"
+      ? `MANDATORY NAME FILTER:
 Before classifying, check whether the company "${name}" is clearly identifiable in the title, snippet, or content.
 
 INCLUDE the article if:
@@ -423,7 +439,7 @@ EXCLUDE the article if:
 • The company name does not appear at all
 
 If EXCLUDED → do not include this article in the output array at all.`
-    : `MANDATORY NAME FILTER:
+      : `MANDATORY NAME FILTER:
 Before classifying, check whether the subject "${name}" is clearly identifiable in the title, snippet, or content.
 
 INCLUDE the article if:
@@ -440,11 +456,11 @@ If EXCLUDED → do not include this article in the output array at all.`;
 
   const scanFocusRule =
     scanFocus && scanFocus !== "all"
-      ? {
+      ? ({
           negative: `\nSCAN FOCUS: Return ONLY articles with NEGATIVE sentiment or HIGH/MEDIUM risk. Exclude all positive and neutral articles from the output entirely.\n`,
           positive: `\nSCAN FOCUS: Return ONLY articles with POSITIVE sentiment. Exclude all negative and neutral articles from the output entirely.\n`,
           neutral: `\nSCAN FOCUS: Return ONLY articles with NEUTRAL sentiment (purely informational). Exclude all negative and positive articles from the output entirely.\n`,
-        }[scanFocus] ?? ""
+        }[scanFocus] ?? "")
       : "";
 
   const prompt = `You are a reputation intelligence analyst. Classify the following ${articles.length} articles about "${name}".
@@ -498,11 +514,12 @@ Return a JSON array only — no explanation, no markdown code fences. Each eleme
 
 Return ONLY the JSON array. If no valid articles, return [].`;
 
-  const response = await client.messages.create({
+  const stream = client.messages.stream({
     model: "claude-sonnet-4-6",
-    max_tokens: 16000,
+    max_tokens: 64000,
     messages: [{ role: "user", content: prompt }],
   });
+  const response = await stream.finalMessage();
 
   if (response.stop_reason === "max_tokens") {
     console.warn("[classify] Claude hit max_tokens — JSON may be truncated");
@@ -555,6 +572,8 @@ function fallbackSummary(score: number) {
       "Discuss their current online presence",
       "Highlight risks of unmanaged reputation",
     ],
+    riskIndicators: [] as string[],
+    objectionHandlers: [] as string[],
   };
 }
 
@@ -564,44 +583,69 @@ async function generateMeetingSummary(
   score: number,
   links: WebLink[],
   languageName = "English",
-): Promise<{ headline: string; issues: string[]; talkingPoints: string[] }> {
+): Promise<{
+  headline: string;
+  issues: string[];
+  talkingPoints: string[];
+  riskIndicators?: string[];
+  objectionHandlers?: string[];
+}> {
   const negLinks = links.filter(
     (l) =>
       l.sentiment === "negative" || l.risk === "high" || l.risk === "medium",
   );
   const posLinks = links.filter((l) => l.sentiment === "positive");
-  const findingsSummary = [
+  const highLinks = links.filter((l) => l.risk === "high");
+  const medLinks = links.filter((l) => l.risk === "medium");
+  const neutralLinks = links.filter((l) => l.sentiment === "neutral");
+
+  const scoreBreakdown = `Score: ${score}/100 | High-risk: ${highLinks.length} | Medium-risk: ${medLinks.length} | Positive: ${posLinks.length} | Neutral: ${neutralLinks.length}`;
+
+  const negSummary =
     negLinks.length > 0
-      ? `Negative:\n${negLinks
-          .slice(0, 6)
-          .map((l) => `- ${l.title} (${l.source}, risk: ${l.risk})`)
+      ? `Negative/Risk findings:\n${negLinks
+          .slice(0, 8)
+          .map(
+            (l) =>
+              `- [${l.risk.toUpperCase()}] "${l.title}" — ${l.source}${l.date ? ` (${l.date})` : ""}\n  ${l.snippet}`,
+          )
           .join("\n")}`
-      : "No negative results found.",
+      : "No negative results found.";
+
+  const posSummary =
     posLinks.length > 0
-      ? `Positive:\n${posLinks
+      ? `Positive findings:\n${posLinks
           .slice(0, 4)
-          .map((l) => `- ${l.title} (${l.source})`)
+          .map(
+            (l) =>
+              `- "${l.title}" — ${l.source}${l.date ? ` (${l.date})` : ""}`,
+          )
           .join("\n")}`
-      : "No positive results found.",
-  ].join("\n\n");
+      : "No positive results found.";
 
-  const prompt = `You are an analyst at a reputation management firm. A scan for "${name}" returned a ReputScore of ${score}/100.
+  const prompt = `You are a senior analyst at a reputation management firm preparing an internal sales brief.
 
-Findings:
-${findingsSummary}
+Subject: "${name}"
+${scoreBreakdown}
 
-Return a JSON object (no markdown, no explanation) with:
+${negSummary}
+
+${posSummary}
+
+Return ONLY a JSON object with these 5 fields (no markdown, no explanation):
 {
-  "headline": "one-line assessment for the sales team",
-  "issues": ["up to 4 key points about their reputation (positive or negative), or 1 entry if nothing found"],
-  "talkingPoints": ["2-3 suggested opening lines for a client meeting focused on why they need reputation management"]
+  "headline": "one sharp sentence summarising the reputational situation for the sales team",
+  "issues": ["5-8 specific key reputation points — cite article titles or sources where relevant"],
+  "talkingPoints": ["4-6 opening lines for the client meeting — reference their actual situation, not generic phrases"],
+  "riskIndicators": ["4-6 concrete risk flags drawn from the findings above — include source name and date where available"],
+  "objectionHandlers": ["4-5 sharp, specific rebuttals for when the prospect says they don't need reputation management — reference their actual findings"]
 }
 
-Write all output (headline, issues, talkingPoints) in ${languageName}.`;
+Write all output in ${languageName}.`;
 
   const response = await client.messages.create({
     model: "claude-sonnet-4-6",
-    max_tokens: 512,
+    max_tokens: 4096,
     messages: [{ role: "user", content: prompt }],
   });
 
@@ -623,25 +667,39 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const { firstName, lastName, company, country: countrySingle, countries: countriesRaw, keywords, pagesCap, subjectType = "individual", reportLanguage, useKeywords = true, scanFocus } =
-    (await req.json()) as {
-      firstName?: string;
-      lastName?: string;
-      company?: string;
-      country?: string;
-      countries?: string[];
-      keywords: string[];
-      pagesCap?: number;
-      subjectType?: "individual" | "company";
-      reportLanguage?: string;
-      useKeywords?: boolean;
-      scanFocus?: "negative" | "positive" | "neutral";
-    };
+  const {
+    firstName,
+    lastName,
+    company,
+    country: countrySingle,
+    countries: countriesRaw,
+    keywords,
+    pagesCap,
+    subjectType = "individual",
+    reportLanguage,
+    useKeywords = true,
+    scanFocus,
+  } = (await req.json()) as {
+    firstName?: string;
+    lastName?: string;
+    company?: string;
+    country?: string;
+    countries?: string[];
+    keywords: string[];
+    pagesCap?: number;
+    subjectType?: "individual" | "company";
+    reportLanguage?: string;
+    useKeywords?: boolean;
+    scanFocus?: "negative" | "positive" | "neutral";
+  };
 
   // Normalize to array — accept both legacy `country` string and new `countries` array
-  const countries: string[] = Array.isArray(countriesRaw) && countriesRaw.length > 0
-    ? countriesRaw
-    : countrySingle ? [countrySingle] : [];
+  const countries: string[] =
+    Array.isArray(countriesRaw) && countriesRaw.length > 0
+      ? countriesRaw
+      : countrySingle
+        ? [countrySingle]
+        : [];
 
   if (!countries.length || (useKeywords && !keywords?.length)) {
     return NextResponse.json(
@@ -650,9 +708,10 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const searchSubject = subjectType === "company" && company
-    ? company.trim()
-    : `${(firstName ?? "").trim()} ${(lastName ?? "").trim()}`.trim();
+  const searchSubject =
+    subjectType === "company" && company
+      ? company.trim()
+      : `${(firstName ?? "").trim()} ${(lastName ?? "").trim()}`.trim();
   const sanitizedSubject = searchSubject.slice(0, 200).replace(/[\r\n]/g, " ");
 
   const client = new Anthropic({ apiKey });
@@ -663,18 +722,46 @@ export async function POST(req: NextRequest) {
     ? (COUNTRY_TO_LANGUAGE[countryCode.toUpperCase()] ?? null)
     : null;
 
-  const REPORT_LANG_MAP: Record<string, string> = { en: "English", it: "Italian", es: "Spanish" };
+  const REPORT_LANG_MAP: Record<string, string> = {
+    en: "English",
+    it: "Italian",
+    es: "Spanish",
+  };
   const LANG_CODE_TO_NAME: Record<string, string> = {
-    en: "English", it: "Italian", es: "Spanish", fr: "French", de: "German",
-    pt: "Portuguese", nl: "Dutch", pl: "Polish", ro: "Romanian", hu: "Hungarian",
-    cs: "Czech", ru: "Russian", uk: "Ukrainian", tr: "Turkish", ja: "Japanese",
-    ko: "Korean", "zh-CN": "Chinese", ar: "Arabic", hi: "Hindi", th: "Thai",
-    vi: "Vietnamese", id: "Indonesian", ms: "Malay", el: "Greek",
-    sv: "Swedish", no: "Norwegian", fi: "Finnish", da: "Danish",
+    en: "English",
+    it: "Italian",
+    es: "Spanish",
+    fr: "French",
+    de: "German",
+    pt: "Portuguese",
+    nl: "Dutch",
+    pl: "Polish",
+    ro: "Romanian",
+    hu: "Hungarian",
+    cs: "Czech",
+    ru: "Russian",
+    uk: "Ukrainian",
+    tr: "Turkish",
+    ja: "Japanese",
+    ko: "Korean",
+    "zh-CN": "Chinese",
+    ar: "Arabic",
+    hi: "Hindi",
+    th: "Thai",
+    vi: "Vietnamese",
+    id: "Indonesian",
+    ms: "Malay",
+    el: "Greek",
+    sv: "Swedish",
+    no: "Norwegian",
+    fi: "Finnish",
+    da: "Danish",
   };
   const outputLanguageName = reportLanguage
     ? (REPORT_LANG_MAP[reportLanguage] ?? "English")
-    : (languageCode ? (LANG_CODE_TO_NAME[languageCode] ?? "English") : "English");
+    : languageCode
+      ? (LANG_CODE_TO_NAME[languageCode] ?? "English")
+      : "English";
 
   try {
     // ── Phase 1: Parallel Serper searches ─────────────────────────────────────
@@ -691,26 +778,36 @@ export async function POST(req: NextRequest) {
       const code = countryCodeFromName(c);
       return {
         countryCode: code,
-        languageCode: code ? (COUNTRY_TO_LANGUAGE[code.toUpperCase()] ?? null) : null,
+        languageCode: code
+          ? (COUNTRY_TO_LANGUAGE[code.toUpperCase()] ?? null)
+          : null,
       };
     });
 
-    const serperResults = await Promise.all(
-      searchQueries.flatMap((q) =>
-        countryConfigs.map(({ countryCode: cc, languageCode: lc }) =>
-          searchSerper(q, cc, lc, pagesCap ?? 2),
-        ),
-      ),
+    const allSearches = searchQueries.flatMap((q) =>
+      countryConfigs.map(({ countryCode: cc, languageCode: lc }) => ({
+        q,
+        cc,
+        lc,
+      })),
     );
+    const serperResults: Awaited<ReturnType<typeof searchSerper>>[] = [];
+    for (const { q, cc, lc } of allSearches) {
+      if (serperResults.length > 0) await sleep(300);
+      serperResults.push(await searchSerper(q, cc, lc, pagesCap ?? 2));
+    }
     const allResults = serperResults.map((s) => s.organic);
+    const allRaw = serperResults.map((s) => s.raw);
 
     // ── Phase 2: Deduplicate URLs, scrape with Firecrawl in parallel ──────────
     const seenUrls = new Set<string>();
     const articles: ArticleForClassification[] = [];
     const dateMap = new Map<string, string>();
     const keywordMap = new Map<string, string>(); // url → first keyword that found it
+    const countryMap = new Map<string, string>(); // url → country that first found it
 
     allResults.forEach((results, kwIdx) => {
+      const countryIdx = kwIdx % (countryConfigs.length || 1);
       for (const r of results) {
         if (!seenUrls.has(r.link)) {
           seenUrls.add(r.link);
@@ -721,18 +818,29 @@ export async function POST(req: NextRequest) {
             content: r.snippet,
           });
           if (r.date) dateMap.set(r.link, r.date);
-          if (useKeywords && keywords[kwIdx]) keywordMap.set(r.link, keywords[kwIdx]!);
+          if (useKeywords && keywords[kwIdx])
+            keywordMap.set(r.link, keywords[kwIdx]!);
+          if (countries[countryIdx])
+            countryMap.set(r.link, countries[countryIdx]!);
         }
       }
     });
 
     const urlsSentToFirecrawl = articles.map((a) => a.url);
 
-    const scrapeResults = await Promise.allSettled(
-      articles.map(async (a) =>
-        (await isPdf(a.url)) ? null : scrapeWithFirecrawl(a.url),
-      ),
-    );
+    // Scrape in batches of 15 to avoid overwhelming Firecrawl's rate limiter
+    const BATCH_SIZE = 15;
+    const scrapeResults: PromiseSettledResult<string | null>[] = [];
+    for (let b = 0; b < articles.length; b += BATCH_SIZE) {
+      if (b > 0) await sleep(500);
+      const batch = articles.slice(b, b + BATCH_SIZE);
+      const batchResults = await Promise.allSettled(
+        batch.map(async (a) =>
+          (await isPdf(a.url)) ? null : scrapeWithFirecrawl(a.url),
+        ),
+      );
+      scrapeResults.push(...batchResults);
+    }
 
     const firecrawlSuccess: string[] = [];
     const firecrawlFailed: string[] = [];
@@ -764,6 +872,7 @@ export async function POST(req: NextRequest) {
         ...link,
         date: dateMap.get(link.url),
         keyword: keywordMap.get(link.url),
+        country: countryMap.get(link.url),
       }))
       .sort((a, b) => {
         const da = a.date ? parseSerperDate(a.date) : NaN;
@@ -794,24 +903,24 @@ export async function POST(req: NextRequest) {
       neutral,
       summary,
       score: deriveScoreServer(negative.length, positive.length),
-      // _serper: keywords.map((kw, i) => ({
-      //   keyword: kw,
-      //   query: searchQueries[i]!,
-      //   count: allResults[i].length,
-      //   links: allRaw[i].flatMap((page) =>
-      //     (page.organic ?? []).map((r) => r.link),
-      //   ),
-      // })),
-      // _firecrawl: keywords.map((kw) => ({
-      //   keyword: kw,
-      //   sent: urlsSentToFirecrawl.filter((u) => keywordMap.get(u) === kw),
-      //   success: firecrawlSuccess.filter((u) => keywordMap.get(u) === kw),
-      //   failed: firecrawlFailed.filter((u) => keywordMap.get(u) === kw),
-      // })),
-      // _claude: keywords.map((kw) => ({
-      //   keyword: kw,
-      //   sent: urlsSentToClaude.filter((u) => keywordMap.get(u) === kw),
-      // })),
+      _serper: keywords.map((kw, i) => ({
+        keyword: kw,
+        query: searchQueries[i]!,
+        count: allResults[i].length,
+        links: allRaw[i].flatMap((page) =>
+          (page.organic ?? []).map((r) => r.link),
+        ),
+      })),
+      _firecrawl: keywords.map((kw) => ({
+        keyword: kw,
+        sent: urlsSentToFirecrawl.filter((u) => keywordMap.get(u) === kw),
+        success: firecrawlSuccess.filter((u) => keywordMap.get(u) === kw),
+        failed: firecrawlFailed.filter((u) => keywordMap.get(u) === kw),
+      })),
+      _claude: keywords.map((kw) => ({
+        keyword: kw,
+        sent: urlsSentToClaude.filter((u) => keywordMap.get(u) === kw),
+      })),
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";

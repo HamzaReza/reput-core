@@ -756,6 +756,7 @@ function EaluminatePageInner() {
   useEffect(() => {
     const id = searchParams.get("lead");
     if (!id) return;
+    const eventId = searchParams.get("event");
     // Reset scan state so stale results from a previous lead don't bleed through
     setResult(null);
     setScore(0);
@@ -780,6 +781,9 @@ function EaluminatePageInner() {
 
         // Resolve the corresponding client so scan events can be appended
         // and restore form settings saved in the matching research event
+        let scanLinks: WebLink[] | undefined;
+        let scanScore: number | undefined;
+        let scanSummary: MeetingSummary | undefined;
         try {
           const clients = await clientsApi.list(200);
           const match = clients.find(
@@ -815,9 +819,17 @@ function EaluminatePageInner() {
               else if (typeof d.country === "string" && d.country)
                 setCountries([d.country as string]);
             }
-            const scanEvent = clientDetail.events
-              .filter((e) => e.event_type === "scan")
-              .find((e) => (e.data?.lead_id as string | undefined) === lead.id);
+            const scanEvents = clientDetail.events.filter(
+              (e) => e.event_type === "scan" && (e.data?.lead_id as string | undefined) === lead.id,
+            );
+            const scanEvent = eventId
+              ? scanEvents.find((e) => e.id === eventId)
+              : scanEvents.at(-1);
+            if (scanEvent?.data) {
+              scanLinks = scanEvent.data.links as WebLink[] | undefined;
+              scanScore = scanEvent.data.score as number | undefined;
+              scanSummary = scanEvent.data.summary as MeetingSummary | undefined;
+            }
             if (typeof scanEvent?.data?.useKeywords === "boolean")
               setUseKeywords(scanEvent.data.useKeywords as boolean);
             if (["all", "negative", "positive", "neutral"].includes(scanEvent?.data?.scanFocus as string))
@@ -841,33 +853,36 @@ function EaluminatePageInner() {
           setPreAnalysisDone(true);
         }
 
-        if (lead.links && lead.links.length > 0) {
-          const links = lead.links as WebLink[];
-          const negative = links.filter(
+        const linksToUse = (scanLinks && scanLinks.length > 0 ? scanLinks : null) ?? (lead.links as WebLink[] | undefined);
+        const scoreToUse = scanScore ?? (lead.score ?? undefined);
+        const summaryToUse = scanSummary ?? (lead.summary ?? undefined);
+
+        if (linksToUse && linksToUse.length > 0) {
+          const negative = linksToUse.filter(
             (l) =>
               l.sentiment === "negative" ||
               l.risk === "high" ||
               l.risk === "medium",
           );
-          const positive = links.filter(
+          const positive = linksToUse.filter(
             (l) =>
               l.sentiment === "positive" ||
               l.risk === "low" ||
               l.risk === "none",
           );
-          const neutral = links.filter((l) => l.sentiment === "neutral");
+          const neutral = linksToUse.filter((l) => l.sentiment === "neutral");
           setResult({
-            links,
+            links: linksToUse,
             negative,
             positive,
             neutral,
-            summary: lead.summary ?? undefined,
+            summary: summaryToUse,
           });
           setUsedKeywords(lead.keywords_suggested);
         }
 
-        if (lead.score !== null) {
-          setScore(lead.score);
+        if (scoreToUse !== undefined && scoreToUse !== null) {
+          setScore(scoreToUse);
           setScanComplete(true);
         }
       })
