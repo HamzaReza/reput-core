@@ -504,3 +504,47 @@ export const COUNTRY_NAME_TO_ISO: Record<string, string> = {
   'zimbabwe': 'ZW',
   'åland islands': 'AX',
 };
+
+export const ALPHA2_TO_NUMERIC: Record<string, string> = {
+  US:"840", CA:"124", MX:"484", BR:"76",  AR:"32",  CO:"170", CL:"152", PE:"604",
+  GB:"826", DE:"276", FR:"250", NL:"528", CH:"756", BE:"56",  ES:"724", IT:"380",
+  AT:"40",  SE:"752", NO:"578", DK:"208", FI:"246", PT:"620", PL:"616", CZ:"203",
+  RO:"642", HU:"348", UA:"804", RU:"643", GR:"300", IE:"372",
+  AU:"36",  JP:"392", KR:"410", SG:"702", MY:"458", HK:"344", IN:"356", CN:"156",
+  TH:"764", VN:"704", ID:"360", PH:"608", NZ:"554", PK:"586",
+  AE:"784", IL:"376", SA:"682", QA:"634", TR:"792", EG:"818",
+  ZA:"710", NG:"566", KE:"404", MA:"504", GH:"288",
+};
+
+// Common short/alternate names the API may return that don't match ISO full names
+const NAME_ALIASES: Record<string, string> = {
+  "united states": "US",
+  "usa": "US",
+  "united kingdom": "GB",
+  "uk": "GB",
+  "russia": "RU",
+  "south korea": "KR",
+  "north korea": "KP",
+  "iran": "IR",
+  "syria": "SY",
+  "vietnam": "VN",
+  "bolivia": "BO",
+  "venezuela": "VE",
+  "tanzania": "TZ",
+  "moldova": "MD",
+  "taiwan": "TW",
+  "laos": "LA",
+  "czech republic": "CZ",
+  "czechia": "CZ",
+  "hong kong": "HK",
+  "macau": "MO",
+  "palestine": "PS",
+  "micronesia": "FM",
+};
+
+export function countryNameToNumericISO(name: string): string | undefined {
+  const lower = name.toLowerCase();
+  const alpha2 = NAME_ALIASES[lower] ?? COUNTRY_NAME_TO_ISO[lower];
+  if (!alpha2) return undefined;
+  return ALPHA2_TO_NUMERIC[alpha2];
+}

@@ -129,7 +129,7 @@ export default function LineChartCard({
       {/* Chart */}
       <div style={{ flex: 1, minHeight: 200, marginTop: "0.75rem" }}>
         <ResponsiveContainer width="100%" height={220} minWidth={1}>
-          <LineChart data={chartData} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
+          <LineChart data={chartData} margin={{ top: 4, right: 24, left: -20, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
             <XAxis dataKey="month" tick={{ fontSize: 10, fill: "#94a3b8" }} axisLine={false} tickLine={false} interval={0} />
             <YAxis tick={{ fontSize: 10, fill: "#94a3b8" }} axisLine={false} tickLine={false} allowDecimals={false} />

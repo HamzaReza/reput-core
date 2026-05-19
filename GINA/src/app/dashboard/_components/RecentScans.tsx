@@ -27,12 +27,6 @@ function riskFromScore(score: number | null): string {
   return "Negative";
 }
 
-function statusFromRisk(risk: string): { label: string; color: string; bg: string } {
-  if (risk === "Pending") return { label: "Scanning", color: "#64748b", bg: "#f1f5f9" };
-  if (risk === "Good" || risk === "Mediocre") return { label: "Brief Ready", color: "#4479da", bg: "#eff6ff" };
-  if (risk === "Poor") return { label: "Scanning", color: "#64748b", bg: "#f1f5f9" };
-  return { label: "High Risk", color: "#ef4444", bg: "#fef2f2" };
-}
 
 function relativeTime(iso: string | null): string {
   if (!iso) return "";
@@ -171,7 +165,7 @@ export default function RecentScans() {
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.8rem" }}>
           <thead>
             <tr style={{ backgroundColor: "#f8fafc" }}>
-              {["Company", "ReputScore", "Status", "Updated"].map((col) => (
+              {["Company", "ReputScore", "Scanned By", "Updated"].map((col) => (
                 <th
                   key={col}
                   style={{
@@ -214,7 +208,6 @@ export default function RecentScans() {
               scans.map((scan, i) => {
                 const risk = riskFromScore(scan.score);
                 const riskColor = RISK_COLORS[risk] ?? "#94a3b8";
-                const statusInfo = statusFromRisk(risk);
                 const isLast = i === scans.length - 1;
 
                 return (
@@ -278,15 +271,6 @@ export default function RecentScans() {
                               {[scan.company, scan.country].filter(Boolean).join(" · ")}
                             </p>
                           )}
-                          {adminView && (scan.scanned_by_name || scan.assigned_to_name) && (
-                            <p style={{ margin: 0, fontSize: "0.6875rem", color: "#94a3b8", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 160 }}>
-                              {scan.scanned_by_name && (
-                                <span>by {scan.scanned_by_name}{scan.scanned_by_role ? ` (${scan.scanned_by_role})` : ""}</span>
-                              )}
-                              {scan.scanned_by_name && scan.assigned_to_name && <span> · </span>}
-                              {scan.assigned_to_name && <span>→ {scan.assigned_to_name}</span>}
-                            </p>
-                          )}
                         </div>
                       </div>
                     </td>
@@ -323,29 +307,30 @@ export default function RecentScans() {
                       )}
                     </td>
 
-                    {/* Status badge */}
+                    {/* Scanned By */}
                     <td style={{ padding: "0.75rem 0.875rem" }}>
-                      <span
-                        style={{
-                          fontSize: "0.6875rem",
-                          fontWeight: 600,
-                          color: statusInfo.color,
-                          backgroundColor: statusInfo.bg,
-                          borderRadius: "999px",
-                          padding: "0.2rem 0.5rem",
-                          whiteSpace: "nowrap",
-                        }}
-                      >
-                        {statusInfo.label}
-                      </span>
+                      {scan.scanned_by_name ? (
+                        <div>
+                          <p style={{ margin: 0, fontWeight: 600, color: "var(--color-foreground, #1e293b)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 120 }}>
+                            {scan.scanned_by_name}
+                          </p>
+                          {scan.scanned_by_role && (
+                            <p style={{ margin: 0, fontSize: "0.6375rem", color: "var(--color-muted, #64748b)" }}>
+                              {scan.scanned_by_role}
+                            </p>
+                          )}
+                        </div>
+                      ) : (
+                        <span style={{ color: "#94a3b8", fontSize: "0.6875rem" }}>—</span>
+                      )}
                     </td>
 
                     {/* Updated */}
                     <td style={{ padding: "0.75rem 0.875rem", whiteSpace: "nowrap" }}>
-                      <p style={{ margin: 0, color: "var(--color-foreground, #1e293b)", fontWeight: 500 }}>
+                      <p style={{ margin: 0, fontSize: "0.6875rem", color: "var(--color-foreground, #1e293b)", fontWeight: 500 }}>
                         {formatDateTime(scan.researched_at)}
                       </p>
-                      <p style={{ margin: 0, fontSize: "0.65rem", color: "var(--color-muted, #64748b)" }}>
+                      <p style={{ margin: 0, fontSize: "0.6rem", color: "var(--color-muted, #64748b)" }}>
                         {relativeTime(scan.researched_at)}
                       </p>
                     </td>

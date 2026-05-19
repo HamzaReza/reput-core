@@ -21,11 +21,16 @@ async def get_stats(
         except Exception:
             return 0
 
+    def pct_change(current: int, last: int) -> int | None:
+        if last == 0:
+            return None if current == 0 else 100
+        return round((current - last) / last * 100)
+
     web_analysts = await count("SELECT COUNT(*)::int FROM web_analysts")
-    scans = await count("SELECT COUNT(*)::int FROM lead_generated WHERE score IS NOT NULL")
-    leads = await count("SELECT COUNT(*)::int FROM lead_generated")
-    contracts = await count("SELECT COUNT(*)::int FROM contracts")
-    clients = await count("SELECT COUNT(*)::int FROM clients")
+    scans        = await count("SELECT COUNT(*)::int FROM lead_generated WHERE score IS NOT NULL")
+    leads        = await count("SELECT COUNT(*)::int FROM lead_generated")
+    contracts    = await count("SELECT COUNT(*)::int FROM contracts")
+    clients      = await count("SELECT COUNT(*)::int FROM clients")
 
     try:
         avg_result = await db.execute(text("SELECT ROUND(AVG(score))::int FROM lead_generated WHERE score IS NOT NULL"))
@@ -33,7 +38,45 @@ async def get_stats(
     except Exception:
         avg_score = 0
 
-    return {"web_analysts": web_analysts, "scans": scans, "leads": leads, "contracts": contracts, "clients": clients, "avg_score": avg_score}
+    # Month-over-month trends
+    trends: dict = {"clients": None, "leads": None, "scans": None, "avg_score": None}
+    try:
+        row = (await db.execute(text("""
+            SELECT
+                COUNT(*) FILTER (WHERE researched_at >= DATE_TRUNC('month', NOW()))::int                                                                   AS leads_cur,
+                COUNT(*) FILTER (WHERE researched_at >= DATE_TRUNC('month', NOW()) - INTERVAL '1 month'
+                                   AND researched_at <  DATE_TRUNC('month', NOW()))::int                                                                   AS leads_prev,
+                COUNT(*) FILTER (WHERE score IS NOT NULL AND researched_at >= DATE_TRUNC('month', NOW()))::int                                              AS scans_cur,
+                COUNT(*) FILTER (WHERE score IS NOT NULL AND researched_at >= DATE_TRUNC('month', NOW()) - INTERVAL '1 month'
+                                                          AND researched_at <  DATE_TRUNC('month', NOW()))::int                                             AS scans_prev,
+                ROUND(AVG(score) FILTER (WHERE score IS NOT NULL AND researched_at >= DATE_TRUNC('month', NOW())))::int                                     AS avg_cur,
+                ROUND(AVG(score) FILTER (WHERE score IS NOT NULL AND researched_at >= DATE_TRUNC('month', NOW()) - INTERVAL '1 month'
+                                                                  AND researched_at <  DATE_TRUNC('month', NOW())))::int                                    AS avg_prev
+            FROM lead_generated
+        """))).one()
+        trends["leads"]     = pct_change(row.leads_cur or 0, row.leads_prev or 0)
+        trends["scans"]     = pct_change(row.scans_cur or 0, row.scans_prev or 0)
+        trends["avg_score"] = (row.avg_cur or 0) - (row.avg_prev or 0) if (row.avg_cur and row.avg_prev) else None
+    except Exception:
+        pass
+
+    try:
+        c_row = (await db.execute(text("""
+            SELECT
+                COUNT(*) FILTER (WHERE created_at >= DATE_TRUNC('month', NOW()))::int                                                                      AS cur,
+                COUNT(*) FILTER (WHERE created_at >= DATE_TRUNC('month', NOW()) - INTERVAL '1 month'
+                                   AND created_at <  DATE_TRUNC('month', NOW()))::int                                                                      AS prev
+            FROM clients
+        """))).one()
+        trends["clients"] = pct_change(c_row.cur or 0, c_row.prev or 0)
+    except Exception:
+        pass
+
+    return {
+        "web_analysts": web_analysts, "scans": scans, "leads": leads,
+        "contracts": contracts, "clients": clients, "avg_score": avg_score,
+        "trends": trends,
+    }
 
 
 @router.get("/score-distribution")
@@ -200,3 +243,26 @@ async def get_funnel(
         }
     except Exception:
         return {"total": 0, "scanned": 0, "unique_scanned": 0, "good": 0, "mediocre": 0, "poor": 0, "negative": 0}
+
+
+@router.get("/activity-by-region")
+async def get_activity_by_region(
+    db: AsyncSession = Depends(get_db),
+    current_web_analyst: WebAnalyst = Depends(get_current_web_analyst),
+) -> dict:
+    sql = """
+        SELECT country_name, COUNT(*)::int AS scan_count
+        FROM client_events,
+             jsonb_array_elements_text(data->'countries') AS country_name
+        WHERE event_type = 'scan'
+          AND data ? 'countries'
+          AND jsonb_array_length(data->'countries') > 0
+        GROUP BY country_name
+        ORDER BY scan_count DESC
+    """
+    try:
+        result = await db.execute(text(sql))
+        rows = result.fetchall()
+        return {"regions": [{"country": row[0], "count": row[1]} for row in rows]}
+    except Exception:
+        return {"regions": []}
