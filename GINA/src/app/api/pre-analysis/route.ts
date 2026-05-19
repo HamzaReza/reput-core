@@ -2,6 +2,8 @@ import { COUNTRY_NAME_TO_ISO } from "@/lib/countries";
 import Anthropic from "@anthropic-ai/sdk";
 import { NextRequest, NextResponse } from "next/server";
 
+export const maxDuration = 800;
+
 const NATIONALITY_ALIASES: Record<string, string> = {
   american: "US",
   australian: "AU",
