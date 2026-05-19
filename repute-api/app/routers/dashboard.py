@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -22,53 +22,181 @@ async def get_stats(
             return 0
 
     web_analysts = await count("SELECT COUNT(*)::int FROM web_analysts")
-    scans = await count("SELECT COUNT(*)::int FROM reputation_scans")
+    scans = await count("SELECT COUNT(*)::int FROM lead_generated WHERE score IS NOT NULL")
     leads = await count("SELECT COUNT(*)::int FROM lead_generated")
     contracts = await count("SELECT COUNT(*)::int FROM contracts")
     clients = await count("SELECT COUNT(*)::int FROM clients")
 
-    return {"web_analysts": web_analysts, "scans": scans, "leads": leads, "contracts": contracts, "clients": clients}
+    try:
+        avg_result = await db.execute(text("SELECT ROUND(AVG(score))::int FROM lead_generated WHERE score IS NOT NULL"))
+        avg_score = avg_result.scalar() or 0
+    except Exception:
+        avg_score = 0
+
+    return {"web_analysts": web_analysts, "scans": scans, "leads": leads, "contracts": contracts, "clients": clients, "avg_score": avg_score}
+
+
+@router.get("/score-distribution")
+async def get_score_distribution(
+    db: AsyncSession = Depends(get_db),
+    current_web_analyst: WebAnalyst = Depends(get_current_web_analyst),
+) -> dict:
+    sql = """
+        SELECT
+            COUNT(*) FILTER (WHERE (data->>'score')::int >= 86)                                AS good,
+            COUNT(*) FILTER (WHERE (data->>'score')::int >= 61 AND (data->>'score')::int < 86) AS mediocre,
+            COUNT(*) FILTER (WHERE (data->>'score')::int >= 26 AND (data->>'score')::int < 61) AS poor,
+            COUNT(*) FILTER (WHERE (data->>'score')::int < 26)                                 AS negative,
+            COUNT(*)                                                                            AS total,
+            ROUND(AVG((data->>'score')::int))::int                                             AS average
+        FROM client_events
+        WHERE event_type = 'scan'
+          AND data->>'score' IS NOT NULL
+    """
+    try:
+        result = await db.execute(text(sql))
+        row = result.fetchone()
+        total = row.total or 0
+        def pct(n): return round((n / total) * 100) if total else 0
+        return {
+            "distribution": [
+                {"name": "Good",     "value": pct(row.good),     "color": "#22c55e"},
+                {"name": "Mediocre", "value": pct(row.mediocre), "color": "#4479DA"},
+                {"name": "Poor",     "value": pct(row.poor),     "color": "#f97316"},
+                {"name": "Negative", "value": pct(row.negative), "color": "#ef4444"},
+            ],
+            "average": row.average or 0,
+            "total": total,
+        }
+    except Exception:
+        return {"distribution": [], "average": 0, "total": 0}
 
 
 @router.get("/charts")
 async def get_charts(
+    period: str = Query("monthly", pattern="^(weekly|monthly)$"),
     db: AsyncSession = Depends(get_db),
     current_web_analyst: WebAnalyst = Depends(get_current_web_analyst),
 ) -> dict:
     def to_rows(result) -> list[dict]:
         return [{"month": str(r[0])[:10], "count": r[1]} for r in result.fetchall()]
 
-    async def monthly(sql: str) -> list[dict]:
+    async def query(sql: str) -> list[dict]:
         try:
             result = await db.execute(text(sql))
             return to_rows(result)
         except Exception:
             return []
 
-    web_analysts_data = await monthly("""
-        SELECT DATE_TRUNC('month', created_at)::text AS month, COUNT(*)::int AS count
-        FROM web_analysts
-        WHERE created_at >= DATE_TRUNC('year', NOW())
-        GROUP BY 1 ORDER BY 1
-    """)
-    scans_data = await monthly("""
-        SELECT DATE_TRUNC('month', researched_at)::text AS month, COUNT(*)::int AS count
-        FROM lead_generated
-        WHERE researched_at >= DATE_TRUNC('year', NOW())
-        GROUP BY 1 ORDER BY 1
-    """)
-    contracts_data = await monthly("""
-        SELECT DATE_TRUNC('month', created_at)::text AS month, COUNT(*)::int AS count
-        FROM contracts
-        WHERE created_at >= DATE_TRUNC('year', NOW())
-        GROUP BY 1 ORDER BY 1
-    """)
+    async def query_leads_split(sql: str) -> tuple[list[dict], list[dict]]:
+        try:
+            result = await db.execute(text(sql))
+            rows = result.fetchall()
+            completed = [{"month": str(r[0])[:10], "count": r[1]} for r in rows]
+            pending   = [{"month": str(r[0])[:10], "count": r[2]} for r in rows]
+            return completed, pending
+        except Exception:
+            return [], []
 
-    clients_data = await monthly("""
-        SELECT DATE_TRUNC('month', created_at)::text AS month, COUNT(*)::int AS count
-        FROM clients
-        WHERE created_at >= DATE_TRUNC('year', NOW())
-        GROUP BY 1 ORDER BY 1
-    """)
+    if period == "weekly":
+        web_analysts_data = await query("""
+            SELECT DATE_TRUNC('day', created_at)::text AS month, COUNT(*)::int AS count
+            FROM web_analysts
+            WHERE created_at >= DATE_TRUNC('week', NOW())
+              AND created_at <  DATE_TRUNC('week', NOW()) + INTERVAL '7 days'
+            GROUP BY 1 ORDER BY 1
+        """)
+        leads_completed, leads_pending = await query_leads_split("""
+            SELECT
+                DATE_TRUNC('day', researched_at)::text AS month,
+                COUNT(*) FILTER (WHERE score IS NOT NULL)::int AS completed,
+                COUNT(*) FILTER (WHERE score IS NULL)::int     AS pending
+            FROM lead_generated
+            WHERE researched_at >= DATE_TRUNC('week', NOW())
+              AND researched_at <  DATE_TRUNC('week', NOW()) + INTERVAL '7 days'
+            GROUP BY 1 ORDER BY 1
+        """)
+        contracts_data = await query("""
+            SELECT DATE_TRUNC('day', created_at)::text AS month, COUNT(*)::int AS count
+            FROM contracts
+            WHERE created_at >= DATE_TRUNC('week', NOW())
+              AND created_at <  DATE_TRUNC('week', NOW()) + INTERVAL '7 days'
+            GROUP BY 1 ORDER BY 1
+        """)
+        clients_data = await query("""
+            SELECT DATE_TRUNC('day', created_at)::text AS month, COUNT(*)::int AS count
+            FROM clients
+            WHERE created_at >= DATE_TRUNC('week', NOW())
+              AND created_at <  DATE_TRUNC('week', NOW()) + INTERVAL '7 days'
+            GROUP BY 1 ORDER BY 1
+        """)
+    else:
+        web_analysts_data = await query("""
+            SELECT DATE_TRUNC('month', created_at)::text AS month, COUNT(*)::int AS count
+            FROM web_analysts
+            WHERE created_at >= DATE_TRUNC('year', NOW())
+            GROUP BY 1 ORDER BY 1
+        """)
+        leads_completed, leads_pending = await query_leads_split("""
+            SELECT
+                DATE_TRUNC('month', researched_at)::text AS month,
+                COUNT(*) FILTER (WHERE score IS NOT NULL)::int AS completed,
+                COUNT(*) FILTER (WHERE score IS NULL)::int     AS pending
+            FROM lead_generated
+            WHERE researched_at >= DATE_TRUNC('year', NOW())
+            GROUP BY 1 ORDER BY 1
+        """)
+        contracts_data = await query("""
+            SELECT DATE_TRUNC('month', created_at)::text AS month, COUNT(*)::int AS count
+            FROM contracts
+            WHERE created_at >= DATE_TRUNC('year', NOW())
+            GROUP BY 1 ORDER BY 1
+        """)
+        clients_data = await query("""
+            SELECT DATE_TRUNC('month', created_at)::text AS month, COUNT(*)::int AS count
+            FROM clients
+            WHERE created_at >= DATE_TRUNC('year', NOW())
+            GROUP BY 1 ORDER BY 1
+        """)
 
-    return {"web_analysts": web_analysts_data, "leads": scans_data, "contracts": contracts_data, "clients": clients_data}
+    return {
+        "web_analysts": web_analysts_data,
+        "leads": leads_completed,
+        "leads_pending": leads_pending,
+        "contracts": contracts_data,
+        "clients": clients_data,
+    }
+
+
+@router.get("/funnel")
+async def get_funnel(
+    db: AsyncSession = Depends(get_db),
+    current_web_analyst: WebAnalyst = Depends(get_current_web_analyst),
+) -> dict:
+    sql = """
+        SELECT
+            (SELECT COUNT(*)::int FROM lead_generated)                                              AS total_leads,
+            COUNT(*)::int                                                                           AS scanned_count,
+            COUNT(DISTINCT data->>'lead_id')::int                                                   AS unique_scanned,
+            COUNT(*) FILTER (WHERE (data->>'score')::int >= 86)                                    AS good,
+            COUNT(*) FILTER (WHERE (data->>'score')::int >= 61 AND (data->>'score')::int < 86)     AS mediocre,
+            COUNT(*) FILTER (WHERE (data->>'score')::int >= 26 AND (data->>'score')::int < 61)     AS poor,
+            COUNT(*) FILTER (WHERE (data->>'score')::int < 26)                                     AS negative
+        FROM client_events
+        WHERE event_type = 'scan'
+          AND data->>'score' IS NOT NULL
+    """
+    try:
+        result = await db.execute(text(sql))
+        row = result.fetchone()
+        return {
+            "total":          int(row.total_leads),
+            "scanned":        int(row.scanned_count),
+            "unique_scanned": int(row.unique_scanned),
+            "good":           int(row.good),
+            "mediocre":       int(row.mediocre),
+            "poor":           int(row.poor),
+            "negative":       int(row.negative),
+        }
+    except Exception:
+        return {"total": 0, "scanned": 0, "unique_scanned": 0, "good": 0, "mediocre": 0, "poor": 0, "negative": 0}
