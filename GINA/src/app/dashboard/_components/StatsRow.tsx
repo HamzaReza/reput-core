@@ -6,8 +6,7 @@ const CARDS = [
   {
     key: "clients" as const,
     label: "Total Clients",
-    trend: "↑ 12% vs last month",
-    trendUp: true,
+    isScore: false,
     iconBg: "#f0f9ff",
     icon: (
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#0ea5e9" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -21,8 +20,7 @@ const CARDS = [
   {
     key: "leads" as const,
     label: "Briefs Ready",
-    trend: "↑ 28% vs last month",
-    trendUp: true,
+    isScore: false,
     iconBg: "#f0fdf4",
     icon: (
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#22c55e" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -35,8 +33,7 @@ const CARDS = [
   {
     key: "scans" as const,
     label: "Active Researches",
-    trend: "↑ 20% vs last month",
-    trendUp: true,
+    isScore: false,
     iconBg: "#eff6ff",
     icon: (
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#4479da" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -48,8 +45,7 @@ const CARDS = [
   {
     key: "avg_score" as const,
     label: "Average ReputScore",
-    trend: "↑ 5 pts vs last month",
-    trendUp: true,
+    isScore: true,
     iconBg: "#faf5ff",
     icon: (
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8b5cf6" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -58,6 +54,14 @@ const CARDS = [
     ),
   },
 ];
+
+function trendLabel(val: number | null | undefined, isScore: boolean): string | null {
+  if (val == null) return null;
+  if (val === 0) return "No change vs last month";
+  const arrow = val > 0 ? "↑" : "↓";
+  const abs = Math.abs(val);
+  return isScore ? `${arrow} ${abs} pts vs last month` : `${arrow} ${abs}% vs last month`;
+}
 
 export default function StatsRow({ data, loading = false }: { data: DashboardStats; loading?: boolean }) {
   return (
@@ -154,16 +158,17 @@ export default function StatsRow({ data, loading = false }: { data: DashboardSta
             </p>
           )}
 
-          <p
-            style={{
-              fontSize: "0.7rem",
-              fontWeight: 500,
-              color: card.trendUp ? "#22c55e" : "#ef4444",
-              margin: 0,
-            }}
-          >
-            {card.trend}
-          </p>
+          {(() => {
+            const val = data.trends?.[card.key];
+            const label = trendLabel(val, card.isScore);
+            if (!label) return null;
+            const color = val === 0 ? "#94a3b8" : (val ?? 0) > 0 ? "#22c55e" : "#ef4444";
+            return (
+              <p style={{ fontSize: "0.7rem", fontWeight: 500, color, margin: 0 }}>
+                {label}
+              </p>
+            );
+          })()}
         </div>
       ))}
     </div>
