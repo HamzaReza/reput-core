@@ -4,19 +4,6 @@ import { DashboardStats } from "@/lib/api";
 
 const CARDS = [
   {
-    key: "scans" as const,
-    label: "Active Researches",
-    trend: "↑ 20% vs last month",
-    trendUp: true,
-    iconBg: "#eff6ff",
-    icon: (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#4479da" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <circle cx="11" cy="11" r="8" />
-        <line x1="21" y1="21" x2="16.65" y2="16.65" />
-      </svg>
-    ),
-  },
-  {
     key: "clients" as const,
     label: "Total Clients",
     trend: "↑ 12% vs last month",
@@ -46,11 +33,23 @@ const CARDS = [
     ),
   },
   {
-    key: null,
+    key: "scans" as const,
+    label: "Active Researches",
+    trend: "↑ 20% vs last month",
+    trendUp: true,
+    iconBg: "#eff6ff",
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#4479da" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="11" cy="11" r="8" />
+        <line x1="21" y1="21" x2="16.65" y2="16.65" />
+      </svg>
+    ),
+  },
+  {
+    key: "avg_score" as const,
     label: "Average ReputScore",
     trend: "↑ 5 pts vs last month",
     trendUp: true,
-    staticValue: "72 / 100",
     iconBg: "#faf5ff",
     icon: (
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8b5cf6" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -134,7 +133,7 @@ export default function StatsRow({ data, loading = false }: { data: DashboardSta
             </div>
           </div>
 
-          {loading && card.key !== null ? (
+          {loading ? (
             <div className="stats-shimmer" style={{ height: "1.875rem", width: "55%", marginBottom: "0.375rem" }} />
           ) : (
             <p
@@ -147,10 +146,10 @@ export default function StatsRow({ data, loading = false }: { data: DashboardSta
                 letterSpacing: "-0.02em",
               }}
             >
-              {card.key === null
-                ? card.staticValue
-                : data[card.key] > 0
-                ? data[card.key].toLocaleString()
+              {data[card.key] > 0
+                ? card.key === "avg_score"
+                  ? `${data[card.key]} / 100`
+                  : data[card.key].toLocaleString()
                 : "—"}
             </p>
           )}
