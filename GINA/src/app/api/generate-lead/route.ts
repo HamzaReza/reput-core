@@ -2,6 +2,8 @@ import { COUNTRY_NAME_TO_ISO } from "@/lib/countries";
 import Anthropic from "@anthropic-ai/sdk";
 import { NextRequest, NextResponse } from "next/server";
 
+export const maxDuration = 800;
+
 export interface WebLink {
   url: string;
   title: string;
