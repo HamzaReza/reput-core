@@ -2,12 +2,7 @@
 
 import Link from "next/link";
 
-interface TopBarProps {
-  userName: string;
-  userEmail: string;
-}
-
-export default function TopBar({ userName: _userName }: TopBarProps) {
+export default function TopBar() {
   return (
     <div
       style={{
