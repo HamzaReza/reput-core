@@ -1,13 +1,16 @@
 import puppeteerCore from "puppeteer-core";
-import chromium from "@sparticuz/chromium";
+import chromium from "@sparticuz/chromium-min";
 import puppeteer from "puppeteer";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
+const CHROMIUM_URL =
+  "https://github.com/Sparticuz/chromium/releases/download/v131.0.0/chromium-v131.0.0-pack.tar";
+
 async function getBrowser() {
   if (process.env.NODE_ENV === "production") {
-    const executablePath = await chromium.executablePath();
+    const executablePath = await chromium.executablePath(CHROMIUM_URL);
     return puppeteerCore.launch({
       args: chromium.args,
       executablePath,
