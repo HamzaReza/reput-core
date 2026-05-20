@@ -33,10 +33,20 @@ async def get_stats(
     clients      = await count("SELECT COUNT(*)::int FROM clients")
 
     try:
-        avg_result = await db.execute(text("SELECT ROUND(AVG(score))::int FROM lead_generated WHERE score IS NOT NULL"))
+        avg_result = await db.execute(text(
+            "SELECT ROUND(AVG((data->>'score')::int))::int "
+            "FROM client_events WHERE event_type = 'scan' AND data->>'score' IS NOT NULL"
+        ))
         avg_score = avg_result.scalar() or 0
     except Exception:
         avg_score = 0
+
+    async def scalar_or_none(sql: str):
+        try:
+            result = await db.execute(text(sql))
+            return result.scalar()
+        except Exception:
+            return None
 
     # Month-over-month trends
     trends: dict = {"clients": None, "leads": None, "scans": None, "avg_score": None}
@@ -48,17 +58,26 @@ async def get_stats(
                                    AND researched_at <  DATE_TRUNC('month', NOW()))::int                                                                   AS leads_prev,
                 COUNT(*) FILTER (WHERE score IS NOT NULL AND researched_at >= DATE_TRUNC('month', NOW()))::int                                              AS scans_cur,
                 COUNT(*) FILTER (WHERE score IS NOT NULL AND researched_at >= DATE_TRUNC('month', NOW()) - INTERVAL '1 month'
-                                                          AND researched_at <  DATE_TRUNC('month', NOW()))::int                                             AS scans_prev,
-                ROUND(AVG(score) FILTER (WHERE score IS NOT NULL AND researched_at >= DATE_TRUNC('month', NOW())))::int                                     AS avg_cur,
-                ROUND(AVG(score) FILTER (WHERE score IS NOT NULL AND researched_at >= DATE_TRUNC('month', NOW()) - INTERVAL '1 month'
-                                                                  AND researched_at <  DATE_TRUNC('month', NOW())))::int                                    AS avg_prev
+                                                          AND researched_at <  DATE_TRUNC('month', NOW()))::int                                             AS scans_prev
             FROM lead_generated
         """))).one()
-        trends["leads"]     = pct_change(row.leads_cur or 0, row.leads_prev or 0)
-        trends["scans"]     = pct_change(row.scans_cur or 0, row.scans_prev or 0)
-        trends["avg_score"] = (row.avg_cur or 0) - (row.avg_prev or 0) if (row.avg_cur and row.avg_prev) else None
+        trends["leads"] = pct_change(row.leads_cur or 0, row.leads_prev or 0)
+        trends["scans"] = pct_change(row.scans_cur or 0, row.scans_prev or 0)
     except Exception:
         pass
+
+    avg_cur  = await scalar_or_none(
+        "SELECT ROUND(AVG((data->>'score')::int))::int FROM client_events "
+        "WHERE event_type = 'scan' AND data->>'score' IS NOT NULL "
+        "AND created_at >= DATE_TRUNC('month', NOW())"
+    )
+    avg_prev = await scalar_or_none(
+        "SELECT ROUND(AVG((data->>'score')::int))::int FROM client_events "
+        "WHERE event_type = 'scan' AND data->>'score' IS NOT NULL "
+        "AND created_at >= DATE_TRUNC('month', NOW()) - INTERVAL '1 month' "
+        "AND created_at < DATE_TRUNC('month', NOW())"
+    )
+    trends["avg_score"] = (int(avg_cur) - int(avg_prev)) if (avg_cur is not None and avg_prev is not None) else None
 
     try:
         c_row = (await db.execute(text("""

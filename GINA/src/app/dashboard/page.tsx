@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  ActivityByRegionData,
   dashboard,
   DashboardStats,
   FunnelData,
@@ -245,7 +244,14 @@ const LEVEL_COLORS = [
   "#1d4ed8", // 5 – very high
 ];
 
-const LEVEL_LABELS = ["No data", "Very Low", "Low", "Medium", "High", "Very High"] as const;
+const LEVEL_LABELS = [
+  "No data",
+  "Very Low",
+  "Low",
+  "Medium",
+  "High",
+  "Very High",
+] as const;
 
 function ActivityByRegionCard({ data }: { data: RegionDataPoint[] }) {
   const maxCount = data.reduce((m, d) => Math.max(m, d.count), 0);
@@ -317,7 +323,13 @@ function ActivityByRegionCard({ data }: { data: RegionDataPoint[] }) {
       </div>
 
       {/* Real world map — bleed to card edges */}
-      <div style={{ margin: "0 -0.875rem", overflow: "hidden", position: "relative" }}>
+      <div
+        style={{
+          margin: "0 -0.875rem",
+          overflow: "hidden",
+          position: "relative",
+        }}
+      >
         <ComposableMap
           width={800}
           height={360}
@@ -337,7 +349,10 @@ function ActivityByRegionCard({ data }: { data: RegionDataPoint[] }) {
                     stroke="#ffffff"
                     strokeWidth={0.4}
                     style={{
-                      default: { outline: "none", cursor: count ? "pointer" : "default" },
+                      default: {
+                        outline: "none",
+                        cursor: count ? "pointer" : "default",
+                      },
                       hover: {
                         outline: "none",
                         fill: LEVEL_COLORS[Math.min(level + 1, 5)],
@@ -355,7 +370,12 @@ function ActivityByRegionCard({ data }: { data: RegionDataPoint[] }) {
                       });
                     }}
                     onMouseMove={(evt: React.MouseEvent<SVGPathElement>) => {
-                      if (tooltip) setTooltip((prev) => prev ? { ...prev, x: evt.clientX, y: evt.clientY } : null);
+                      if (tooltip)
+                        setTooltip((prev) =>
+                          prev
+                            ? { ...prev, x: evt.clientX, y: evt.clientY }
+                            : null,
+                        );
                     }}
                     onMouseLeave={() => setTooltip(null)}
                   />
@@ -367,33 +387,35 @@ function ActivityByRegionCard({ data }: { data: RegionDataPoint[] }) {
       </div>
 
       {/* Tooltip — portalled to body to escape stacking contexts */}
-      {tooltip && createPortal(
-        <div
-          style={{
-            position: "fixed",
-            left: tooltip.x + 12,
-            top: tooltip.y - 36,
-            background: "rgba(15,23,42,0.9)",
-            color: "#f8fafc",
-            padding: "0.3rem 0.65rem",
-            borderRadius: "0.5rem",
-            fontSize: "0.75rem",
-            fontWeight: 600,
-            pointerEvents: "none",
-            zIndex: 9999,
-            whiteSpace: "nowrap",
-            boxShadow: "0 4px 12px rgba(0,0,0,0.3)",
-            lineHeight: 1.6,
-          }}
-        >
-          {tooltip.country}
-          <br />
-          <span style={{ fontWeight: 400, color: "#94a3b8" }}>
-            {tooltip.count.toLocaleString()} scan{tooltip.count !== 1 ? "s" : ""}
-          </span>
-        </div>,
-        document.body
-      )}
+      {tooltip &&
+        createPortal(
+          <div
+            style={{
+              position: "fixed",
+              left: tooltip.x + 12,
+              top: tooltip.y - 36,
+              background: "rgba(15,23,42,0.9)",
+              color: "#f8fafc",
+              padding: "0.3rem 0.65rem",
+              borderRadius: "0.5rem",
+              fontSize: "0.75rem",
+              fontWeight: 600,
+              pointerEvents: "none",
+              zIndex: 9999,
+              whiteSpace: "nowrap",
+              boxShadow: "0 4px 12px rgba(0,0,0,0.3)",
+              lineHeight: 1.6,
+            }}
+          >
+            {tooltip.country}
+            <br />
+            <span style={{ fontWeight: 400, color: "#94a3b8" }}>
+              {tooltip.count.toLocaleString()} scan
+              {tooltip.count !== 1 ? "s" : ""}
+            </span>
+          </div>,
+          document.body,
+        )}
 
       {/* Legend — 5 labeled color boxes */}
       <div style={{ marginTop: "0.5rem" }}>
@@ -401,10 +423,29 @@ function ActivityByRegionCard({ data }: { data: RegionDataPoint[] }) {
           {LEVEL_COLORS.slice(1).map((color, i) => (
             <div
               key={color}
-              style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: "3px" }}
+              style={{
+                flex: 1,
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                gap: "3px",
+              }}
             >
-              <div style={{ width: "100%", height: 7, backgroundColor: color, borderRadius: 2 }} />
-              <span style={{ fontSize: "0.55rem", color: "var(--color-muted, #64748b)", textAlign: "center" }}>
+              <div
+                style={{
+                  width: "100%",
+                  height: 7,
+                  backgroundColor: color,
+                  borderRadius: 2,
+                }}
+              />
+              <span
+                style={{
+                  fontSize: "0.55rem",
+                  color: "var(--color-muted, #64748b)",
+                  textAlign: "center",
+                }}
+              >
                 {LEVEL_LABELS[i + 1]}
               </span>
             </div>
@@ -414,16 +455,42 @@ function ActivityByRegionCard({ data }: { data: RegionDataPoint[] }) {
 
       {/* Top regions list */}
       {top5.length > 0 ? (
-        <div style={{ marginTop: "0.5rem", borderTop: "1px solid var(--color-border, #e2e8f0)", paddingTop: "0.5rem" }}>
-          <p style={{ fontSize: "0.6875rem", fontWeight: 700, color: "var(--color-foreground, #1e293b)", margin: "0 0 0.35rem" }}>
+        <div
+          style={{
+            marginTop: "0.5rem",
+            borderTop: "1px solid var(--color-border, #e2e8f0)",
+            paddingTop: "0.5rem",
+          }}
+        >
+          <p
+            style={{
+              fontSize: "0.6875rem",
+              fontWeight: 700,
+              color: "var(--color-foreground, #1e293b)",
+              margin: "0 0 0.35rem",
+            }}
+          >
             Top Regions
           </p>
           {top5.map(({ country, count }) => (
             <div
               key={country}
-              style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.5rem", marginBottom: "0.2rem" }}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: "0.5rem",
+                marginBottom: "0.2rem",
+              }}
             >
-              <div style={{ display: "flex", alignItems: "center", gap: "0.375rem", minWidth: 0 }}>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "0.375rem",
+                  minWidth: 0,
+                }}
+              >
                 <div
                   style={{
                     width: 8,
@@ -433,18 +500,40 @@ function ActivityByRegionCard({ data }: { data: RegionDataPoint[] }) {
                     flexShrink: 0,
                   }}
                 />
-                <span style={{ fontSize: "0.6875rem", color: "var(--color-foreground, #1e293b)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                <span
+                  style={{
+                    fontSize: "0.6875rem",
+                    color: "var(--color-foreground, #1e293b)",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                  }}
+                >
                   {country}
                 </span>
               </div>
-              <span style={{ fontSize: "0.6875rem", fontWeight: 600, color: "var(--color-muted, #64748b)", flexShrink: 0 }}>
+              <span
+                style={{
+                  fontSize: "0.6875rem",
+                  fontWeight: 600,
+                  color: "var(--color-muted, #64748b)",
+                  flexShrink: 0,
+                }}
+              >
                 {count.toLocaleString()}
               </span>
             </div>
           ))}
         </div>
       ) : (
-        <p style={{ fontSize: "0.75rem", color: "var(--color-muted, #64748b)", margin: "0.5rem 0 0", textAlign: "center" }}>
+        <p
+          style={{
+            fontSize: "0.75rem",
+            color: "var(--color-muted, #64748b)",
+            margin: "0.5rem 0 0",
+            textAlign: "center",
+          }}
+        >
           No scan data yet
         </p>
       )}
@@ -767,7 +856,7 @@ export default function DashboardHome() {
         }
       `}</style>
 
-      <TopBar userName={userName} userEmail="" />
+      <TopBar />
 
       <StatsRow data={statsData} loading={loading} />
 
