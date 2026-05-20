@@ -1127,8 +1127,6 @@ export default function ClientDetailPage() {
     | ClientEventType
     | undefined;
   const handleExportTimelinePdf = async () => {
-    const { default: html2canvas } = await import("html2canvas");
-    const { jsPDF } = await import("jspdf");
 
     const escapeHtml = (value: string) =>
       value
@@ -1165,6 +1163,8 @@ export default function ClientDetailPage() {
       .slice(0, 40)}.pdf`;
 
     const css = `
+      @page { margin-top: 48px; }
+      @page :first { margin-top: 0; }
       *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
       .tl-wrap {
         font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -1182,6 +1182,8 @@ export default function ClientDetailPage() {
         padding: 0.72rem 0.85rem;
         margin-bottom: 0.55rem;
         background: #f8fafc;
+        break-inside: avoid;
+        page-break-inside: avoid;
       }
       .tl-footer {
         margin-top: 1.3rem;
@@ -1201,55 +1203,20 @@ export default function ClientDetailPage() {
       </div>
     `;
 
-    const style = document.createElement("style");
-    style.textContent = css;
-    document.head.appendChild(style);
-
-    const container = document.createElement("div");
-    container.style.cssText =
-      "position:fixed;left:-9999px;top:0;z-index:-1;background:#f8fafc;padding:24px;";
-    container.innerHTML = bodyHtml;
-    document.body.appendChild(container);
-
-    const wrap = container.querySelector(".tl-wrap") as HTMLElement;
-
-    try {
-      const canvas = await html2canvas(wrap, {
-        scale: 2,
-        useCORS: true,
-        allowTaint: true,
-        logging: false,
-        backgroundColor: "#ffffff",
-      });
-
-      const imgData = canvas.toDataURL("image/jpeg", 0.95);
-      const pdf = new jsPDF({
-        orientation: "portrait",
-        unit: "mm",
-        format: "a4",
-      });
-      const pdfW = pdf.internal.pageSize.getWidth();
-      const pdfH = pdf.internal.pageSize.getHeight();
-      const imgH = (canvas.height / canvas.width) * pdfW;
-
-      let remaining = imgH;
-      let yOffset = 0;
-
-      pdf.addImage(imgData, "JPEG", 0, yOffset, pdfW, imgH);
-      remaining -= pdfH;
-
-      while (remaining > 0) {
-        yOffset -= pdfH;
-        pdf.addPage();
-        pdf.addImage(imgData, "JPEG", 0, yOffset, pdfW, imgH);
-        remaining -= pdfH;
-      }
-
-      pdf.save(filename);
-    } finally {
-      document.head.removeChild(style);
-      document.body.removeChild(container);
-    }
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><style>${css}</style></head><body style="background:#f8fafc;padding:24px;">${bodyHtml}</body></html>`;
+    const res = await fetch("/api/export-pdf", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ html, filename }),
+    });
+    if (!res.ok) throw new Error("PDF export failed");
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   return (
