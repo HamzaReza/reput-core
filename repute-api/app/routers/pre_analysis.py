@@ -80,7 +80,7 @@ class PreAnalysisRequest(BaseModel):
     reportLanguage: str | None = None
 
 
-@router.post("/")
+@router.post("")
 async def pre_analysis(
     body: PreAnalysisRequest,
     _analyst: WebAnalyst = Depends(get_current_web_analyst),
