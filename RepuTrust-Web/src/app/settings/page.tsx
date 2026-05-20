@@ -2,7 +2,7 @@
 
 import Footer from "@/components/common/Footer";
 import Header from "@/components/common/Header";
-import { isAuthed, getCachedMe, users, ScanDepth } from "@/lib/api";
+import { isAuthed, getCachedMe, users, ScanDepth, USER_CACHE_KEY, PROFILE_CACHE_KEY } from "@/lib/api";
 import { COUNTRY_NAMES } from "@/lib/countries";
 import { useRouter } from "next/navigation";
 import React, { useEffect, useState } from "react";
@@ -23,7 +23,6 @@ export default function SettingsPage() {
   const router = useRouter();
   const [authed, setAuthed] = useState<boolean | null>(null);
 
-  // Profile fields (read-only in beta)
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [phone, setPhone] = useState("");
@@ -32,8 +31,11 @@ export default function SettingsPage() {
   const [dob, setDob] = useState("");
   const [scanDepth, setScanDepth] = useState<ScanDepth>("Standard");
   const [keywords, setKeywords] = useState<string[]>([]);
+  const [newKeyword, setNewKeyword] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
   const [showBetaDeleteMsg, setShowBetaDeleteMsg] = useState(false);
-  const [showBetaScanMsg, setShowBetaScanMsg] = useState(false);
+  // const [showBetaScanMsg, setShowBetaScanMsg] = useState(false); // [DISABLED] with scan limit
 
   useEffect(() => {
     if (!isAuthed()) {
@@ -75,6 +77,37 @@ export default function SettingsPage() {
     };
     loadProfile();
   }, [router]);
+
+  const addKeyword = () => {
+    const kw = newKeyword.trim();
+    if (kw && !keywords.includes(kw)) setKeywords((prev) => [...prev, kw]);
+    setNewKeyword("");
+  };
+
+  const removeKeyword = (kw: string) =>
+    setKeywords((prev) => prev.filter((k) => k !== kw));
+
+  const handleSave = async () => {
+    setSaving(true);
+    setSaveError("");
+    try {
+      await users.updateMe({
+        name: `${firstName} ${lastName}`.trim() || undefined,
+        phone: phone || undefined,
+        nationality: nationality || undefined,
+        date_of_birth: dob || undefined,
+        scan_depth: scanDepth,
+      });
+      await users.upsertProfile({ keywords });
+      sessionStorage.removeItem(USER_CACHE_KEY);
+      sessionStorage.removeItem(PROFILE_CACHE_KEY);
+      sessionStorage.removeItem("reput_scan");
+      router.push("/dashboard");
+    } catch (e) {
+      setSaveError(e instanceof Error ? e.message : "Failed to save changes.");
+      setSaving(false);
+    }
+  };
 
   if (!authed) return null;
 
@@ -168,8 +201,8 @@ export default function SettingsPage() {
                     <input
                       type="text"
                       value={firstName}
-                      readOnly
-                      style={{ ...fieldStyle, cursor: "default" }}
+                      onChange={(e) => setFirstName(e.target.value)}
+                      style={fieldStyle}
                       placeholder="Name"
                     />
                   </div>
@@ -188,8 +221,8 @@ export default function SettingsPage() {
                     <input
                       type="text"
                       value={lastName}
-                      readOnly
-                      style={{ ...fieldStyle, cursor: "default" }}
+                      onChange={(e) => setLastName(e.target.value)}
+                      style={fieldStyle}
                       placeholder="Lastname"
                     />
                   </div>
@@ -209,8 +242,8 @@ export default function SettingsPage() {
                   <input
                     type="tel"
                     value={phone}
-                    readOnly
-                    style={{ ...fieldStyle, cursor: "default" }}
+                    onChange={(e) => setPhone(e.target.value)}
+                    style={fieldStyle}
                     placeholder="Telephone"
                   />
                 </div>
@@ -230,8 +263,9 @@ export default function SettingsPage() {
                     type="email"
                     value={profileEmail}
                     readOnly
-                    style={{ ...fieldStyle, cursor: "default" }}
+                    style={{ ...fieldStyle, cursor: "not-allowed", opacity: 0.7 }}
                     placeholder="E-mail"
+                    title="Email cannot be changed"
                   />
                 </div>
                 <div style={{ position: "relative" }}>
@@ -248,14 +282,13 @@ export default function SettingsPage() {
                   </label>
                   <select
                     value={nationality}
-                    disabled
+                    onChange={(e) => setNationality(e.target.value)}
                     style={{
                       ...fieldStyle,
                       appearance: "none",
                       WebkitAppearance: "none",
                       paddingRight: "2.5rem",
-                      cursor: "default",
-                      opacity: 1,
+                      cursor: "pointer",
                     }}
                   >
                     <option value="">Select nationality</option>
@@ -300,13 +333,12 @@ export default function SettingsPage() {
                   >
                     Date of Birth
                   </label>
-                  <div style={{ ...fieldStyle, cursor: "default", display: "flex", alignItems: "center" }}>
-                    <span style={{ color: dob ? "#1e293b" : "#94a3b8", fontSize: "0.95rem" }}>
-                      {dob
-                        ? new Date(dob + "T00:00:00").toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" })
-                        : "—"}
-                    </span>
-                  </div>
+                  <input
+                    type="date"
+                    value={dob}
+                    onChange={(e) => setDob(e.target.value)}
+                    style={fieldStyle}
+                  />
                 </div>
               </div>
             </div>
@@ -355,10 +387,9 @@ export default function SettingsPage() {
                   </label>
                   <select
                     value={scanDepth}
-                    disabled
+                    onChange={(e) => setScanDepth(e.target.value as ScanDepth)}
                     style={{
-                      cursor: "default",
-                      opacity: 1,
+                      cursor: "pointer",
                       width: "100%",
                       padding: "0.5rem 1rem",
                       borderRadius: "0.625rem",
@@ -450,18 +481,19 @@ export default function SettingsPage() {
                   backgroundColor: "#ffffff",
                   minHeight: "3rem",
                   alignItems: "center",
-                  cursor: "default",
                 }}
               >
-                {keywords.length === 0 ? (
-                  <span style={{ color: "#94a3b8", fontSize: "0.9375rem", padding: "0.25rem 0.5rem" }}>—</span>
-                ) : keywords.map((kw) => (
+                {keywords.length === 0 && (
+                  <span style={{ color: "#94a3b8", fontSize: "0.9375rem", padding: "0.25rem 0.5rem" }}>No keywords yet</span>
+                )}
+                {keywords.map((kw) => (
                   <span
                     key={kw}
                     style={{
                       display: "inline-flex",
                       alignItems: "center",
-                      padding: "0.25rem 0.75rem",
+                      gap: "0.375rem",
+                      padding: "0.25rem 0.5rem 0.25rem 0.75rem",
                       borderRadius: "0.5rem",
                       backgroundColor: "#4479DA",
                       color: "#fff",
@@ -471,8 +503,62 @@ export default function SettingsPage() {
                     }}
                   >
                     {kw}
+                    <button
+                      type="button"
+                      onClick={() => removeKeyword(kw)}
+                      style={{
+                        background: "none",
+                        border: "none",
+                        color: "rgba(255,255,255,0.8)",
+                        cursor: "pointer",
+                        padding: "0",
+                        lineHeight: 1,
+                        fontSize: "0.9rem",
+                        display: "flex",
+                        alignItems: "center",
+                      }}
+                      aria-label={`Remove ${kw}`}
+                    >
+                      ×
+                    </button>
                   </span>
                 ))}
+              </div>
+              <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.75rem" }}>
+                <input
+                  type="text"
+                  value={newKeyword}
+                  onChange={(e) => setNewKeyword(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addKeyword(); } }}
+                  placeholder="Add keyword…"
+                  style={{
+                    flex: 1,
+                    padding: "0.5rem 0.875rem",
+                    borderRadius: "0.625rem",
+                    border: "1px solid rgba(255,255,255,0.3)",
+                    backgroundColor: "#ffffff",
+                    color: "#1e293b",
+                    outline: "none",
+                    fontSize: "0.875rem",
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={addKeyword}
+                  style={{
+                    padding: "0.5rem 1rem",
+                    borderRadius: "0.625rem",
+                    border: "1px solid rgba(255,255,255,0.5)",
+                    background: "rgba(255,255,255,0.15)",
+                    color: "#ffffff",
+                    fontWeight: 600,
+                    fontSize: "0.875rem",
+                    cursor: "pointer",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  Add
+                </button>
               </div>
             </div>
 
@@ -685,59 +771,30 @@ export default function SettingsPage() {
                 width: "100%",
               }}
             >
-              {showBetaScanMsg ? (
-                <div
-                  className="glass"
-                  style={{
-                    borderRadius: "0.75rem",
-                    padding: "1.25rem 1.5rem",
-                    border: "1px solid var(--color-border)",
-                    textAlign: "center",
-                    maxWidth: "min(28rem, 100%)",
-                    width: "100%",
-                    boxSizing: "border-box",
-                    display: "flex",
-                    flexDirection: "column",
-                    alignItems: "center",
-                    gap: "0.75rem",
-                  }}
-                >
-                  <p style={{ fontSize: "0.9375rem", color: "var(--color-foreground)", fontWeight: 600, margin: 0 }}>
-                    During the Beta, each user receives one scan. Recalculating is not available.
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => setShowBetaScanMsg(false)}
-                    style={{
-                      padding: "0.5rem 1.25rem",
-                      borderRadius: "0.625rem",
-                      border: "1px solid var(--color-border)",
-                      background: "transparent",
-                      color: "var(--color-foreground)",
-                      fontWeight: 600,
-                      fontSize: "0.875rem",
-                      cursor: "pointer",
-                    }}
-                  >
-                    Dismiss
-                  </button>
-                </div>
-              ) : (
-                <button
-                  onClick={() => setShowBetaScanMsg(true)}
-                  className="glow-button"
-                  style={{
-                    fontWeight: 700,
-                    minWidth: "min(18rem, 100%)",
-                    boxSizing: "border-box",
-                    padding: "0.75rem 2.75rem",
-                    borderRadius: "0.625rem",
-                    transition: "all 0.3s",
-                  }}
-                >
-                  Recalculate score
-                </button>
+              {/* [DISABLED] Beta one-scan message — re-enable if scan limiting is restored
+              showBetaScanMsg:
+                During the Beta, each user receives one scan. Recalculating is not available.
+              */}
+              {saveError && (
+                <p style={{ color: "#ef4444", fontSize: "0.875rem", margin: 0 }}>{saveError}</p>
               )}
+              <button
+                onClick={handleSave}
+                disabled={saving}
+                className="glow-button"
+                style={{
+                  fontWeight: 700,
+                  minWidth: "min(18rem, 100%)",
+                  boxSizing: "border-box",
+                  padding: "0.75rem 2.75rem",
+                  borderRadius: "0.625rem",
+                  transition: "all 0.3s",
+                  opacity: saving ? 0.7 : 1,
+                  cursor: saving ? "not-allowed" : "pointer",
+                }}
+              >
+                {saving ? "Saving…" : "Recalculate score"}
+              </button>
             </div>
           </div>
         </div>
