@@ -171,19 +171,27 @@ async def pre_analysis(
     keywords: list[str] = []
 
     try:
-        search_msg = await client.messages.create(
-            model="claude-sonnet-4-6",
-            max_tokens=4096,
-            system=search_system,
-            tools=[{"type": "web_search_20260209", "name": "web_search"}],  # type: ignore[list-item]
-            messages=[{"role": "user", "content": search_content}],
-        )
+        messages: list[dict] = [{"role": "user", "content": search_content}]
+        search_msg = None
+        for _turn in range(10):
+            search_msg = await client.messages.create(
+                model="claude-sonnet-4-6",
+                max_tokens=16000,
+                system=search_system,
+                tools=[{"type": "web_search_20260209", "name": "web_search"}],  # type: ignore[list-item]
+                messages=messages,  # type: ignore[arg-type]
+            )
+            if search_msg.stop_reason == "end_turn":
+                break
+            messages.append({"role": "assistant", "content": search_msg.content})  # type: ignore[arg-type]
 
         research_summary = "\n".join(
-            block.text for block in search_msg.content if block.type == "text"
+            block.text for block in (search_msg.content if search_msg else [])
+            if block.type == "text"
         ).strip()
 
         if not research_summary:
+            print(f"[pre-analysis] empty summary — stop_reason={search_msg.stop_reason if search_msg else 'none'}, block_types={[b.type for b in search_msg.content] if search_msg else []}")
             return {"profile": profile, "keywords": keywords}
 
         format_msg = await client.messages.create(
