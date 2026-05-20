@@ -1,12 +1,26 @@
+import puppeteerCore from "puppeteer-core";
+import chromium from "@sparticuz/chromium";
 import puppeteer from "puppeteer";
+
+async function getBrowser() {
+  if (process.env.NODE_ENV === "production") {
+    const executablePath = await chromium.executablePath();
+    return puppeteerCore.launch({
+      args: chromium.args,
+      executablePath,
+      headless: true,
+    });
+  }
+  return puppeteer.launch({
+    headless: true,
+    args: ["--no-sandbox", "--disable-setuid-sandbox"],
+  });
+}
 
 export async function POST(request: Request) {
   const { html, filename } = await request.json();
 
-  const browser = await puppeteer.launch({
-    headless: true,
-    args: ["--no-sandbox", "--disable-setuid-sandbox"],
-  });
+  const browser = await getBrowser();
 
   try {
     const page = await browser.newPage();
