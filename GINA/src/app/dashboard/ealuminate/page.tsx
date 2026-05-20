@@ -1033,7 +1033,7 @@ function EaluminatePageInner() {
     setPreAnalysisSummary("");
     setLeadId(null);
     try {
-      const res = await fetch("/api/pre-analysis", {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1"}/pre-analysis`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -1127,7 +1127,7 @@ function EaluminatePageInner() {
     startCycles();
 
     try {
-      const res = await fetch("/api/generate-lead", {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1"}/generate-lead`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
