@@ -76,13 +76,14 @@ async def upsert_client(
 
     await db.flush()
 
-    # On the first research event, lock the client to this scanner and set assignment.
-    # If already scanned by someone else, block the scan.
-    if payload.event_type == "research":
-        if (
-            client.scanned_by_id is not None
-            and client.scanned_by_id != current_web_analyst.id
-        ):
+    # Block unauthorized users from research or scan events.
+    if payload.event_type in ("research", "scan") and client.scanned_by_id is not None:
+        allowed = (
+            current_web_analyst.role == "admin"
+            or client.scanned_by_id == current_web_analyst.id
+            or client.assigned_to_id == current_web_analyst.id
+        )
+        if not allowed:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail=(
@@ -92,6 +93,8 @@ async def upsert_client(
                 ),
             )
 
+    # On the first research event, lock the client to this scanner.
+    if payload.event_type == "research":
         if client.scanned_by_id is None:
             client.scanned_by_id = current_web_analyst.id
             client.scanned_by_name = current_web_analyst.name
@@ -193,6 +196,35 @@ async def assign_client(
     await db.flush()
 
     return {"ok": True, "assigned_to": client.assigned_to_name}
+
+
+@router.get("/can-scan")
+async def can_scan(
+    name: str,
+    country: str,
+    db: AsyncSession = Depends(get_db),
+    current_web_analyst: WebAnalyst = Depends(get_current_web_analyst),
+) -> dict:
+    result = await db.execute(
+        select(Client).where(Client.name == name, Client.country == country).limit(1)
+    )
+    client = result.scalar_one_or_none()
+    if client is not None and client.scanned_by_id is not None:
+        allowed = (
+            current_web_analyst.role == "admin"
+            or client.scanned_by_id == current_web_analyst.id
+            or client.assigned_to_id == current_web_analyst.id
+        )
+        if not allowed:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    f"This client has already been scanned by "
+                    f"{client.scanned_by_name or 'another analyst'} "
+                    f"and cannot be scanned again by a different user."
+                ),
+            )
+    return {"can_scan": True}
 
 
 @router.get("/")
