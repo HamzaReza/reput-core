@@ -58,113 +58,23 @@ function sanitize(name: string): string {
     .slice(0, 40);
 }
 
-// FIXED: Improved logo loading with better error handling and timeout
-async function fetchLogoBase64(src: string): Promise<string> {
-  return new Promise<string>((resolve) => {
-    const img = new Image();
-    img.crossOrigin = "anonymous";
-
-    // Set a timeout to prevent indefinite waiting
-    const timeout = setTimeout(() => {
-      resolve(""); // Return empty string on timeout
-    }, 5000);
-
-    img.onload = () => {
-      clearTimeout(timeout);
-      try {
-        const canvas = document.createElement("canvas");
-        canvas.width = img.naturalWidth;
-        canvas.height = img.naturalHeight;
-        const ctx = canvas.getContext("2d");
-        if (!ctx) {
-          resolve("");
-          return;
-        }
-        ctx.drawImage(img, 0, 0);
-        resolve(canvas.toDataURL("image/png"));
-      } catch {
-        resolve("");
-      }
-    };
-
-    img.onerror = () => {
-      clearTimeout(timeout);
-      resolve(""); // Return empty on error instead of src
-    };
-
-    img.src = src;
-  });
-}
-
-async function downloadAsPdf(
-  css: string,
-  bodyHtml: string,
+async function downloadPdfFromServer(
+  html: string,
   filename: string,
 ): Promise<void> {
-  const { default: html2canvas } = await import("html2canvas");
-  const { jsPDF } = await import("jspdf");
-
-  const style = document.createElement("style");
-  style.textContent = css;
-  document.head.appendChild(style);
-
-  const container = document.createElement("div");
-  container.style.cssText =
-    "position:fixed;left:-9999px;top:0;z-index:-1;background:#f0f4f8;";
-  container.innerHTML = bodyHtml;
-  document.body.appendChild(container);
-
-  // Wait for all images to fully load before capturing
-  await Promise.all(
-    Array.from(container.querySelectorAll("img")).map((img) =>
-      img.complete
-        ? Promise.resolve()
-        : new Promise<void>((resolve) => {
-            img.onload = () => resolve();
-            img.onerror = () => resolve();
-          }),
-    ),
-  );
-
-  const page = container.querySelector(".page") as HTMLElement;
-
-  try {
-    const canvas = await html2canvas(page, {
-      scale: 2,
-      useCORS: true,
-      allowTaint: true,
-      logging: false,
-      backgroundColor: "#ffffff",
-    });
-
-    const imgData = canvas.toDataURL("image/jpeg", 0.95);
-    const pdf = new jsPDF({
-      orientation: "portrait",
-      unit: "mm",
-      format: "a4",
-    });
-    const pdfW = pdf.internal.pageSize.getWidth();
-    const pdfH = pdf.internal.pageSize.getHeight();
-    const imgH = (canvas.height / canvas.width) * pdfW;
-
-    let remaining = imgH;
-    let yOffset = 0;
-
-    pdf.addImage(imgData, "JPEG", 0, yOffset, pdfW, imgH);
-    remaining -= pdfH;
-
-    while (remaining > 0) {
-      yOffset -= pdfH;
-      pdf.addPage();
-      pdf.addImage(imgData, "JPEG", 0, yOffset, pdfW, imgH);
-      remaining -= pdfH;
-    }
-
-    pdf.save(filename);
-  } finally {
-    document.head.removeChild(style);
-    document.body.removeChild(container);
-  }
+  const res = await fetch("/api/export-pdf", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ html, filename }),
+  });
+  if (!res.ok) throw new Error("PDF export failed");
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 export async function exportSummaryPdf(
@@ -172,9 +82,7 @@ export async function exportSummaryPdf(
 ): Promise<void> {
   const { fullName, company, country, webAnalystName, score, result } = params;
   const dateStr = getDateStr();
-  const logoSrc = await fetchLogoBase64(
-    `${window.location.origin}/images/Ealixir.png`,
-  );
+  const logoSrc = `${window.location.origin}/images/Ealixir.png`;
   const sl = scoreLabel(score);
   const scoreColor =
     sl.label === "Good"
@@ -234,6 +142,8 @@ export async function exportSummaryPdf(
       : `<p style="color:#94a3b8;font-size:0.8125rem;">No links available.</p>`;
 
   const css = `
+  @page { margin-top: 48px; }
+  @page :first { margin-top: 0; }
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   .page {
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
@@ -387,6 +297,8 @@ export async function exportSummaryPdf(
     border: 1px solid #e2e8f0;
     margin-bottom: 0.625rem;
     overflow: hidden;
+    break-inside: avoid;
+    page-break-inside: avoid;
   }
   .link-accent { width: 4px; flex-shrink: 0; }
   .link-body { flex: 1; padding: 0.625rem 0.875rem; min-width: 0; }
@@ -409,16 +321,11 @@ export async function exportSummaryPdf(
   .footer-date { font-size: 0.6875rem; color: #94a3b8; }
   `;
 
-  // FIXED: Conditionally render logo or placeholder
-  const logoHtml = logoSrc
-    ? `<img class="header-logo" src="${logoSrc}" alt="Ealixir"/>`
-    : `<div class="header-logo-placeholder"></div>`;
-
   const bodyHtml = `
   <div class="page">
     <div class="header">
       <div class="header-logo-wrap">
-        ${logoHtml}
+        <img class="header-logo" src="${logoSrc}" alt="Ealixir"/>
       </div>
       <div class="header-eyebrow">Ealuminate Intelligence Module</div>
       <div class="header-title">Ealuminate Report</div>
@@ -475,10 +382,10 @@ export async function exportSummaryPdf(
     </div>
   </div>`;
 
-  await downloadAsPdf(
-    css,
-    bodyHtml,
-    `ealuminate-report-${sanitize(fullName)}.pdf`,
+  const filename = `ealuminate-report-${sanitize(fullName)}.pdf`;
+  await downloadPdfFromServer(
+    `<!DOCTYPE html><html><head><meta charset="utf-8"><style>${css}</style></head><body>${bodyHtml}</body></html>`,
+    filename,
   );
 }
 
@@ -495,9 +402,7 @@ export async function exportReportMasterPdf(
     editableKeywords,
   } = params;
   const dateStr = getDateStr();
-  const logoSrc = await fetchLogoBase64(
-    `${window.location.origin}/images/Ealixir.png`,
-  );
+  const logoSrc = `${window.location.origin}/images/Ealixir.png`;
 
   const profileRows = preAnalysisProfile
     ? [
@@ -525,6 +430,8 @@ export async function exportReportMasterPdf(
       : `<span style="color:#94a3b8;font-size:0.8125rem;">No keywords.</span>`;
 
   const css = `
+  @page { margin-top: 48px; }
+  @page :first { margin-top: 0; }
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   .page {
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
@@ -708,16 +615,11 @@ export async function exportReportMasterPdf(
   .footer-date { font-size: 0.6875rem; color: #94a3b8; }
   `;
 
-  // FIXED: Conditionally render logo or placeholder
-  const logoHtml = logoSrc
-    ? `<img class="header-logo" src="${logoSrc}" alt="Ealixir"/>`
-    : `<div class="header-logo-placeholder"></div>`;
-
   const bodyHtml = `
   <div class="page">
     <div class="header">
       <div class="header-logo-wrap">
-        ${logoHtml}
+        <img class="header-logo" src="${logoSrc}" alt="Ealixir"/>
       </div>
       <div class="header-eyebrow">Ealuminate Intelligence Module</div>
       <div class="header-title">Report Master</div>
@@ -757,5 +659,9 @@ export async function exportReportMasterPdf(
     </div>
   </div>`;
 
-  await downloadAsPdf(css, bodyHtml, `report-master-${sanitize(fullName)}.pdf`);
+  const filename = `report-master-${sanitize(fullName)}.pdf`;
+  await downloadPdfFromServer(
+    `<!DOCTYPE html><html><head><meta charset="utf-8"><style>${css}</style></head><body>${bodyHtml}</body></html>`,
+    filename,
+  );
 }
