@@ -2,6 +2,9 @@ import puppeteerCore from "puppeteer-core";
 import chromium from "@sparticuz/chromium";
 import puppeteer from "puppeteer";
 
+export const runtime = "nodejs";
+export const maxDuration = 60;
+
 async function getBrowser() {
   if (process.env.NODE_ENV === "production") {
     const executablePath = await chromium.executablePath();
@@ -32,6 +35,11 @@ export async function POST(request: Request) {
         "Content-Disposition": `attachment; filename="${filename}"`,
       },
     });
+  } catch (err) {
+    return Response.json(
+      { error: err instanceof Error ? err.message : String(err) },
+      { status: 500 },
+    );
   } finally {
     await browser.close();
   }
