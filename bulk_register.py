@@ -24,8 +24,9 @@ except ImportError:
             return e.code, body
 
 ENVIRONMENTS = {
-    "production": "https://ealixir-reput-production.up.railway.app/api/v1/auth/register",
-    "develop":    "https://ealixir-reput-develop.up.railway.app/api/v1/auth/register",
+    "local":      "http://localhost:8000/api/v1/auth/register",
+    # "production": "https://ealixir-reput-production.up.railway.app/api/v1/auth/register",
+    # "develop":    "https://ealixir-reput-develop.up.railway.app/api/v1/auth/register",
 }
 CSV_FILE = "accounts.csv"
 DELAY = 0.5  # seconds between requests

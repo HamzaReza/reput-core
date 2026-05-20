@@ -444,16 +444,16 @@ export default function DashboardPage() {
         // Session cache is warm — nothing more to do
         if (cached) return;
 
-        // Check DB for an existing scan before running a new one
-        const latest = await reputation.getLatest();
-        if (latest) {
-          setScanData(latest);
-          setScore(latest.score);
-          sessionStorage.setItem("reput_scan", JSON.stringify(latest));
-          return;
-        }
+        // [DISABLED] One-scan gate — commented out to allow multiple scans per user
+        // const latest = await reputation.getLatest();
+        // if (latest) {
+        //   setScanData(latest);
+        //   setScore(latest.score);
+        //   sessionStorage.setItem("reput_scan", JSON.stringify(latest));
+        //   return;
+        // }
 
-        // No existing scan — run the one-time scan
+        // Run scan
         const result = await fetchAndMergeScan(user);
         if (!result) {
           setScanError(true);
