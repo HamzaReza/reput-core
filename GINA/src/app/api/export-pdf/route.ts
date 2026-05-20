@@ -1,35 +1,18 @@
-import puppeteerCore from "puppeteer-core";
-import chromium from "@sparticuz/chromium-min";
 import puppeteer from "puppeteer";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-const CHROMIUM_URL =
-  "https://github.com/Sparticuz/chromium/releases/download/v131.0.0/chromium-v131.0.0-pack.tar";
-
-async function getBrowser() {
-  if (process.env.NODE_ENV === "production") {
-    const executablePath = await chromium.executablePath(CHROMIUM_URL);
-    return puppeteerCore.launch({
-      args: chromium.args,
-      executablePath,
-      headless: true,
-    });
-  }
-  return puppeteer.launch({
-    headless: true,
-    args: ["--no-sandbox", "--disable-setuid-sandbox"],
-  });
-}
-
 export async function POST(request: Request) {
   const { html, filename } = await request.json();
 
-  let browser: Awaited<ReturnType<typeof getBrowser>> | undefined;
+  let browser: Awaited<ReturnType<typeof puppeteer.launch>> | undefined;
 
   try {
-    browser = await getBrowser();
+    browser = await puppeteer.launch({
+      headless: true,
+      args: ["--no-sandbox", "--disable-setuid-sandbox"],
+    });
     const page = await browser.newPage();
     await page.setContent(html, { waitUntil: "load" });
     const pdf = await page.pdf({ format: "A4", printBackground: true });
