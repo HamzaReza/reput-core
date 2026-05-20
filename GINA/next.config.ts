@@ -1,7 +1,10 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  serverExternalPackages: ["puppeteer-core", "@sparticuz/chromium-min", "puppeteer"],
+  serverExternalPackages: ["puppeteer"],
+  outputFileTracingIncludes: {
+    "/api/export-pdf": ["./.cache/puppeteer/**/*"],
+  },
   images: {
     remotePatterns: [{ protocol: "https", hostname: "**" }],
   },
