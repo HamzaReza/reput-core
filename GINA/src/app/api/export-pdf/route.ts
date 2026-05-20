@@ -23,9 +23,10 @@ async function getBrowser() {
 export async function POST(request: Request) {
   const { html, filename } = await request.json();
 
-  const browser = await getBrowser();
+  let browser: Awaited<ReturnType<typeof getBrowser>> | undefined;
 
   try {
+    browser = await getBrowser();
     const page = await browser.newPage();
     await page.setContent(html, { waitUntil: "load" });
     const pdf = await page.pdf({ format: "A4", printBackground: true });
@@ -41,6 +42,6 @@ export async function POST(request: Request) {
       { status: 500 },
     );
   } finally {
-    await browser.close();
+    await browser?.close();
   }
 }
