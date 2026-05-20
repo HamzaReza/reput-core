@@ -171,6 +171,7 @@ async def pre_analysis(
     keywords: list[str] = []
 
     try:
+        print(f"[pre-analysis] starting search for: {subject_label!r} | countries={countries}")
         search_msg = await client.messages.create(
             model="claude-sonnet-4-6",
             max_tokens=16000,
@@ -178,15 +179,22 @@ async def pre_analysis(
             tools=[{"type": "web_search_20260209", "name": "web_search"}],  # type: ignore[list-item]
             messages=[{"role": "user", "content": search_content}],
         )
+        print(f"[pre-analysis] search done — stop_reason={search_msg.stop_reason!r} | blocks={[b.type for b in search_msg.content]}")
+        for i, block in enumerate(search_msg.content):
+            if block.type == "text":
+                print(f"[pre-analysis] text block[{i}] (first 300 chars): {block.text[:300]!r}")
+            else:
+                print(f"[pre-analysis] non-text block[{i}]: type={block.type!r}")
 
         research_summary = "\n".join(
             block.text for block in search_msg.content if block.type == "text"
         ).strip()
 
         if not research_summary:
-            print(f"[pre-analysis] empty summary — stop_reason={search_msg.stop_reason}, block_types={[b.type for b in search_msg.content]}")
+            print(f"[pre-analysis] EMPTY SUMMARY — returning fallback")
             return {"profile": profile, "keywords": keywords}
 
+        print(f"[pre-analysis] research_summary length={len(research_summary)} chars — proceeding to format")
         format_msg = await client.messages.create(
             model="claude-sonnet-4-6",
             max_tokens=2048,
@@ -222,6 +230,8 @@ async def pre_analysis(
                 keywords = raw_kw[:cap] if isinstance(raw_kw, list) else []
 
     except Exception as e:
-        print(f"[pre-analysis] error: {e}")
+        import traceback
+        print(f"[pre-analysis] EXCEPTION: {e}")
+        print(traceback.format_exc())
 
     return {"profile": profile, "keywords": keywords}
