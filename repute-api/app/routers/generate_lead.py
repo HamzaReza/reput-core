@@ -413,7 +413,7 @@ class GenerateLeadRequest(BaseModel):
 
 # ── Route ────────────────────────────────────────────────────────────────────
 
-@router.post("/")
+@router.post("")
 async def generate_lead(
     body: GenerateLeadRequest,
     _analyst: WebAnalyst = Depends(get_current_web_analyst),

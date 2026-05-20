@@ -22,13 +22,12 @@ except ImportError:
 
 ENVIRONMENTS = {
     "local":      "http://localhost:8000/api/v1/auth/register-web-analyst",
-    "develop":    "https://ealixir-reput-develop.up.railway.app/api/v1/auth/register-web-analyst",
-    "production": "https://ealixir-reput-production.up.railway.app/api/v1/auth/register-web-analyst",
+    "staging":    "https://ealixir-reput-staging.up.railway.app/api/v1/auth/register-web-analyst",
+    # "develop":    "https://ealixir-reput-develop.up.railway.app/api/v1/auth/register-web-analyst",
+    # "production": "https://ealixir-reput-production.up.railway.app/api/v1/auth/register-web-analyst",
 }
 
 WEB_ANALYSTS = [
-    {"name": "Web Analyst 1", "email": "Analyst1@test.com", "password": "Analyst12345", "role": "analyst"},
-    {"name": "Web Analyst 2", "email": "Analyst2@test.com", "password": "Analyst22345", "role": "analyst"},
     {"name": "Admin",       "email": "Admin@test.com",   "password": "Admin12345",   "role": "admin"},
 ]
 
