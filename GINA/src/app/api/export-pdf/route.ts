@@ -1,10 +1,14 @@
 import puppeteer from "puppeteer";
+import path from "path";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
 export async function POST(request: Request) {
   const { html, filename } = await request.json();
+
+  // Ensure puppeteer finds Chrome in the project cache at runtime
+  process.env.PUPPETEER_CACHE_DIR = path.join(process.cwd(), ".cache", "puppeteer");
 
   let browser: Awaited<ReturnType<typeof puppeteer.launch>> | undefined;
 
