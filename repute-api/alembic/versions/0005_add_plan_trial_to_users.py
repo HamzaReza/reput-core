@@ -15,8 +15,8 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.add_column("users", sa.Column("plan", sa.String(20), nullable=False, server_default="free"))
-    op.add_column("users", sa.Column("pro_trial_expires_at", sa.DateTime(timezone=True), nullable=True))
+    op.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS plan VARCHAR(20) NOT NULL DEFAULT 'free'")
+    op.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS pro_trial_expires_at TIMESTAMPTZ")
 
 
 def downgrade() -> None:
