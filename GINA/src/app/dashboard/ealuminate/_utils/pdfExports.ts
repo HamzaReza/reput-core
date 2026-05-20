@@ -67,6 +67,7 @@ async function downloadPdfFromServer(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ html, filename }),
   });
+  console.log("🚀 ~ pdfExports.ts:70 ~ downloadPdfFromServer ~ res:", res);
   if (!res.ok) throw new Error("PDF export failed");
   const blob = await res.blob();
   const url = URL.createObjectURL(blob);
