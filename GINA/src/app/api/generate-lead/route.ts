@@ -779,14 +779,9 @@ export async function POST(req: NextRequest) {
 
   try {
     // ── Phase 1: Parallel Serper searches ─────────────────────────────────────
-    const FOCUS_QUERY_SUFFIX: Record<string, string> = {
-      negative: "scandal fraud lawsuit complaint allegations",
-      positive: "award recognition achievement success",
-    };
-    const focusSuffix = scanFocus ? (FOCUS_QUERY_SUFFIX[scanFocus] ?? "") : "";
     const searchQueries = useKeywords
       ? keywords.map((kw: string) => `${sanitizedSubject} ${kw}`)
-      : [focusSuffix ? `${sanitizedSubject} ${focusSuffix}` : sanitizedSubject];
+      : [sanitizedSubject];
 
     const countryConfigs = countries.map((c) => {
       const code = countryCodeFromName(c);

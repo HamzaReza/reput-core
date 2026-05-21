@@ -73,12 +73,6 @@ MONTH_MAP: dict[str, int] = {
     "aoû": 8, "mär": 3, "okt": 10, "fev": 2, "out": 10,
 }
 
-FOCUS_QUERY_SUFFIX: dict[str, str] = {
-    "negative": "scandal fraud lawsuit complaint allegations",
-    "positive": "award recognition achievement success",
-}
-
-
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
 def _country_code(country: str) -> str | None:
@@ -450,11 +444,10 @@ async def generate_lead(
 
     async with httpx.AsyncClient() as http:
         # ── Phase 1: Serper searches ──────────────────────────────────────────
-        focus_suffix = FOCUS_QUERY_SUFFIX.get(body.scanFocus or "", "") if body.scanFocus else ""
         search_queries = (
             [f"{sanitized_subject} {kw}" for kw in body.keywords]
             if body.useKeywords
-            else [f"{sanitized_subject} {focus_suffix}".strip() if focus_suffix else sanitized_subject]
+            else [sanitized_subject]
         )
 
         country_configs = [
@@ -489,23 +482,28 @@ async def generate_lead(
         seen_urls: set[str] = set()
         articles: list[dict] = []
         date_map: dict[str, str] = {}
-        keyword_map: dict[str, str] = {}
+        keyword_map: dict[str, list[str]] = {}
         country_map: dict[str, str] = {}
         num_countries = len(country_configs) or 1
 
         for kw_idx, results in enumerate(all_organic):
             country_idx = kw_idx % num_countries
+            kw = body.keywords[kw_idx] if body.useKeywords and kw_idx < len(body.keywords) else None
             for r in results:
                 url = r.get("link", "")
-                if url and url not in seen_urls:
+                if not url:
+                    continue
+                if url not in seen_urls:
                     seen_urls.add(url)
                     articles.append({"url": url, "title": r.get("title", ""), "snippet": r.get("snippet", ""), "content": r.get("snippet", "")})
                     if r.get("date"):
                         date_map[url] = r["date"]
-                    if body.useKeywords and kw_idx < len(body.keywords):
-                        keyword_map[url] = body.keywords[kw_idx]
+                    if kw:
+                        keyword_map[url] = [kw]
                     if country_idx < len(countries):
                         country_map[url] = countries[country_idx]
+                elif kw and kw not in keyword_map.get(url, []):
+                    keyword_map.setdefault(url, []).append(kw)
 
         urls_sent_to_firecrawl = [a["url"] for a in articles]
 
@@ -554,7 +552,7 @@ async def generate_lead(
             {
                 **link,
                 "date": date_map.get(link["url"]),
-                "keyword": keyword_map.get(link["url"]),
+                "keywords": keyword_map.get(link["url"], []),
                 "country": country_map.get(link["url"]),
             }
             for link in _dedupe_links(classified)
@@ -586,20 +584,28 @@ async def generate_lead(
             }
             for i, kw_idx in enumerate(i // num_countries for i in range(len(all_searches)))
         ],
-        "_firecrawl": [
-            {
-                "keyword": kw,
-                "sent": [u for u in urls_sent_to_firecrawl if keyword_map.get(u) == kw],
-                "success": [u for u in firecrawl_success if keyword_map.get(u) == kw],
-                "failed": [u for u in firecrawl_failed if keyword_map.get(u) == kw],
-            }
-            for kw in body.keywords
-        ],
-        "_claude": [
-            {
-                "keyword": kw,
-                "sent": [u for u in urls_sent_to_claude if keyword_map.get(u) == kw],
-            }
-            for kw in body.keywords
-        ],
+        "_firecrawl": (
+            [
+                {
+                    "keyword": kw,
+                    "sent": [u for u in urls_sent_to_firecrawl if kw in keyword_map.get(u, [])],
+                    "success": [u for u in firecrawl_success if kw in keyword_map.get(u, [])],
+                    "failed": [u for u in firecrawl_failed if kw in keyword_map.get(u, [])],
+                }
+                for kw in body.keywords
+            ]
+            if body.useKeywords
+            else [{"keyword": None, "sent": urls_sent_to_firecrawl, "success": firecrawl_success, "failed": firecrawl_failed}]
+        ),
+        "_claude": (
+            [
+                {
+                    "keyword": kw,
+                    "sent": [u for u in urls_sent_to_claude if kw in keyword_map.get(u, [])],
+                }
+                for kw in body.keywords
+            ]
+            if body.useKeywords
+            else [{"keyword": None, "sent": urls_sent_to_claude}]
+        ),
     }
