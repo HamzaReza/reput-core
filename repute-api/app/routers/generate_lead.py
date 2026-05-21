@@ -533,7 +533,7 @@ async def generate_lead(
                 *[
                     _scrape_firecrawl(a["url"], settings.firecrawl_api_key, http)
                     if not await _is_pdf(a["url"], http) and settings.firecrawl_api_key
-                    else asyncio.coroutine(lambda: None)()
+                    else asyncio.sleep(0)
                     for a in batch
                 ],
                 return_exceptions=True,
