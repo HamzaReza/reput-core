@@ -25,6 +25,7 @@ except ImportError:
 
 ENVIRONMENTS = {
     "local":      "http://localhost:8000/api/v1/auth/register",
+    "staging":    "https://ealixir-reput-staging.up.railway.app/api/v1/auth/register",
     # "production": "https://ealixir-reput-production.up.railway.app/api/v1/auth/register",
     # "develop":    "https://ealixir-reput-develop.up.railway.app/api/v1/auth/register",
 }

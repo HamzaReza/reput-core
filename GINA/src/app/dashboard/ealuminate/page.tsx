@@ -48,7 +48,6 @@ const KEYWORD_FOCUS_OPTIONS = [
 ] as const;
 
 const REPORT_LANGUAGE_OPTIONS = [
-  { value: "auto", label: "Auto" },
   { value: "en", label: "English" },
   { value: "it", label: "Italian" },
   { value: "es", label: "Spanish" },
@@ -571,7 +570,7 @@ function EaluminatePageInner() {
   const [pagesCap, setPagesCap] = useState(2);
   const [keywordsCap, setKeywordsCap] = useState(5);
   const [keywordFocus, setKeywordFocus] = useState<KeywordFocus>("all");
-  const [reportLanguage, setReportLanguage] = useState<ReportLanguage>("auto");
+  const [reportLanguage, setReportLanguage] = useState<ReportLanguage>("en");
   const [useKeywords, setUseKeywords] = useState(true);
   const [scanFocus, setScanFocus] = useState<KeywordFocus>("all");
 
@@ -815,7 +814,7 @@ function EaluminatePageInner() {
                 setKeywordFocus(d.keywordFocus as KeywordFocus);
               if (typeof d.pagesCap === "number") setPagesCap(d.pagesCap);
               if (
-                ["auto", "en", "it", "es"].includes(d.reportLanguage as string)
+                ["en", "it", "es"].includes(d.reportLanguage as string)
               )
                 setReportLanguage(d.reportLanguage as ReportLanguage);
               if (
@@ -849,6 +848,10 @@ function EaluminatePageInner() {
               )
             )
               setScanFocus(scanEvent?.data?.scanFocus as KeywordFocus);
+            if (typeof scanEvent?.data?.keywordsCap === "number")
+              setKeywordsCap(scanEvent.data.keywordsCap as number);
+            if (typeof scanEvent?.data?.pagesCap === "number")
+              setPagesCap(scanEvent.data.pagesCap as number);
           }
         } catch {
           /* non-fatal */
@@ -1032,8 +1035,23 @@ function EaluminatePageInner() {
     setEditableKeywords([]);
     setPreAnalysisSummary("");
     setLeadId(null);
+
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
+    const checkRes = await fetch(
+      `${apiUrl}/clients/can-scan?name=${encodeURIComponent(subjectType === "company" ? company.trim() : fullName)}&country=${encodeURIComponent(country)}`,
+      { headers: { Authorization: `Bearer ${getToken()}` } }
+    );
+    if (checkRes.status === 401) { router.replace("/login?reason=session_expired"); return; }
+    if (!checkRes.ok) {
+      const checkData = await checkRes.json();
+      const checkDetail = checkData.detail;
+      setError(typeof checkDetail === "string" ? checkDetail : "Cannot scan this client.");
+      setPreAnalysisLoading(false);
+      return;
+    }
+
     try {
-      const res = await fetch("/api/pre-analysis", {
+      const res = await fetch(`${apiUrl}/pre-analysis`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -1049,8 +1067,7 @@ function EaluminatePageInner() {
           keywordsCap,
           keywordFocus,
           subjectType,
-          reportLanguage:
-            reportLanguage !== "auto" ? reportLanguage : undefined,
+          reportLanguage,
         }),
       });
       if (res.status === 401) {
@@ -1126,8 +1143,22 @@ function EaluminatePageInner() {
     setLoading(true);
     startCycles();
 
+    const scanApiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
+    const scanCheckRes = await fetch(
+      `${scanApiUrl}/clients/can-scan?name=${encodeURIComponent(subjectType === "company" ? company.trim() : fullName)}&country=${encodeURIComponent(country)}`,
+      { headers: { Authorization: `Bearer ${getToken()}` } }
+    );
+    if (scanCheckRes.status === 401) { router.replace("/login?reason=session_expired"); return; }
+    if (!scanCheckRes.ok) {
+      const scanCheckData = await scanCheckRes.json();
+      const scanCheckDetail = scanCheckData.detail;
+      setError(typeof scanCheckDetail === "string" ? scanCheckDetail : "Cannot scan this client.");
+      setLoading(false);
+      return;
+    }
+
     try {
-      const res = await fetch("/api/generate-lead", {
+      const res = await fetch(`${scanApiUrl}/generate-lead`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -1142,8 +1173,7 @@ function EaluminatePageInner() {
           keywords: editableKeywords,
           pagesCap,
           subjectType,
-          reportLanguage:
-            reportLanguage !== "auto" ? reportLanguage : undefined,
+          reportLanguage,
           useKeywords,
           scanFocus: scanFocus !== "all" ? scanFocus : undefined,
         }),
@@ -1234,6 +1264,8 @@ function EaluminatePageInner() {
               useKeywords,
               scanFocus: scanFocus !== "all" ? scanFocus : undefined,
               countries,
+              keywordsCap,
+              pagesCap,
             },
           });
         } catch {

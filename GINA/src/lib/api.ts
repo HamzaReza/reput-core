@@ -545,7 +545,8 @@ export interface WebLink {
   source: string;
   type: string;
   date?: string;
-  keyword?: string;
+  keyword?: string;   // legacy: old saved leads
+  keywords?: string[]; // current: array of all matched keywords
   country?: string;
 }
 
