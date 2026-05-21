@@ -464,6 +464,13 @@ export interface DashboardStats {
   leads: number;
   contracts: number;
   clients: number;
+  avg_score: number;
+  trends: {
+    clients: number | null;
+    leads: number | null;
+    scans: number | null;
+    avg_score: number | null;
+  };
 }
 
 export interface MonthPoint {
@@ -474,8 +481,34 @@ export interface MonthPoint {
 export interface DashboardCharts {
   web_analysts: MonthPoint[];
   leads: MonthPoint[];
+  leads_pending: MonthPoint[];
   contracts: MonthPoint[];
   clients: MonthPoint[];
+}
+
+export interface ScoreDistribution {
+  distribution: { name: string; value: number; color: string }[];
+  average: number;
+  total: number;
+}
+
+export interface FunnelData {
+  total: number;
+  scanned: number;
+  unique_scanned: number;
+  good: number;
+  mediocre: number;
+  poor: number;
+  negative: number;
+}
+
+export interface RegionDataPoint {
+  country: string;
+  count: number;
+}
+
+export interface ActivityByRegionData {
+  regions: RegionDataPoint[];
 }
 
 export interface WebAnalyst {
@@ -514,7 +547,11 @@ export const webAnalystsApi = {
 
 export const dashboard = {
   stats: () => request<DashboardStats>("/dashboard/stats", {}, true),
-  charts: () => request<DashboardCharts>("/dashboard/charts", {}, true),
+  charts: (period: "weekly" | "monthly" = "monthly") =>
+    request<DashboardCharts>(`/dashboard/charts?period=${period}`, {}, true),
+  scoreDistribution: () => request<ScoreDistribution>("/dashboard/score-distribution", {}, true),
+  funnel: () => request<FunnelData>("/dashboard/funnel", {}, true),
+  activityByRegion: () => request<ActivityByRegionData>("/dashboard/activity-by-region", {}, true),
 };
 
 // ── Leads types & endpoints ───────────────────────────────────────────────────

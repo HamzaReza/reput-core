@@ -4,26 +4,21 @@ import { DashboardStats } from "@/lib/api";
 
 const CARDS = [
   {
-    key: "scans" as const,
-    label: "Active Researches",
-    trend: "↑ 20% vs last month",
-    trendUp: true,
-    iconBg: "#eff6ff",
-    icon: (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#4479da" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <circle cx="11" cy="11" r="8" />
-        <line x1="21" y1="21" x2="16.65" y2="16.65" />
-      </svg>
-    ),
-  },
-  {
     key: "clients" as const,
     label: "Total Clients",
-    trend: "↑ 12% vs last month",
-    trendUp: true,
+    isScore: false,
     iconBg: "#f0f9ff",
     icon: (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#0ea5e9" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <svg
+        width="18"
+        height="18"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="#0ea5e9"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
         <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
         <circle cx="9" cy="7" r="4" />
         <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
@@ -33,12 +28,20 @@ const CARDS = [
   },
   {
     key: "leads" as const,
-    label: "Briefs Ready",
-    trend: "↑ 28% vs last month",
-    trendUp: true,
+    label: "Researches Ready",
+    isScore: false,
     iconBg: "#f0fdf4",
     icon: (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#22c55e" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <svg
+        width="18"
+        height="18"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="#22c55e"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
         <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
         <polyline points="14 2 14 8 20 8" />
         <polyline points="9 15 11 17 15 13" />
@@ -46,21 +49,68 @@ const CARDS = [
     ),
   },
   {
-    key: null,
+    key: "scans" as const,
+    label: "Active Scans",
+    isScore: false,
+    iconBg: "#eff6ff",
+    icon: (
+      <svg
+        width="18"
+        height="18"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="#4479da"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <circle cx="11" cy="11" r="8" />
+        <line x1="21" y1="21" x2="16.65" y2="16.65" />
+      </svg>
+    ),
+  },
+  {
+    key: "avg_score" as const,
     label: "Average ReputScore",
-    trend: "↑ 5 pts vs last month",
-    trendUp: true,
-    staticValue: "72 / 100",
+    isScore: true,
     iconBg: "#faf5ff",
     icon: (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8b5cf6" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <svg
+        width="18"
+        height="18"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="#8b5cf6"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
         <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
       </svg>
     ),
   },
 ];
 
-export default function StatsRow({ data, loading = false }: { data: DashboardStats; loading?: boolean }) {
+function trendLabel(
+  val: number | null | undefined,
+  isScore: boolean,
+): string | null {
+  if (val == null) return null;
+  if (val === 0) return "No change vs last month";
+  const arrow = val > 0 ? "↑" : "↓";
+  const abs = Math.abs(val);
+  return isScore
+    ? `${arrow} ${abs} pts vs last month`
+    : `${arrow} ${abs}% vs last month`;
+}
+
+export default function StatsRow({
+  data,
+  loading = false,
+}: {
+  data: DashboardStats;
+  loading?: boolean;
+}) {
   return (
     <div
       style={{
@@ -134,8 +184,15 @@ export default function StatsRow({ data, loading = false }: { data: DashboardSta
             </div>
           </div>
 
-          {loading && card.key !== null ? (
-            <div className="stats-shimmer" style={{ height: "1.875rem", width: "55%", marginBottom: "0.375rem" }} />
+          {loading ? (
+            <div
+              className="stats-shimmer"
+              style={{
+                height: "1.875rem",
+                width: "55%",
+                marginBottom: "0.375rem",
+              }}
+            />
           ) : (
             <p
               style={{
@@ -147,24 +204,33 @@ export default function StatsRow({ data, loading = false }: { data: DashboardSta
                 letterSpacing: "-0.02em",
               }}
             >
-              {card.key === null
-                ? card.staticValue
-                : data[card.key] > 0
-                ? data[card.key].toLocaleString()
+              {data[card.key] > 0
+                ? card.key === "avg_score"
+                  ? `${data[card.key]} / 100`
+                  : data[card.key].toLocaleString()
                 : "—"}
             </p>
           )}
 
-          <p
-            style={{
-              fontSize: "0.7rem",
-              fontWeight: 500,
-              color: card.trendUp ? "#22c55e" : "#ef4444",
-              margin: 0,
-            }}
-          >
-            {card.trend}
-          </p>
+          {(() => {
+            const val = data.trends?.[card.key];
+            const label = trendLabel(val, card.isScore);
+            if (!label) return null;
+            const color =
+              val === 0 ? "#94a3b8" : (val ?? 0) > 0 ? "#22c55e" : "#ef4444";
+            return (
+              <p
+                style={{
+                  fontSize: "0.7rem",
+                  fontWeight: 500,
+                  color,
+                  margin: 0,
+                }}
+              >
+                {label}
+              </p>
+            );
+          })()}
         </div>
       ))}
     </div>
