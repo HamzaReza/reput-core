@@ -265,6 +265,17 @@ function parseSerperDate(dateStr: string): number {
   return NaN;
 }
 
+function toEnglishDate(raw: string | undefined): string | undefined {
+  if (!raw) return undefined;
+  const ts = parseSerperDate(raw);
+  if (isNaN(ts)) return undefined;
+  return new Intl.DateTimeFormat("en-GB", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  }).format(new Date(ts * 1000));
+}
+
 function countryCodeFromName(country: string): string | null {
   const k = country.toLowerCase().trim();
   return COUNTRY_NAME_TO_ISO[k] ?? NATIONALITY_ALIASES[k] ?? null;
@@ -779,14 +790,9 @@ export async function POST(req: NextRequest) {
 
   try {
     // ── Phase 1: Parallel Serper searches ─────────────────────────────────────
-    const FOCUS_QUERY_SUFFIX: Record<string, string> = {
-      negative: "scandal fraud lawsuit complaint allegations",
-      positive: "award recognition achievement success",
-    };
-    const focusSuffix = scanFocus ? (FOCUS_QUERY_SUFFIX[scanFocus] ?? "") : "";
     const searchQueries = useKeywords
       ? keywords.map((kw: string) => `${sanitizedSubject} ${kw}`)
-      : [focusSuffix ? `${sanitizedSubject} ${focusSuffix}` : sanitizedSubject];
+      : [sanitizedSubject];
 
     const countryConfigs = countries.map((c) => {
       const code = countryCodeFromName(c);
@@ -884,7 +890,7 @@ export async function POST(req: NextRequest) {
     const deduped = dedupeLinks(classified)
       .map((link) => ({
         ...link,
-        date: dateMap.get(link.url),
+        date: toEnglishDate(dateMap.get(link.url)),
         keyword: keywordMap.get(link.url),
         country: countryMap.get(link.url),
       }))
