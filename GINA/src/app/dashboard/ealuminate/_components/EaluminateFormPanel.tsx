@@ -101,14 +101,12 @@ function ProfileCollapse({
   const color = PROFILE_FIELD_COLORS[label] ?? "#4479DA";
   return (
     <div
-      onClick={onToggle}
       style={{
         display: "flex",
         borderRadius: "0.875rem",
         overflow: "hidden",
         background: "#fff",
         border: "1px solid #e2e8f0",
-        cursor: "pointer",
         transition: "border-color 0.15s ease",
       }}
       onMouseEnter={(e) => (e.currentTarget.style.borderColor = "#b6c4d4")}
@@ -117,11 +115,13 @@ function ProfileCollapse({
       <div style={{ width: 4, flexShrink: 0, backgroundColor: color }} />
       <div style={{ flex: 1, padding: "0.75rem 0.875rem", minWidth: 0 }}>
         <div
+          onClick={onToggle}
           style={{
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
             gap: "0.75rem",
+            cursor: "pointer",
           }}
         >
           <p

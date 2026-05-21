@@ -32,14 +32,12 @@ function BriefCollapse({
   const List = ordered ? "ol" : "ul";
   return (
     <div
-      onClick={onToggle}
       style={{
         display: "flex",
         borderRadius: "0.875rem",
         overflow: "hidden",
         background: "#fff",
         border: "1px solid #e2e8f0",
-        cursor: "pointer",
         transition: "border-color 0.15s ease",
       }}
       onMouseEnter={(e) => (e.currentTarget.style.borderColor = "#b6c4d4")}
@@ -47,7 +45,7 @@ function BriefCollapse({
     >
       <div style={{ width: 4, flexShrink: 0, backgroundColor: color }} />
       <div style={{ flex: 1, padding: "0.75rem 0.875rem", minWidth: 0 }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.75rem" }}>
+        <div onClick={onToggle} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.75rem", cursor: "pointer" }}>
           <p style={{ margin: 0, fontSize: "0.875rem", fontWeight: 600, color: "#1e293b", lineHeight: 1.4 }}>
             {label}
           </p>
