@@ -48,7 +48,6 @@ const KEYWORD_FOCUS_OPTIONS = [
 ] as const;
 
 const REPORT_LANGUAGE_OPTIONS = [
-  { value: "auto", label: "Auto" },
   { value: "en", label: "English" },
   { value: "it", label: "Italian" },
   { value: "es", label: "Spanish" },
@@ -571,7 +570,7 @@ function EaluminatePageInner() {
   const [pagesCap, setPagesCap] = useState(2);
   const [keywordsCap, setKeywordsCap] = useState(5);
   const [keywordFocus, setKeywordFocus] = useState<KeywordFocus>("all");
-  const [reportLanguage, setReportLanguage] = useState<ReportLanguage>("auto");
+  const [reportLanguage, setReportLanguage] = useState<ReportLanguage>("en");
   const [useKeywords, setUseKeywords] = useState(true);
   const [scanFocus, setScanFocus] = useState<KeywordFocus>("all");
 
@@ -815,7 +814,7 @@ function EaluminatePageInner() {
                 setKeywordFocus(d.keywordFocus as KeywordFocus);
               if (typeof d.pagesCap === "number") setPagesCap(d.pagesCap);
               if (
-                ["auto", "en", "it", "es"].includes(d.reportLanguage as string)
+                ["en", "it", "es"].includes(d.reportLanguage as string)
               )
                 setReportLanguage(d.reportLanguage as ReportLanguage);
               if (
@@ -1068,8 +1067,7 @@ function EaluminatePageInner() {
           keywordsCap,
           keywordFocus,
           subjectType,
-          reportLanguage:
-            reportLanguage !== "auto" ? reportLanguage : undefined,
+          reportLanguage,
         }),
       });
       if (res.status === 401) {
@@ -1175,8 +1173,7 @@ function EaluminatePageInner() {
           keywords: editableKeywords,
           pagesCap,
           subjectType,
-          reportLanguage:
-            reportLanguage !== "auto" ? reportLanguage : undefined,
+          reportLanguage,
           useKeywords,
           scanFocus: scanFocus !== "all" ? scanFocus : undefined,
         }),
