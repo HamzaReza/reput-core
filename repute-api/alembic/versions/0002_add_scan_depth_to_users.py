@@ -16,15 +16,7 @@ depends_on = None
 
 def upgrade() -> None:
     op.execute("DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'scandepth') THEN CREATE TYPE scandepth AS ENUM ('Standard', 'Deep', 'Thorough'); END IF; END $$")
-    op.add_column(
-        "users",
-        sa.Column(
-            "scan_depth",
-            sa.Enum("Standard", "Deep", "Thorough", name="scandepth"),
-            nullable=False,
-            server_default="Standard",
-        ),
-    )
+    op.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS scan_depth scandepth NOT NULL DEFAULT 'Standard'")
 
 
 def downgrade() -> None:

@@ -1,6 +1,7 @@
 "use client";
 
 import type { WebLink } from "@/lib/api";
+import React from "react";
 import type { ComponentType } from "react";
 import { useState } from "react";
 import type { RiskLevel, ScanResult } from "./types";
@@ -675,30 +676,30 @@ export function EaluminateResultsPanel({
                           >
                             {uiRisk}
                           </span>
-                          {useKeywords && item.keyword && (
-                            <>
-                              <span
-                                style={{
-                                  fontSize: "0.6875rem",
-                                  color: "#cbd5e1",
-                                }}
-                              >
-                                ·
-                              </span>
-                              <span
-                                style={{
-                                  fontSize: "0.6875rem",
-                                  fontWeight: 500,
-                                  color: "#6366f1",
-                                  backgroundColor: "rgba(99,102,241,0.08)",
-                                  padding: "0.125rem 0.5rem",
-                                  borderRadius: "999px",
-                                }}
-                              >
-                                {item.keyword}
-                              </span>
-                            </>
-                          )}
+                          {useKeywords && (() => {
+                            const kws = item.keywords?.length
+                              ? item.keywords
+                              : item.keyword
+                              ? [item.keyword]
+                              : [];
+                            return kws.map((kw, ki) => (
+                              <React.Fragment key={ki}>
+                                <span style={{ fontSize: "0.6875rem", color: "#cbd5e1" }}>·</span>
+                                <span
+                                  style={{
+                                    fontSize: "0.6875rem",
+                                    fontWeight: 500,
+                                    color: "#6366f1",
+                                    backgroundColor: "rgba(99,102,241,0.08)",
+                                    padding: "0.125rem 0.5rem",
+                                    borderRadius: "999px",
+                                  }}
+                                >
+                                  {kw}
+                                </span>
+                              </React.Fragment>
+                            ));
+                          })()}
                           {item.country && (
                             <>
                               <span
