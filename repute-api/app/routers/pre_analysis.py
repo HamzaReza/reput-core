@@ -197,7 +197,7 @@ async def pre_analysis(
         print(f"[pre-analysis] research_summary length={len(research_summary)} chars — proceeding to format")
         format_msg = await client.messages.create(
             model="claude-sonnet-4-6",
-            max_tokens=2048,
+            max_tokens=8192,
             system=f"You are a data formatter. Convert the research summary into the specified JSON shape. Write ALL field values and ALL keywords in {language_name}. Output ONLY valid JSON — no markdown fences, no explanation, no extra keys.",
             messages=[
                 {

@@ -381,7 +381,7 @@ async def _generate_meeting_summary(
     try:
         response = await client.messages.create(
             model="claude-sonnet-4-6",
-            max_tokens=4096,
+            max_tokens=8192,
             messages=[{"role": "user", "content": prompt}],
         )
         text_block = next((b for b in response.content if b.type == "text"), None)
