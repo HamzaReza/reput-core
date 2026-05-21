@@ -66,11 +66,6 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 60 * 24  # 24 hours
 
-    # External API keys
-    anthropic_api_key: str = Field(default="", validation_alias="ANTHROPIC_API_KEY")
-    serper_api_key: str = Field(default="", validation_alias="SERPER_API_KEY")
-    firecrawl_api_key: str = Field(default="", validation_alias="FIRECRAWL_API_KEY")
-
     @property
     def async_database_url(self) -> str:
         """Always returns a postgresql+asyncpg:// URL regardless of what was provided."""

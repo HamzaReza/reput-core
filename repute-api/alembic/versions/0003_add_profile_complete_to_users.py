@@ -15,7 +15,10 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS profile_complete BOOLEAN NOT NULL DEFAULT false")
+    op.add_column(
+        "users",
+        sa.Column("profile_complete", sa.Boolean(), nullable=False, server_default="false"),
+    )
 
 
 def downgrade() -> None:

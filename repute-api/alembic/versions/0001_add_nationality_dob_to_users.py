@@ -15,8 +15,8 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS nationality VARCHAR(100)")
-    op.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS date_of_birth DATE")
+    op.add_column("users", sa.Column("nationality", sa.String(100), nullable=True))
+    op.add_column("users", sa.Column("date_of_birth", sa.Date(), nullable=True))
 
 
 def downgrade() -> None:
