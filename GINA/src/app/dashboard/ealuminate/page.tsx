@@ -38,6 +38,7 @@ declare global {
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 const PAGES_CAP_OPTIONS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+const JOB_STORAGE_KEY = "ealuminate_job_id";
 const KEYWORDS_CAP_OPTIONS = [3, 4, 5, 6, 7, 8, 9, 10];
 
 const KEYWORD_FOCUS_OPTIONS = [
@@ -607,6 +608,8 @@ function EaluminatePageInner() {
   const statusSwapRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const tipIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const tipSwapRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [isResuming, setIsResuming] = useState(false);
 
   const stopCycles = () => {
     if (statusIntervalRef.current) clearInterval(statusIntervalRef.current);
@@ -637,6 +640,132 @@ function EaluminatePageInner() {
       }, 500);
     }, 5000);
   };
+
+  const scanApiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
+
+  const startPolling = (job_id: string) => {
+    if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+
+    const checkJob = async () => {
+      try {
+        const poll = await fetch(`${scanApiUrl}/generate-lead/${job_id}`, {
+          headers: { Authorization: `Bearer ${getToken()}` },
+        });
+        if (poll.status === 401) {
+          clearInterval(pollIntervalRef.current!);
+          localStorage.removeItem(JOB_STORAGE_KEY);
+          router.replace("/login?reason=session_expired");
+          return;
+        }
+        const pollData = await poll.json();
+
+        if (pollData.status === "done") {
+          clearInterval(pollIntervalRef.current!);
+          localStorage.removeItem(JOB_STORAGE_KEY);
+          stopCycles();
+
+          const scanResult = pollData.result as ScanResult;
+          const finalScore =
+            typeof pollData.result?.score === "number"
+              ? pollData.result.score
+              : deriveScore(
+                  scanResult.links.filter(
+                    (l) => l.sentiment === "negative" || l.risk === "high" || l.risk === "medium",
+                  ).length,
+                  scanResult.links.filter(
+                    (l) => l.sentiment === "positive" || l.sentiment === "neutral" || l.risk === "low" || l.risk === "none",
+                  ).length,
+                );
+          setScore(finalScore);
+          setResult(scanResult);
+          setScanComplete(true);
+          setIsResuming(false);
+          setLoading(false);
+
+          // Post-scan persistence
+          let currentLeadId: string | null = leadId;
+          if (!currentLeadId) {
+            try {
+              const ld = await leads.create({
+                name: fullName || undefined,
+                company: company.trim() || undefined,
+                country,
+                background: description.trim(),
+                pre_analysis_summary: preAnalysisSummary || undefined,
+                keywords_suggested: editableKeywords,
+                force_new: true,
+              });
+              if (ld.id) { currentLeadId = ld.id; setLeadId(ld.id); }
+            } catch { /* non-fatal */ }
+          }
+          if (currentLeadId) {
+            try {
+              await leads.update(currentLeadId, {
+                links: scanResult.links as unknown[],
+                summary: scanResult.summary ? ({ ...scanResult.summary } as Record<string, unknown>) : undefined,
+                score: finalScore,
+                keywords_suggested: editableKeywords,
+              });
+            } catch { /* non-fatal */ }
+          }
+          if (clientId) {
+            try {
+              await clientsApi.addEvent(clientId, {
+                event_type: "scan",
+                event_data: {
+                  score: finalScore,
+                  summary: scanResult.summary ?? null,
+                  links_count: scanResult.links.length,
+                  negative_count: scanResult.negative.length,
+                  keywords: editableKeywords,
+                  lead_id: currentLeadId ?? undefined,
+                  links: scanResult.links,
+                  useKeywords,
+                  scanFocus: scanFocus !== "all" ? scanFocus : undefined,
+                  countries,
+                  keywordsCap,
+                  pagesCap,
+                },
+              });
+            } catch { /* non-fatal */ }
+          }
+        } else if (pollData.status === "failed") {
+          clearInterval(pollIntervalRef.current!);
+          localStorage.removeItem(JOB_STORAGE_KEY);
+          stopCycles();
+          setError(pollData.error ?? "Scan failed. Please try again.");
+          setIsResuming(false);
+          setLoading(false);
+        }
+        // "pending" | "running" → keep polling
+      } catch {
+        clearInterval(pollIntervalRef.current!);
+        localStorage.removeItem(JOB_STORAGE_KEY);
+        stopCycles();
+        setError("Network error while polling.");
+        setIsResuming(false);
+        setLoading(false);
+      }
+    };
+
+    checkJob(); // immediate first check — no delay on resume
+    pollIntervalRef.current = setInterval(checkJob, 5000);
+  };
+
+  // Resume an in-progress job if one was saved before navigating away
+  useEffect(() => {
+    const savedJobId = localStorage.getItem(JOB_STORAGE_KEY);
+    if (savedJobId) {
+      setIsResuming(true);
+      setLoading(true);
+      startCycles();
+      startPolling(savedJobId);
+    }
+    return () => {
+      if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     if (process.env.NODE_ENV === "production") return;
@@ -1143,7 +1272,6 @@ function EaluminatePageInner() {
     setLoading(true);
     startCycles();
 
-    const scanApiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
     const scanCheckRes = await fetch(
       `${scanApiUrl}/clients/can-scan?name=${encodeURIComponent(subjectType === "company" ? company.trim() : fullName)}&country=${encodeURIComponent(country)}`,
       { headers: { Authorization: `Bearer ${getToken()}` } }
@@ -1165,8 +1293,7 @@ function EaluminatePageInner() {
           Authorization: `Bearer ${getToken()}`,
         },
         body: JSON.stringify({
-          firstName:
-            subjectType === "individual" ? firstName.trim() : undefined,
+          firstName: subjectType === "individual" ? firstName.trim() : undefined,
           lastName: subjectType === "individual" ? lastName.trim() : undefined,
           company: company.trim() || undefined,
           countries,
@@ -1178,103 +1305,19 @@ function EaluminatePageInner() {
           scanFocus: scanFocus !== "all" ? scanFocus : undefined,
         }),
       });
-      if (res.status === 401) {
-        router.replace("/login?reason=session_expired");
-        return;
-      }
+      if (res.status === 401) { router.replace("/login?reason=session_expired"); return; }
       const data = await res.json();
       if (!res.ok || data.error) {
         setError(data.error ?? "Scan failed. Please try again.");
+        setLoading(false);
+        stopCycles();
         return;
       }
-
-      const scanResult = data as ScanResult;
-      const finalScore =
-        typeof data.score === "number"
-          ? data.score
-          : deriveScore(
-              scanResult.links.filter(
-                (l) =>
-                  l.sentiment === "negative" ||
-                  l.risk === "high" ||
-                  l.risk === "medium",
-              ).length,
-              scanResult.links.filter(
-                (l) =>
-                  l.sentiment === "positive" ||
-                  l.sentiment === "neutral" ||
-                  l.risk === "low" ||
-                  l.risk === "none",
-              ).length,
-            );
-      setScore(finalScore);
-      setResult(scanResult);
-      setScanComplete(true);
-
-      // Post-scan persistence — reuse the research lead if available, otherwise create a new one
-      let currentLeadId: string | null = leadId;
-      if (!currentLeadId) {
-        try {
-          const ld = await leads.create({
-            name: fullName || undefined,
-            company: company.trim() || undefined,
-            country,
-            background: description.trim(),
-            pre_analysis_summary: preAnalysisSummary || undefined,
-            keywords_suggested: editableKeywords,
-            force_new: true,
-          });
-          if (ld.id) {
-            currentLeadId = ld.id;
-            setLeadId(ld.id);
-          }
-        } catch {
-          /* non-fatal */
-        }
-      }
-
-      if (currentLeadId) {
-        try {
-          await leads.update(currentLeadId, {
-            links: scanResult.links as unknown[],
-            summary: scanResult.summary
-              ? ({ ...scanResult.summary } as Record<string, unknown>)
-              : undefined,
-            score: finalScore,
-            keywords_suggested: editableKeywords,
-          });
-        } catch {
-          /* non-fatal */
-        }
-      }
-
-      // Append scan event to the client timeline
-      if (clientId) {
-        try {
-          await clientsApi.addEvent(clientId, {
-            event_type: "scan",
-            event_data: {
-              score: finalScore,
-              summary: scanResult.summary ?? null,
-              links_count: scanResult.links.length,
-              negative_count: scanResult.negative.length,
-              keywords: editableKeywords,
-              lead_id: currentLeadId ?? undefined,
-              links: scanResult.links,
-              useKeywords,
-              scanFocus: scanFocus !== "all" ? scanFocus : undefined,
-              countries,
-              keywordsCap,
-              pagesCap,
-            },
-          });
-        } catch {
-          /* non-fatal */
-        }
-      }
+      localStorage.setItem(JOB_STORAGE_KEY, data.job_id);
+      startPolling(data.job_id);
+      // loading state stays active — startPolling clears it when done
     } catch {
       setError("Network error. Please try again.");
-    } finally {
       setLoading(false);
       stopCycles();
     }
@@ -1427,6 +1470,7 @@ function EaluminatePageInner() {
           riskColors={RISK_COLORS}
           onExportSummary={handleExportSummaryPdf}
           GaugeComponent={RepuGauge}
+          isResuming={isResuming}
         />
       </div>
     </div>

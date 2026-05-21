@@ -1,16 +1,19 @@
 import asyncio
 import json
 import re
-from datetime import datetime
+import uuid
+from datetime import datetime, timezone
 from typing import Literal
 
 import anthropic
 import httpx
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
-from app.models.lead import WebAnalyst
+from app.database import AsyncSessionLocal, get_db
+from app.models.lead import GenerateLeadJob, WebAnalyst
 from app.utils.auth import get_current_web_analyst
 
 router = APIRouter(prefix="/generate-lead", tags=["generate-lead"])
@@ -421,25 +424,15 @@ class GenerateLeadRequest(BaseModel):
     scanFocus: str | None = None
 
 
-# ── Route ────────────────────────────────────────────────────────────────────
+# ── Core logic (extracted so background runner can call it) ──────────────────
 
-@router.post("")
-async def generate_lead(
-    body: GenerateLeadRequest,
-    _analyst: WebAnalyst = Depends(get_current_web_analyst),
-) -> dict:
-    settings = get_settings()
-    if not settings.anthropic_api_key:
-        raise HTTPException(status_code=500, detail="ANTHROPIC_API_KEY not configured")
-    if not settings.serper_api_key:
-        raise HTTPException(status_code=500, detail="SERPER_API_KEY not configured")
-
+async def _execute_generate_lead(body: GenerateLeadRequest, settings) -> dict:
     countries: list[str] = (
         body.countries if body.countries and len(body.countries) > 0
         else ([body.country] if body.country else [])
     )
     if not countries or (body.useKeywords and not body.keywords):
-        raise HTTPException(status_code=400, detail="Required fields missing")
+        raise ValueError("Required fields missing")
 
     search_subject = (
         (body.company or "").strip() if body.subjectType == "company" and body.company
@@ -625,3 +618,66 @@ async def generate_lead(
             else [{"keyword": None, "sent": urls_sent_to_claude}]
         ),
     }
+
+
+# ── Background runner ────────────────────────────────────────────────────────
+
+async def _run_job(job_id: uuid.UUID, body: GenerateLeadRequest) -> None:
+    async with AsyncSessionLocal() as db:
+        job = await db.get(GenerateLeadJob, job_id)
+        job.status = "running"
+        await db.commit()
+        try:
+            settings = get_settings()
+            result = await _execute_generate_lead(body, settings)
+            job.status = "done"
+            job.result = result
+            job.completed_at = datetime.now(timezone.utc)
+        except Exception as e:
+            job.status = "failed"
+            job.error = str(e)
+            job.completed_at = datetime.now(timezone.utc)
+        await db.commit()
+
+
+# ── Routes ───────────────────────────────────────────────────────────────────
+
+@router.post("")
+async def generate_lead(
+    body: GenerateLeadRequest,
+    analyst: WebAnalyst = Depends(get_current_web_analyst),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    settings = get_settings()
+    if not settings.anthropic_api_key:
+        raise HTTPException(status_code=500, detail="ANTHROPIC_API_KEY not configured")
+    if not settings.serper_api_key:
+        raise HTTPException(status_code=500, detail="SERPER_API_KEY not configured")
+
+    countries: list[str] = (
+        body.countries if body.countries and len(body.countries) > 0
+        else ([body.country] if body.country else [])
+    )
+    if not countries or (body.useKeywords and not body.keywords):
+        raise HTTPException(status_code=400, detail="Required fields missing")
+
+    job = GenerateLeadJob(created_by_id=analyst.id)
+    db.add(job)
+    await db.flush()
+    job_id = job.id
+    await db.commit()
+
+    asyncio.create_task(_run_job(job_id, body))
+    return {"job_id": str(job_id)}
+
+
+@router.get("/{job_id}")
+async def get_generate_lead_job(
+    job_id: uuid.UUID,
+    _analyst: WebAnalyst = Depends(get_current_web_analyst),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    job = await db.get(GenerateLeadJob, job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    return {"status": job.status, "result": job.result, "error": job.error}
