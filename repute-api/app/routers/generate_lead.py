@@ -73,7 +73,23 @@ MONTH_MAP: dict[str, int] = {
     "aoû": 8, "mär": 3, "okt": 10, "fev": 2, "out": 10,
 }
 
+_ENGLISH_MONTHS = [
+    "January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December",
+]
+
 # ── Helpers ──────────────────────────────────────────────────────────────────
+
+def _to_english_date(raw: str | None) -> str | None:
+    import math
+    if not raw:
+        return None
+    ts = _parse_serper_date(raw)
+    if math.isnan(ts):
+        return None
+    dt = datetime.fromtimestamp(ts)
+    return f"{dt.day} {_ENGLISH_MONTHS[dt.month - 1]} {dt.year}"
+
 
 def _country_code(country: str) -> str | None:
     k = country.lower().strip()
@@ -551,7 +567,7 @@ async def generate_lead(
         [
             {
                 **link,
-                "date": date_map.get(link["url"]),
+                "date": _to_english_date(date_map.get(link["url"])),
                 "keywords": keyword_map.get(link["url"], []),
                 "country": country_map.get(link["url"]),
             }
