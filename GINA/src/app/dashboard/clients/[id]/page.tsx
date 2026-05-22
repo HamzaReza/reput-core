@@ -725,7 +725,7 @@ function ActionPanel({
         className="glass glow-border"
         style={{ borderRadius: "0.875rem", padding: "1.25rem" }}
       >
-        <style>{`@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }`}</style>
+        <style>{`@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} } @keyframes dotPulse { 0%,100%{box-shadow:0 0 0 2px #f59e0b40} 50%{box-shadow:0 0 0 5px #f59e0b00} }`}</style>
         <div style={{ display: "flex", alignItems: "center", gap: "0.625rem" }}>
           <div
             style={{
@@ -1028,7 +1028,15 @@ export default function ClientDetailPage() {
     const raw = localStorage.getItem(EALUMINATE_JOB_KEY);
     if (!raw) return;
 
-    let stored: { job_id: string; leadId: string | null; clientId?: string | null } | null = null;
+    let stored: {
+      job_id: string;
+      leadId: string | null;
+      clientId?: string | null;
+      useKeywords?: boolean;
+      pagesCap?: number;
+      scanFocus?: string;
+      keywords?: string[];
+    } | null = null;
     try { stored = JSON.parse(raw); } catch { localStorage.removeItem(EALUMINATE_JOB_KEY); return; }
     if (!stored?.leadId) return;
 
@@ -1036,7 +1044,15 @@ export default function ClientDetailPage() {
 
     setActiveJobLeadId(stored.leadId);
 
-    const { job_id, leadId: jobLeadId, clientId: jobClientId = null } = stored;
+    const {
+      job_id,
+      leadId: jobLeadId,
+      clientId: jobClientId = null,
+      useKeywords: jobUseKeywords,
+      pagesCap: jobPagesCap,
+      scanFocus: jobScanFocus,
+      keywords: jobKeywords,
+    } = stored;
     const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
 
     const checkJob = async () => {
@@ -1074,6 +1090,10 @@ export default function ClientDetailPage() {
                   negative_count: (r.negative ?? []).length,
                   lead_id: jobLeadId ?? undefined,
                   links: r.links ?? [],
+                  useKeywords: jobUseKeywords,
+                  pagesCap: jobPagesCap,
+                  scanFocus: jobScanFocus ?? undefined,
+                  keywords: jobKeywords ?? [],
                 },
               });
             } catch { /* non-fatal */ }
@@ -1660,6 +1680,7 @@ export default function ClientDetailPage() {
             </p>
           )}
 
+          <style>{`@keyframes dotPulse { 0%,100%{box-shadow:0 0 0 2px #f59e0b40} 50%{box-shadow:0 0 0 5px #f59e0b00} }`}</style>
           <div style={{ position: "relative" }}>
             {client.events.map((event, i) => {
               const meta = EVENT_META[event.event_type as ClientEventType] ?? {
@@ -1667,7 +1688,7 @@ export default function ClientDetailPage() {
                 color: "#64748b",
                 dot: "#94a3b8",
               };
-              const isLast = i === client.events.length - 1;
+              const isLast = i === client.events.length - 1 && !activeJobLeadId;
               const data = event.data ?? {};
               return (
                 <div
@@ -1801,6 +1822,7 @@ export default function ClientDetailPage() {
                     boxShadow: "0 0 0 2px #f59e0b40",
                     flexShrink: 0,
                     marginTop: "0.15rem",
+                    animation: "dotPulse 1.8s ease-in-out infinite",
                   }} />
                 </div>
                 <div style={{ flex: 1, paddingBottom: 0 }}>
@@ -1808,15 +1830,14 @@ export default function ClientDetailPage() {
                     <span style={{ fontSize: "0.875rem", fontWeight: 700, color: "#d97706" }}>
                       Scan in Progress
                     </span>
-                    <span style={{ fontSize: "0.75rem", color: "#94a3b8" }}>Just now</span>
                   </div>
                   <button
                     type="button"
                     onClick={() => router.push(`/dashboard/ealuminate?lead=${activeJobLeadId}`)}
                     className="glow-button"
-                    style={{ padding: "0.4rem 1rem", fontWeight: 700, borderRadius: "999px", fontSize: "0.8125rem", cursor: "pointer", opacity: 0.85 }}
+                    style={{ padding: "0.4rem 1rem", fontWeight: 700, borderRadius: "999px", fontSize: "0.8125rem", cursor: "pointer" }}
                   >
-                    ⏳ View in Ealuminate
+                    View in Ealuminate
                   </button>
                 </div>
               </div>
