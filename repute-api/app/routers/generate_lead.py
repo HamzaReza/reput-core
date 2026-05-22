@@ -338,48 +338,55 @@ async def _generate_meeting_summary(
     links: list[dict],
     language_name: str,
 ) -> dict:
-    neg_links = [l for l in links if l.get("sentiment") == "negative" or l.get("risk") in ("high", "medium")]
-    pos_links = [l for l in links if l.get("sentiment") == "positive"]
-    high_links = [l for l in links if l.get("risk") == "high"]
-    med_links = [l for l in links if l.get("risk") == "medium"]
-    neutral_links = [l for l in links if l.get("sentiment") == "neutral"]
-
-    score_breakdown = f"Score: {score}/100 | High-risk: {len(high_links)} | Medium-risk: {len(med_links)} | Positive: {len(pos_links)} | Neutral: {len(neutral_links)}"
-
-    neg_summary = (
-        "Negative/Risk findings:\n" + "\n".join(
-            f"- [{l['risk'].upper()}] \"{l['title']}\" — {l['source']}"
-            + (f" ({l['date']})" if l.get("date") else "")
-            + f"\n  {l['snippet']}"
-            for l in neg_links[:8]
-        )
-        if neg_links else "No negative results found."
-    )
-
-    pos_summary = (
-        "Positive findings:\n" + "\n".join(
-            f"- \"{l['title']}\" — {l['source']}" + (f" ({l['date']})" if l.get("date") else "")
-            for l in pos_links[:4]
-        )
-        if pos_links else "No positive results found."
-    )
-
-    prompt = (
-        f'You are a senior analyst at a reputation management firm preparing an internal sales brief.\n\n'
-        f'Subject: "{name}"\n{score_breakdown}\n\n{neg_summary}\n\n{pos_summary}\n\n'
-        f"Return ONLY a JSON object with these 5 fields (no markdown, no explanation):\n"
-        f'{{\n  "headline": "one sharp sentence summarising the reputational situation for the sales team",\n'
-        f'  "issues": ["5-8 specific key reputation points — cite article titles or sources where relevant"],\n'
-        f'  "talkingPoints": ["4-6 opening lines for the client meeting — reference their actual situation, not generic phrases"],\n'
-        f'  "riskIndicators": ["4-6 concrete risk flags drawn from the findings above — include source name and date where available"],\n'
-        f'  "objectionHandlers": ["4-5 sharp, specific rebuttals for when the prospect says they don\'t need reputation management — reference their actual findings"]\n'
-        f"}}\n\nWrite all output in {language_name}."
-    )
-
     try:
+        neg_links = [l for l in links if l.get("sentiment") == "negative" or l.get("risk") in ("high", "medium")]
+        pos_links = [l for l in links if l.get("sentiment") == "positive"]
+        high_links = [l for l in links if l.get("risk") == "high"]
+        med_links = [l for l in links if l.get("risk") == "medium"]
+        neutral_links = [l for l in links if l.get("sentiment") == "neutral"]
+
+        score_breakdown = f"Score: {score}/100 | High-risk: {len(high_links)} | Medium-risk: {len(med_links)} | Positive: {len(pos_links)} | Neutral: {len(neutral_links)}"
+
+        neg_summary = (
+            "Negative/Risk findings:\n" + "\n".join(
+                f"- [{(l.get('risk') or 'none').upper()}] \"{l.get('title', '')}\" — {l.get('source', '')}"
+                + (f" ({l['date']})" if l.get("date") else "")
+                + f"\n  {l.get('snippet', '')}"
+                for l in neg_links[:8]
+            )
+            if neg_links else "No negative results found."
+        )
+
+        pos_summary = (
+            "Positive findings:\n" + "\n".join(
+                f"- \"{l.get('title', '')}\" — {l.get('source', '')}" + (f" ({l['date']})" if l.get("date") else "")
+                for l in pos_links[:4]
+            )
+            if pos_links else "No positive results found."
+        )
+
+        prompt = (
+            f'Analyze the following publicly available web search findings about a prospective client and produce an internal sales brief.\n\n'
+            f'Subject: "{name}"\n{score_breakdown}\n\n{neg_summary}\n\n{pos_summary}\n\n'
+            f"Return ONLY a JSON object with these 5 fields (no markdown, no explanation):\n"
+            f'{{\n  "headline": "one sharp sentence summarising the reputational situation for the sales team",\n'
+            f'  "issues": ["5-8 specific key reputation points — cite article titles or sources where relevant"],\n'
+            f'  "talkingPoints": ["4-6 opening lines for the client meeting — reference their actual situation, not generic phrases"],\n'
+            f'  "riskIndicators": ["4-6 concrete risk flags drawn from the findings above — include source name and date where available"],\n'
+            f'  "objectionHandlers": ["4-5 sharp, specific rebuttals for when the prospect says they don\'t need reputation management — reference their actual findings"]\n'
+            f"}}\n\nWrite all output in {language_name}."
+        )
+
         response = await client.messages.create(
             model="claude-sonnet-4-6",
             max_tokens=8192,
+            system=(
+                "You are an AI assistant embedded in a professional reputation intelligence platform used by "
+                "reputation management firms. Your task is to analyze publicly available web search results "
+                "about a prospective client and produce structured internal sales briefing notes. "
+                "The findings below are summaries of news articles and web sources retrieved from public search engines. "
+                "Respond only with the requested JSON object."
+            ),
             messages=[{"role": "user", "content": prompt}],
         )
         text_block = next((b for b in response.content if b.type == "text"), None)
@@ -387,6 +394,7 @@ async def _generate_meeting_summary(
             json_match = re.search(r"\{[\s\S]*\}", text_block.text.strip())
             if json_match:
                 return json.loads(json_match.group())
+        print(f"[meeting-summary] no JSON extracted; response: {text_block.text[:300] if text_block else 'no text block'}")
     except Exception as e:
         print(f"[meeting-summary] error: {e}")
 
