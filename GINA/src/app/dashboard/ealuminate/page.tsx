@@ -739,6 +739,9 @@ function EaluminatePageInner() {
           clearInterval(pollIntervalRef.current!);
           localStorage.removeItem(JOB_STORAGE_KEY);
           stopCycles();
+          setResult(null);
+          setScanComplete(false);
+          setScore(0);
           setError(pollData.error ?? "Scan failed. Please try again.");
           setIsResuming(false);
           setLoading(false);
