@@ -17,6 +17,24 @@ import type {
   ScanResult,
 } from "./_components/types";
 import { exportReportMasterPdf, exportSummaryPdf } from "./_utils/pdfExports";
+import ExportFieldsModal from "./_components/ExportFieldsModal";
+
+const RESEARCH_SUMMARY_FIELDS = [
+  { key: "identity",          label: "Identity",          color: "#4479DA" },
+  { key: "background",        label: "Background",        color: "#6366f1" },
+  { key: "associations",      label: "Associations",      color: "#f59e0b" },
+  { key: "recent_news",       label: "Recent News",       color: "#48D4B8" },
+  { key: "negative_findings", label: "Negative Findings", color: "#ef4444" },
+  { key: "positive_presence", label: "Positive Presence", color: "#4CAF50" },
+  { key: "reputation_notes",  label: "Reputation Notes",  color: "#94a3b8" },
+];
+
+const BRIEF_FIELDS = [
+  { key: "key_points",         label: "Key Points",         color: "#4479DA" },
+  { key: "meeting_angles",     label: "Meeting Angles",     color: "#6366f1" },
+  { key: "risk_indicators",    label: "Risk Indicators",    color: "#ef4444" },
+  { key: "objection_handlers", label: "Objection Handlers", color: "#48D4B8" },
+];
 
 declare global {
   interface Window {
@@ -1087,27 +1105,20 @@ function EaluminatePageInner() {
 
   const country = countries[0] ?? "";
 
-  const handleExportSummaryPdf = () => {
-    exportSummaryPdf({
-      fullName,
-      company,
-      country,
-      webAnalystName,
-      score,
-      result,
-    });
+  const [exportSummaryModalOpen, setExportSummaryModalOpen] = useState(false);
+  const [exportReportModalOpen, setExportReportModalOpen] = useState(false);
+
+  const handleExportSummaryPdf = () => setExportSummaryModalOpen(true);
+  const handleExportReportMaster = () => setExportReportModalOpen(true);
+
+  const handleConfirmSummaryExport = (selectedFields: string[]) => {
+    setExportSummaryModalOpen(false);
+    exportSummaryPdf({ fullName, company, country, webAnalystName, score, result, selectedFields });
   };
 
-  const handleExportReportMaster = () => {
-    exportReportMasterPdf({
-      fullName,
-      company,
-      country,
-      webAnalystName,
-      preAnalysisProfile,
-      preAnalysisSummary,
-      editableKeywords,
-    });
+  const handleConfirmReportExport = (selectedFields: string[]) => {
+    setExportReportModalOpen(false);
+    exportReportMasterPdf({ fullName, company, country, webAnalystName, preAnalysisProfile, preAnalysisSummary, editableKeywords, selectedFields });
   };
 
   const handleDescriptionChange = (val: string) => {
@@ -1526,6 +1537,22 @@ function EaluminatePageInner() {
           isResuming={isResuming}
         />
       </div>
+      {exportSummaryModalOpen && (
+        <ExportFieldsModal
+          title="Export Internal Brief"
+          fields={BRIEF_FIELDS}
+          onConfirm={handleConfirmSummaryExport}
+          onClose={() => setExportSummaryModalOpen(false)}
+        />
+      )}
+      {exportReportModalOpen && (
+        <ExportFieldsModal
+          title="Export Research Summary"
+          fields={RESEARCH_SUMMARY_FIELDS}
+          onConfirm={handleConfirmReportExport}
+          onClose={() => setExportReportModalOpen(false)}
+        />
+      )}
     </div>
   );
 }
