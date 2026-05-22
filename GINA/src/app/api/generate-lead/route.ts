@@ -265,16 +265,6 @@ function parseSerperDate(dateStr: string): number {
   return NaN;
 }
 
-function toEnglishDate(raw: string | undefined): string | undefined {
-  if (!raw) return undefined;
-  const ts = parseSerperDate(raw);
-  if (isNaN(ts)) return undefined;
-  return new Intl.DateTimeFormat("en-GB", {
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-  }).format(new Date(ts * 1000));
-}
 
 function countryCodeFromName(country: string): string | null {
   const k = country.toLowerCase().trim();
@@ -890,7 +880,7 @@ export async function POST(req: NextRequest) {
     const deduped = dedupeLinks(classified)
       .map((link) => ({
         ...link,
-        date: toEnglishDate(dateMap.get(link.url)),
+        date: dateMap.get(link.url),
         keyword: keywordMap.get(link.url),
         country: countryMap.get(link.url),
       }))
