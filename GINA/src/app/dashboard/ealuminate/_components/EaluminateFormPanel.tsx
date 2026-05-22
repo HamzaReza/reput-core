@@ -680,6 +680,42 @@ export function EaluminateFormPanel(props: EaluminateFormPanelProps) {
             )}
           </button>
 
+          {preAnalysisLoading && (
+            <div
+              style={{
+                marginTop: "0.75rem",
+                padding: "0.625rem 0.875rem",
+                borderRadius: "0.625rem",
+                backgroundColor: "rgba(245,158,11,0.1)",
+                border: "1px solid rgba(245,158,11,0.35)",
+                display: "flex",
+                alignItems: "flex-start",
+                gap: "0.5rem",
+              }}
+            >
+              <span
+                style={{
+                  fontSize: "0.875rem",
+                  flexShrink: 0,
+                  marginTop: "0.05rem",
+                }}
+              >
+                ⚠️
+              </span>
+              <p
+                style={{
+                  margin: 0,
+                  fontSize: "0.8125rem",
+                  fontWeight: 600,
+                  color: "#d97706",
+                  lineHeight: 1.45,
+                }}
+              >
+                Do not navigate away — all research data will be lost.
+              </p>
+            </div>
+          )}
+
           {!preAnalysisDone && !preAnalysisLoading && (
             <button
               type="submit"
@@ -698,6 +734,28 @@ export function EaluminateFormPanel(props: EaluminateFormPanelProps) {
             >
               Skip to Scan →
             </button>
+          )}
+
+          {preAnalysisDone && !preAnalysisSummary && (
+            <div
+              style={{
+                borderRadius: "0.875rem",
+                border: "1px solid #e2e8f0",
+                backgroundColor: "#f8fafc",
+                padding: "1rem 1.25rem",
+              }}
+            >
+              <p
+                style={{
+                  margin: 0,
+                  fontSize: "0.8125rem",
+                  color: "#94a3b8",
+                  fontStyle: "italic",
+                }}
+              >
+                Pre-analysis was skipped — no research summary available.
+              </p>
+            </div>
           )}
 
           {preAnalysisDone && preAnalysisSummary && (
@@ -1015,6 +1073,43 @@ export function EaluminateFormPanel(props: EaluminateFormPanelProps) {
                   "Run Scan"
                 )}
               </button>
+
+              {loading && (
+                <div
+                  style={{
+                    marginTop: "0.75rem",
+                    padding: "0.625rem 0.875rem",
+                    borderRadius: "0.625rem",
+                    backgroundColor: "rgba(68,121,218,0.08)",
+                    border: "1px solid rgba(68,121,218,0.25)",
+                    display: "flex",
+                    alignItems: "flex-start",
+                    gap: "0.5rem",
+                  }}
+                >
+                  <span
+                    style={{
+                      fontSize: "0.875rem",
+                      flexShrink: 0,
+                      marginTop: "0.05rem",
+                    }}
+                  >
+                    💡
+                  </span>
+                  <p
+                    style={{
+                      margin: 0,
+                      fontSize: "0.8125rem",
+                      fontWeight: 600,
+                      color: "#4479DA",
+                      lineHeight: 1.45,
+                    }}
+                  >
+                    You can go back to the client page and track scan progress
+                    from there.
+                  </p>
+                </div>
+              )}
             </>
           )}
         </div>

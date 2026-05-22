@@ -46,15 +46,55 @@ NATIONALITY_ALIASES: dict[str, str] = {
     "palestine": "PS", "ethiopia": "ET", "ghana": "GH", "senegal": "SN",
 }
 
-COUNTRY_TO_LANGUAGE: dict[str, str] = {
-    "IT": "it", "FR": "fr", "DE": "de", "ES": "es", "PT": "pt", "NL": "nl",
-    "PL": "pl", "RO": "ro", "HU": "hu", "CZ": "cs", "SK": "sk", "HR": "hr",
-    "RU": "ru", "UA": "uk", "TR": "tr", "AR": "es", "JP": "ja", "KR": "ko",
-    "CN": "zh-CN", "TW": "zh-TW", "SA": "ar", "AE": "ar", "EG": "ar",
-    "IN": "hi", "TH": "th", "VN": "vi", "ID": "id", "MY": "ms", "GR": "el",
-    "SE": "sv", "NO": "no", "FI": "fi", "DK": "da",
-    "GB": "en", "US": "en", "CA": "en", "AU": "en", "IE": "en",
+_COUNTRY_TO_LANGUAGE: dict[str, str] = {
+    # Europe
+    "AL": "sq", "AD": "ca", "AT": "de", "BY": "be", "BE": "fr", "BA": "bs",
+    "BG": "bg", "HR": "hr", "CY": "el", "CZ": "cs", "DK": "da", "EE": "et",
+    "FI": "fi", "FR": "fr", "DE": "de", "GR": "el", "HU": "hu", "IS": "is",
+    "IE": "en", "IT": "it", "XK": "sq", "LV": "lv", "LI": "de", "LT": "lt",
+    "LU": "fr", "MK": "mk", "MT": "mt", "MD": "mo", "MC": "fr", "ME": "sr-me",
+    "NL": "nl", "NO": "no", "PL": "pl", "PT": "pt", "RO": "ro", "RU": "ru",
+    "SM": "it", "RS": "sr", "SK": "sk", "SI": "sl", "ES": "es", "SE": "sv",
+    "CH": "de", "UA": "uk", "GB": "en", "VA": "it",
+    # Americas
+    "AG": "en", "AR": "es", "AW": "nl", "BS": "en", "BB": "en", "BZ": "en",
+    "BO": "es", "BR": "pt-br", "CA": "en", "CL": "es", "CO": "es", "CR": "es",
+    "CU": "es", "DM": "en", "DO": "es", "EC": "es", "SV": "es", "GD": "en",
+    "GT": "es", "GY": "en", "HT": "ht", "HN": "es", "JM": "en", "MX": "es",
+    "NI": "es", "PA": "es", "PY": "es", "PE": "es", "KN": "en", "LC": "en",
+    "VC": "en", "SR": "nl", "TT": "en", "US": "en", "UY": "es", "VE": "es",
+    # Middle East / North Africa
+    "DZ": "ar", "BH": "ar", "EG": "ar", "IQ": "ar", "JO": "ar", "KW": "ar",
+    "LB": "ar", "LY": "ar", "MA": "ar", "OM": "ar", "PS": "ar", "QA": "ar",
+    "SA": "ar", "SD": "ar", "SY": "ar", "TN": "ar", "AE": "ar", "YE": "ar",
+    "IL": "iw", "IR": "fa", "TR": "tr",
+    # Sub-Saharan Africa
+    "AO": "pt", "BJ": "fr", "BW": "en", "BF": "fr", "BI": "fr", "CM": "fr",
+    "CV": "pt", "CF": "fr", "TD": "fr", "KM": "fr", "CG": "fr", "CD": "fr",
+    "CI": "fr", "DJ": "fr", "GQ": "es", "ER": "ti", "ET": "am", "GA": "fr",
+    "GM": "en", "GH": "en", "GN": "fr", "GW": "pt", "KE": "sw", "LS": "st",
+    "LR": "en", "MG": "mg", "MW": "ny", "ML": "fr", "MR": "ar", "MU": "fr",
+    "MZ": "pt", "NA": "af", "NE": "fr", "NG": "en", "RW": "rw", "ST": "pt",
+    "SN": "fr", "SC": "fr", "SL": "en", "SO": "so", "ZA": "af", "SS": "en",
+    "TZ": "sw", "TG": "fr", "UG": "en", "ZM": "en", "ZW": "en",
+    # Asia
+    "AF": "ps", "AM": "hy", "AZ": "az", "BD": "bn", "BT": "bt", "KH": "km",
+    "CN": "zh-cn", "GE": "ka", "IN": "hi", "ID": "id", "JP": "ja", "KZ": "kk",
+    "KG": "ky", "LA": "lo", "MY": "ms", "MV": "mv", "MN": "mn", "MM": "my",
+    "NP": "ne", "KR": "ko", "LK": "si", "TJ": "tg", "TH": "th", "TM": "tk",
+    "TW": "zh-tw", "UZ": "uz", "VN": "vi", "PK": "ur", "PH": "tl",
+    "SG": "en", "HK": "zh-tw",
+    # Oceania
+    "AU": "en", "FJ": "en", "NZ": "en", "PG": "en", "WS": "ws", "TO": "to",
 }
+
+
+def _get_serper_locale(country_code: str | None) -> tuple[str | None, str]:
+    """Return (gl, hl) for a Serper request. hl defaults to 'en' if unmapped."""
+    if not country_code:
+        return None, "en"
+    upper = country_code.upper()
+    return upper.lower(), _COUNTRY_TO_LANGUAGE.get(upper, "en")
 
 LANG_CODE_TO_NAME: dict[str, str] = {
     "en": "English", "it": "Italian", "es": "Spanish", "fr": "French",
@@ -89,6 +129,12 @@ def _parse_serper_date(date_str: str) -> float:
         return datetime.fromisoformat(date_str).timestamp()
     except ValueError:
         pass
+    # "Dec 7, 2023" or "December 7, 2023" — Serper's actual format
+    for fmt in ("%b %d, %Y", "%B %d, %Y"):
+        try:
+            return datetime.strptime(date_str.strip(), fmt).timestamp()
+        except ValueError:
+            pass
     m = re.match(r"^(\d{1,2})\s+([a-záàâäéèêëíìîïóòôöúùûüñç]+)\.?\s+(\d{4})$", date_str.strip(), re.IGNORECASE)
     if m:
         month = MONTH_MAP.get(m.group(2).lower())
@@ -168,11 +214,10 @@ async def _search_serper(
 ) -> tuple[list[dict], list[dict]]:
     def make_payload(page: int) -> dict:
         payload: dict = {"q": query, "page": page}
-        if country_code:
-            payload["gl"] = country_code.lower()
-        lang = language_code or (COUNTRY_TO_LANGUAGE.get(country_code.upper()) if country_code else None)
-        if lang:
-            payload["hl"] = lang
+        gl, hl = _get_serper_locale(country_code)
+        if gl:
+            payload["gl"] = gl
+        payload["hl"] = language_code or hl
         return payload
 
     async def fetch_page(page: int, attempt: int = 0) -> dict:
@@ -435,7 +480,7 @@ async def _execute_generate_lead(body: GenerateLeadRequest, settings) -> dict:
 
     primary_country = countries[0]
     country_code = _country_code(primary_country)
-    language_code = COUNTRY_TO_LANGUAGE.get(country_code.upper()) if country_code else None
+    _, language_code = _get_serper_locale(country_code)
 
     output_language_name = (
         REPORT_LANG_MAP.get(body.reportLanguage, "English") if body.reportLanguage
@@ -454,8 +499,8 @@ async def _execute_generate_lead(body: GenerateLeadRequest, settings) -> dict:
 
         country_configs = [
             {
-                "country_code": _country_code(c),
-                "language_code": COUNTRY_TO_LANGUAGE.get((_country_code(c) or "").upper()),
+                "country_code": (cc := _country_code(c)),
+                "language_code": _get_serper_locale(cc)[1],
             }
             for c in countries
         ]
