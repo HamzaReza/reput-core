@@ -1073,7 +1073,10 @@ export default function ClientDetailPage() {
           jobPollRef.current = null;
           localStorage.removeItem(EALUMINATE_JOB_KEY);
 
-          if (pollData.status === "done" && pollData.result && jobClientId) {
+          const writtenKey = `ealuminate_scan_written_${job_id}`;
+          if (pollData.status === "done" && pollData.result && jobClientId && !localStorage.getItem(writtenKey)) {
+            localStorage.setItem(writtenKey, "1");
+            setTimeout(() => localStorage.removeItem(writtenKey), 30000);
             const r = pollData.result as {
               links?: Array<Record<string, unknown>>;
               negative?: Array<Record<string, unknown>>;
@@ -1754,7 +1757,7 @@ export default function ClientDetailPage() {
                     {event.event_type === "research" && (
                       <>
                         <ResearchDetail data={data} />
-                        {!client.events.slice(i + 1).some((e) => {
+                        {activeJobLeadId !== (data.lead_id as string | undefined) && !client.events.slice(i + 1).some((e) => {
                           if (e.event_type !== "scan") return false;
                           const researchLeadId = data.lead_id as
                             | string
