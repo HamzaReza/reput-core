@@ -97,6 +97,7 @@ interface EaluminateResultsPanelProps {
   onExportSummary: () => void;
   GaugeComponent: ComponentType<{ score: number }>;
   useKeywords: boolean;
+  isResuming?: boolean;
 }
 
 function KeywordsUsed({
@@ -182,6 +183,7 @@ export function EaluminateResultsPanel({
   onExportSummary,
   GaugeComponent,
   useKeywords,
+  isResuming,
 }: EaluminateResultsPanelProps) {
   const [openBriefSection, setOpenBriefSection] = useState<string | null>(null);
 
@@ -293,6 +295,18 @@ export function EaluminateResultsPanel({
             >
               REPUTATION INTELLIGENCE IN PROGRESS
             </p>
+            {isResuming && (
+              <p
+                style={{
+                  margin: 0,
+                  fontSize: "0.75rem",
+                  color: "#64748b",
+                  fontWeight: 500,
+                }}
+              >
+                Still calculating your report — please wait…
+              </p>
+            )}
           </div>
 
           <p
