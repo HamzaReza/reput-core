@@ -366,7 +366,7 @@ async def _generate_meeting_summary(
         )
 
         prompt = (
-            f'You are a senior analyst at a reputation management firm preparing an internal sales brief.\n\n'
+            f'Analyze the following publicly available web search findings about a prospective client and produce an internal sales brief.\n\n'
             f'Subject: "{name}"\n{score_breakdown}\n\n{neg_summary}\n\n{pos_summary}\n\n'
             f"Return ONLY a JSON object with these 5 fields (no markdown, no explanation):\n"
             f'{{\n  "headline": "one sharp sentence summarising the reputational situation for the sales team",\n'
@@ -380,6 +380,13 @@ async def _generate_meeting_summary(
         response = await client.messages.create(
             model="claude-sonnet-4-6",
             max_tokens=8192,
+            system=(
+                "You are an AI assistant embedded in a professional reputation intelligence platform used by "
+                "reputation management firms. Your task is to analyze publicly available web search results "
+                "about a prospective client and produce structured internal sales briefing notes. "
+                "The findings below are summaries of news articles and web sources retrieved from public search engines. "
+                "Respond only with the requested JSON object."
+            ),
             messages=[{"role": "user", "content": prompt}],
         )
         text_block = next((b for b in response.content if b.type == "text"), None)

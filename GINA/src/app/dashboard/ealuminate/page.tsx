@@ -778,7 +778,15 @@ function EaluminatePageInner() {
     const raw = localStorage.getItem(JOB_STORAGE_KEY);
     if (!raw) return cleanup;
 
-    let stored: { job_id: string; leadId: string | null } | null = null;
+    let stored: {
+      job_id: string;
+      leadId: string | null;
+      clientId?: string | null;
+      useKeywords?: boolean;
+      pagesCap?: number;
+      scanFocus?: string;
+      keywords?: string[];
+    } | null = null;
     try { stored = JSON.parse(raw); } catch { localStorage.removeItem(JOB_STORAGE_KEY); return cleanup; }
     if (!stored) return cleanup;
 
@@ -790,6 +798,11 @@ function EaluminatePageInner() {
       localStorage.removeItem(JOB_STORAGE_KEY); // stale job from a different client
       return cleanup;
     }
+
+    if (stored.useKeywords !== undefined) setUseKeywords(stored.useKeywords);
+    if (stored.pagesCap !== undefined) setPagesCap(stored.pagesCap);
+    if (stored.scanFocus !== undefined) setScanFocus(stored.scanFocus as KeywordFocus);
+    if (stored.keywords?.length) setEditableKeywords(stored.keywords);
 
     setIsResuming(true);
     setLoading(true);
@@ -1345,7 +1358,15 @@ function EaluminatePageInner() {
         stopCycles();
         return;
       }
-      localStorage.setItem(JOB_STORAGE_KEY, JSON.stringify({ job_id: data.job_id, leadId: leadId || null, clientId: clientId || null }));
+      localStorage.setItem(JOB_STORAGE_KEY, JSON.stringify({
+        job_id: data.job_id,
+        leadId: leadId || null,
+        clientId: clientId || null,
+        useKeywords,
+        pagesCap,
+        scanFocus: scanFocus !== "all" ? scanFocus : undefined,
+        keywords: editableKeywords,
+      }));
       startPolling(data.job_id);
       // loading state stays active — startPolling clears it when done
     } catch {
