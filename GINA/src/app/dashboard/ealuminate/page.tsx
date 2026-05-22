@@ -779,6 +779,9 @@ function EaluminatePageInner() {
     try { stored = JSON.parse(raw); } catch { localStorage.removeItem(JOB_STORAGE_KEY); return cleanup; }
     if (!stored) return cleanup;
 
+    const eventParam = new URLSearchParams(window.location.search).get("event");
+    if (eventParam) return cleanup;
+
     const currentLeadParam = new URLSearchParams(window.location.search).get("lead");
     if (stored.leadId !== currentLeadParam) {
       localStorage.removeItem(JOB_STORAGE_KEY); // stale job from a different client
@@ -1339,7 +1342,7 @@ function EaluminatePageInner() {
         stopCycles();
         return;
       }
-      localStorage.setItem(JOB_STORAGE_KEY, JSON.stringify({ job_id: data.job_id, leadId: leadId || null }));
+      localStorage.setItem(JOB_STORAGE_KEY, JSON.stringify({ job_id: data.job_id, leadId: leadId || null, clientId: clientId || null }));
       startPolling(data.job_id);
       // loading state stays active — startPolling clears it when done
     } catch {
