@@ -610,6 +610,11 @@ function EaluminatePageInner() {
   const tipSwapRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [isResuming, setIsResuming] = useState(false);
+  const persistContextRef = useRef({
+    leadId, clientId, fullName: `${firstName.trim()} ${lastName.trim()}`.trim(),
+    company, country: countries[0] ?? "", description, preAnalysisSummary,
+    editableKeywords, useKeywords, scanFocus, countries, keywordsCap, pagesCap,
+  });
 
   const stopCycles = () => {
     if (statusIntervalRef.current) clearInterval(statusIntervalRef.current);
@@ -682,17 +687,18 @@ function EaluminatePageInner() {
           setIsResuming(false);
           setLoading(false);
 
-          // Post-scan persistence
-          let currentLeadId: string | null = leadId;
+          // Post-scan persistence — read from ref so values are always fresh (not stale closures)
+          const ctx = persistContextRef.current;
+          let currentLeadId: string | null = ctx.leadId;
           if (!currentLeadId) {
             try {
               const ld = await leads.create({
-                name: fullName || undefined,
-                company: company.trim() || undefined,
-                country,
-                background: description.trim(),
-                pre_analysis_summary: preAnalysisSummary || undefined,
-                keywords_suggested: editableKeywords,
+                name: ctx.fullName || undefined,
+                company: ctx.company.trim() || undefined,
+                country: ctx.country,
+                background: ctx.description.trim(),
+                pre_analysis_summary: ctx.preAnalysisSummary || undefined,
+                keywords_suggested: ctx.editableKeywords,
                 force_new: true,
               });
               if (ld.id) { currentLeadId = ld.id; setLeadId(ld.id); }
@@ -704,27 +710,27 @@ function EaluminatePageInner() {
                 links: scanResult.links as unknown[],
                 summary: scanResult.summary ? ({ ...scanResult.summary } as Record<string, unknown>) : undefined,
                 score: finalScore,
-                keywords_suggested: editableKeywords,
+                keywords_suggested: ctx.editableKeywords,
               });
             } catch { /* non-fatal */ }
           }
-          if (clientId) {
+          if (ctx.clientId) {
             try {
-              await clientsApi.addEvent(clientId, {
+              await clientsApi.addEvent(ctx.clientId, {
                 event_type: "scan",
                 event_data: {
                   score: finalScore,
                   summary: scanResult.summary ?? null,
                   links_count: scanResult.links.length,
                   negative_count: scanResult.negative.length,
-                  keywords: editableKeywords,
+                  keywords: ctx.editableKeywords,
                   lead_id: currentLeadId ?? undefined,
                   links: scanResult.links,
-                  useKeywords,
-                  scanFocus: scanFocus !== "all" ? scanFocus : undefined,
-                  countries,
-                  keywordsCap,
-                  pagesCap,
+                  useKeywords: ctx.useKeywords,
+                  scanFocus: ctx.scanFocus !== "all" ? ctx.scanFocus : undefined,
+                  countries: ctx.countries,
+                  keywordsCap: ctx.keywordsCap,
+                  pagesCap: ctx.pagesCap,
                 },
               });
             } catch { /* non-fatal */ }
@@ -752,18 +758,38 @@ function EaluminatePageInner() {
     pollIntervalRef.current = setInterval(checkJob, 5000);
   };
 
+  // Keep persistContextRef in sync with latest state so checkJob always reads fresh values
+  useEffect(() => {
+    persistContextRef.current = {
+      leadId, clientId,
+      fullName: `${firstName.trim()} ${lastName.trim()}`.trim(),
+      company, country: countries[0] ?? "", description, preAnalysisSummary,
+      editableKeywords, useKeywords, scanFocus, countries, keywordsCap, pagesCap,
+    };
+  }, [leadId, clientId, firstName, lastName, company, countries, description,
+      preAnalysisSummary, editableKeywords, useKeywords, scanFocus, keywordsCap, pagesCap]);
+
   // Resume an in-progress job if one was saved before navigating away
   useEffect(() => {
-    const savedJobId = localStorage.getItem(JOB_STORAGE_KEY);
-    if (savedJobId) {
-      setIsResuming(true);
-      setLoading(true);
-      startCycles();
-      startPolling(savedJobId);
+    const cleanup = () => { if (pollIntervalRef.current) clearInterval(pollIntervalRef.current); };
+    const raw = localStorage.getItem(JOB_STORAGE_KEY);
+    if (!raw) return cleanup;
+
+    let stored: { job_id: string; leadId: string | null } | null = null;
+    try { stored = JSON.parse(raw); } catch { localStorage.removeItem(JOB_STORAGE_KEY); return cleanup; }
+    if (!stored) return cleanup;
+
+    const currentLeadParam = new URLSearchParams(window.location.search).get("lead");
+    if (stored.leadId !== currentLeadParam) {
+      localStorage.removeItem(JOB_STORAGE_KEY); // stale job from a different client
+      return cleanup;
     }
-    return () => {
-      if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
-    };
+
+    setIsResuming(true);
+    setLoading(true);
+    startCycles();
+    startPolling(stored.job_id);
+    return cleanup;
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -1313,7 +1339,7 @@ function EaluminatePageInner() {
         stopCycles();
         return;
       }
-      localStorage.setItem(JOB_STORAGE_KEY, data.job_id);
+      localStorage.setItem(JOB_STORAGE_KEY, JSON.stringify({ job_id: data.job_id, leadId: leadId || null }));
       startPolling(data.job_id);
       // loading state stays active — startPolling clears it when done
     } catch {
