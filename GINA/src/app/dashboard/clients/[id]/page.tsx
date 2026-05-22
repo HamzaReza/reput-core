@@ -5,6 +5,7 @@ import {
   ClientDetail,
   ClientEventType,
   clientsApi,
+  getToken,
   isAdmin,
   WebAnalystItem,
   webAnalysts,
@@ -1020,17 +1021,75 @@ export default function ClientDetailPage() {
         .catch(() => {});
   }, [adminView]);
 
+  const jobPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
   useEffect(() => {
     const EALUMINATE_JOB_KEY = "ealuminate_job_id";
     const raw = localStorage.getItem(EALUMINATE_JOB_KEY);
     if (!raw) return;
-    try {
-      const stored = JSON.parse(raw) as { job_id: string; leadId: string | null };
-      if (stored.leadId) setActiveJobLeadId(stored.leadId);
-    } catch {
-      // malformed, ignore
-    }
-  }, []);
+
+    let stored: { job_id: string; leadId: string | null; clientId?: string | null } | null = null;
+    try { stored = JSON.parse(raw); } catch { localStorage.removeItem(EALUMINATE_JOB_KEY); return; }
+    if (!stored?.leadId) return;
+
+    if (stored.clientId && stored.clientId !== id) return;
+
+    setActiveJobLeadId(stored.leadId);
+
+    const { job_id, leadId: jobLeadId, clientId: jobClientId = null } = stored;
+    const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
+
+    const checkJob = async () => {
+      try {
+        const token = getToken();
+        const res = await fetch(`${apiBase}/generate-lead/${job_id}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok) return;
+        const pollData = await res.json() as {
+          status: string;
+          result?: Record<string, unknown>;
+          error?: string;
+        };
+
+        if (pollData.status === "done" || pollData.status === "failed") {
+          clearInterval(jobPollRef.current!);
+          jobPollRef.current = null;
+          localStorage.removeItem(EALUMINATE_JOB_KEY);
+
+          if (pollData.status === "done" && pollData.result && jobClientId) {
+            const r = pollData.result as {
+              links?: Array<Record<string, unknown>>;
+              negative?: Array<Record<string, unknown>>;
+              summary?: Record<string, unknown>;
+              score?: number;
+            };
+            try {
+              await clientsApi.addEvent(jobClientId, {
+                event_type: "scan",
+                event_data: {
+                  score: r.score,
+                  summary: r.summary ?? null,
+                  links_count: (r.links ?? []).length,
+                  negative_count: (r.negative ?? []).length,
+                  lead_id: jobLeadId ?? undefined,
+                  links: r.links ?? [],
+                },
+              });
+            } catch { /* non-fatal */ }
+          }
+
+          setActiveJobLeadId(null);
+          await reload();
+        }
+      } catch { /* non-fatal */ }
+    };
+
+    checkJob();
+    jobPollRef.current = setInterval(checkJob, 5000);
+
+    return () => { if (jobPollRef.current) clearInterval(jobPollRef.current); };
+  }, [id]);
 
   const handleReassign = async () => {
     setReassigning(true);
@@ -1684,51 +1743,30 @@ export default function ClientDetailPage() {
                             (e.data?.lead_id as string | undefined) ===
                             researchLeadId
                           );
-                        }) && (() => {
-                          const researchLeadId = data.lead_id as string | undefined;
-                          const isInProgress = researchLeadId && activeJobLeadId === researchLeadId;
-                          if (isInProgress) {
-                            return (
-                              <button
-                                type="button"
-                                onClick={() => router.push(`/dashboard/ealuminate?lead=${researchLeadId}`)}
-                                className="glow-button"
-                                style={{
-                                  marginTop: "0.625rem",
-                                  padding: "0.4rem 1rem",
-                                  fontWeight: 700,
-                                  borderRadius: "999px",
-                                  fontSize: "0.8125rem",
-                                  cursor: "pointer",
-                                  opacity: 0.85,
-                                }}
-                              >
-                                ⏳ Scan in progress — View
-                              </button>
-                            );
-                          }
-                          return (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                if (researchLeadId)
-                                  router.push(`/dashboard/ealuminate?lead=${researchLeadId}`);
-                                else router.push("/dashboard/ealuminate");
-                              }}
-                              className="glow-button"
-                              style={{
-                                marginTop: "0.625rem",
-                                padding: "0.4rem 1rem",
-                                fontWeight: 700,
-                                borderRadius: "999px",
-                                fontSize: "0.8125rem",
-                                cursor: "pointer",
-                              }}
-                            >
-                              Run Scan in Ealuminate
-                            </button>
-                          );
-                        })()}
+                        }) && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const leadId = data.lead_id as string | undefined;
+                              if (leadId)
+                                router.push(
+                                  `/dashboard/ealuminate?lead=${leadId}`,
+                                );
+                              else router.push("/dashboard/ealuminate");
+                            }}
+                            className="glow-button"
+                            style={{
+                              marginTop: "0.625rem",
+                              padding: "0.4rem 1rem",
+                              fontWeight: 700,
+                              borderRadius: "999px",
+                              fontSize: "0.8125rem",
+                              cursor: "pointer",
+                            }}
+                          >
+                            Run Scan in Ealuminate
+                          </button>
+                        )}
                       </>
                     )}
                     {event.event_type === "scan" && (
@@ -1751,6 +1789,38 @@ export default function ClientDetailPage() {
                 </div>
               );
             })}
+            {activeJobLeadId && (
+              <div style={{ display: "flex", gap: "1rem", position: "relative" }}>
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", flexShrink: 0 }}>
+                  <div style={{
+                    width: 12,
+                    height: 12,
+                    borderRadius: "50%",
+                    backgroundColor: "#f59e0b",
+                    border: "2px solid #fff",
+                    boxShadow: "0 0 0 2px #f59e0b40",
+                    flexShrink: 0,
+                    marginTop: "0.15rem",
+                  }} />
+                </div>
+                <div style={{ flex: 1, paddingBottom: 0 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.375rem" }}>
+                    <span style={{ fontSize: "0.875rem", fontWeight: 700, color: "#d97706" }}>
+                      Scan in Progress
+                    </span>
+                    <span style={{ fontSize: "0.75rem", color: "#94a3b8" }}>Just now</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => router.push(`/dashboard/ealuminate?lead=${activeJobLeadId}`)}
+                    className="glow-button"
+                    style={{ padding: "0.4rem 1rem", fontWeight: 700, borderRadius: "999px", fontSize: "0.8125rem", cursor: "pointer", opacity: 0.85 }}
+                  >
+                    ⏳ View in Ealuminate
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
