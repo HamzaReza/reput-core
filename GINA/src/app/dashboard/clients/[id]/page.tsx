@@ -991,6 +991,7 @@ export default function ClientDetailPage() {
   const [client, setClient] = useState<ClientDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [activeJobLeadId, setActiveJobLeadId] = useState<string | null>(null);
 
   const adminView = isAdmin();
   const [analystsList, setAnalystsList] = useState<WebAnalystItem[]>([]);
@@ -1018,6 +1019,18 @@ export default function ClientDetailPage() {
         .then(setAnalystsList)
         .catch(() => {});
   }, [adminView]);
+
+  useEffect(() => {
+    const EALUMINATE_JOB_KEY = "ealuminate_job_id";
+    const raw = localStorage.getItem(EALUMINATE_JOB_KEY);
+    if (!raw) return;
+    try {
+      const stored = JSON.parse(raw) as { job_id: string; leadId: string | null };
+      if (stored.leadId) setActiveJobLeadId(stored.leadId);
+    } catch {
+      // malformed, ignore
+    }
+  }, []);
 
   const handleReassign = async () => {
     setReassigning(true);
@@ -1671,30 +1684,51 @@ export default function ClientDetailPage() {
                             (e.data?.lead_id as string | undefined) ===
                             researchLeadId
                           );
-                        }) && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const leadId = data.lead_id as string | undefined;
-                              if (leadId)
-                                router.push(
-                                  `/dashboard/ealuminate?lead=${leadId}`,
-                                );
-                              else router.push("/dashboard/ealuminate");
-                            }}
-                            className="glow-button"
-                            style={{
-                              marginTop: "0.625rem",
-                              padding: "0.4rem 1rem",
-                              fontWeight: 700,
-                              borderRadius: "999px",
-                              fontSize: "0.8125rem",
-                              cursor: "pointer",
-                            }}
-                          >
-                            Run Scan in Ealuminate
-                          </button>
-                        )}
+                        }) && (() => {
+                          const researchLeadId = data.lead_id as string | undefined;
+                          const isInProgress = researchLeadId && activeJobLeadId === researchLeadId;
+                          if (isInProgress) {
+                            return (
+                              <button
+                                type="button"
+                                onClick={() => router.push(`/dashboard/ealuminate?lead=${researchLeadId}`)}
+                                className="glow-button"
+                                style={{
+                                  marginTop: "0.625rem",
+                                  padding: "0.4rem 1rem",
+                                  fontWeight: 700,
+                                  borderRadius: "999px",
+                                  fontSize: "0.8125rem",
+                                  cursor: "pointer",
+                                  opacity: 0.85,
+                                }}
+                              >
+                                ⏳ Scan in progress — View
+                              </button>
+                            );
+                          }
+                          return (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (researchLeadId)
+                                  router.push(`/dashboard/ealuminate?lead=${researchLeadId}`);
+                                else router.push("/dashboard/ealuminate");
+                              }}
+                              className="glow-button"
+                              style={{
+                                marginTop: "0.625rem",
+                                padding: "0.4rem 1rem",
+                                fontWeight: 700,
+                                borderRadius: "999px",
+                                fontSize: "0.8125rem",
+                                cursor: "pointer",
+                              }}
+                            >
+                              Run Scan in Ealuminate
+                            </button>
+                          );
+                        })()}
                       </>
                     )}
                     {event.event_type === "scan" && (
