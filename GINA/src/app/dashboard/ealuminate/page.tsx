@@ -17,6 +17,24 @@ import type {
   ScanResult,
 } from "./_components/types";
 import { exportReportMasterPdf, exportSummaryPdf } from "./_utils/pdfExports";
+import ExportFieldsModal from "./_components/ExportFieldsModal";
+
+const RESEARCH_SUMMARY_FIELDS = [
+  { key: "identity",          label: "Identity",          color: "#4479DA" },
+  { key: "background",        label: "Background",        color: "#6366f1" },
+  { key: "associations",      label: "Associations",      color: "#f59e0b" },
+  { key: "recent_news",       label: "Recent News",       color: "#48D4B8" },
+  { key: "negative_findings", label: "Negative Findings", color: "#ef4444" },
+  { key: "positive_presence", label: "Positive Presence", color: "#4CAF50" },
+  { key: "reputation_notes",  label: "Reputation Notes",  color: "#94a3b8" },
+];
+
+const BRIEF_FIELDS = [
+  { key: "key_points",         label: "Key Points",         color: "#4479DA" },
+  { key: "meeting_angles",     label: "Meeting Angles",     color: "#6366f1" },
+  { key: "risk_indicators",    label: "Risk Indicators",    color: "#ef4444" },
+  { key: "objection_handlers", label: "Objection Handlers", color: "#48D4B8" },
+];
 
 declare global {
   interface Window {
@@ -715,25 +733,30 @@ function EaluminatePageInner() {
             } catch { /* non-fatal */ }
           }
           if (ctx.clientId) {
-            try {
-              await clientsApi.addEvent(ctx.clientId, {
-                event_type: "scan",
-                event_data: {
-                  score: finalScore,
-                  summary: scanResult.summary ?? null,
-                  links_count: scanResult.links.length,
-                  negative_count: scanResult.negative.length,
-                  keywords: ctx.editableKeywords,
-                  lead_id: currentLeadId ?? undefined,
-                  links: scanResult.links,
-                  useKeywords: ctx.useKeywords,
-                  scanFocus: ctx.scanFocus !== "all" ? ctx.scanFocus : undefined,
-                  countries: ctx.countries,
-                  keywordsCap: ctx.keywordsCap,
-                  pagesCap: ctx.pagesCap,
-                },
-              });
-            } catch { /* non-fatal */ }
+            const writtenKey = `ealuminate_scan_written_${job_id}`;
+            if (!localStorage.getItem(writtenKey)) {
+              localStorage.setItem(writtenKey, "1");
+              setTimeout(() => localStorage.removeItem(writtenKey), 30000);
+              try {
+                await clientsApi.addEvent(ctx.clientId, {
+                  event_type: "scan",
+                  event_data: {
+                    score: finalScore,
+                    summary: scanResult.summary ?? null,
+                    links_count: scanResult.links.length,
+                    negative_count: scanResult.negative.length,
+                    keywords: ctx.editableKeywords,
+                    lead_id: currentLeadId ?? undefined,
+                    links: scanResult.links,
+                    useKeywords: ctx.useKeywords,
+                    scanFocus: ctx.scanFocus !== "all" ? ctx.scanFocus : undefined,
+                    countries: ctx.countries,
+                    keywordsCap: ctx.keywordsCap,
+                    pagesCap: ctx.pagesCap,
+                  },
+                });
+              } catch { /* non-fatal */ }
+            }
           }
         } else if (pollData.status === "failed") {
           clearInterval(pollIntervalRef.current!);
@@ -786,6 +809,8 @@ function EaluminatePageInner() {
       pagesCap?: number;
       scanFocus?: string;
       keywords?: string[];
+      keywordsReady?: boolean;
+      preAnalysisDone?: boolean;
     } | null = null;
     try { stored = JSON.parse(raw); } catch { localStorage.removeItem(JOB_STORAGE_KEY); return cleanup; }
     if (!stored) return cleanup;
@@ -803,6 +828,8 @@ function EaluminatePageInner() {
     if (stored.pagesCap !== undefined) setPagesCap(stored.pagesCap);
     if (stored.scanFocus !== undefined) setScanFocus(stored.scanFocus as KeywordFocus);
     if (stored.keywords?.length) setEditableKeywords(stored.keywords);
+    if (stored.keywordsReady) setKeywordsReady(true);
+    if (stored.preAnalysisDone) setPreAnalysisDone(true);
 
     setIsResuming(true);
     setLoading(true);
@@ -974,6 +1001,7 @@ function EaluminatePageInner() {
             const researchEvent = clientDetail.events
               .filter((e) => e.event_type === "research")
               .find((e) => (e.data?.lead_id as string | undefined) === lead.id);
+            const hasActiveJob = !!localStorage.getItem(JOB_STORAGE_KEY);
             if (researchEvent?.data) {
               const d = researchEvent.data;
               if (d.subjectType === "individual" || d.subjectType === "company")
@@ -986,7 +1014,7 @@ function EaluminatePageInner() {
                 )
               )
                 setKeywordFocus(d.keywordFocus as KeywordFocus);
-              if (typeof d.pagesCap === "number") setPagesCap(d.pagesCap);
+              if (!hasActiveJob && typeof d.pagesCap === "number") setPagesCap(d.pagesCap);
               if (
                 ["en", "it", "es"].includes(d.reportLanguage as string)
               )
@@ -1014,9 +1042,10 @@ function EaluminatePageInner() {
                 | MeetingSummary
                 | undefined;
             }
-            if (typeof scanEvent?.data?.useKeywords === "boolean")
+            if (!hasActiveJob && typeof scanEvent?.data?.useKeywords === "boolean")
               setUseKeywords(scanEvent.data.useKeywords as boolean);
             if (
+              !hasActiveJob &&
               ["all", "negative", "positive", "neutral"].includes(
                 scanEvent?.data?.scanFocus as string,
               )
@@ -1024,7 +1053,7 @@ function EaluminatePageInner() {
               setScanFocus(scanEvent?.data?.scanFocus as KeywordFocus);
             if (typeof scanEvent?.data?.keywordsCap === "number")
               setKeywordsCap(scanEvent.data.keywordsCap as number);
-            if (typeof scanEvent?.data?.pagesCap === "number")
+            if (!hasActiveJob && typeof scanEvent?.data?.pagesCap === "number")
               setPagesCap(scanEvent.data.pagesCap as number);
           }
         } catch {
@@ -1087,27 +1116,20 @@ function EaluminatePageInner() {
 
   const country = countries[0] ?? "";
 
-  const handleExportSummaryPdf = () => {
-    exportSummaryPdf({
-      fullName,
-      company,
-      country,
-      webAnalystName,
-      score,
-      result,
-    });
+  const [exportSummaryModalOpen, setExportSummaryModalOpen] = useState(false);
+  const [exportReportModalOpen, setExportReportModalOpen] = useState(false);
+
+  const handleExportSummaryPdf = () => setExportSummaryModalOpen(true);
+  const handleExportReportMaster = () => setExportReportModalOpen(true);
+
+  const handleConfirmSummaryExport = (selectedFields: string[]) => {
+    setExportSummaryModalOpen(false);
+    exportSummaryPdf({ fullName, company, country, webAnalystName, score, result, selectedFields });
   };
 
-  const handleExportReportMaster = () => {
-    exportReportMasterPdf({
-      fullName,
-      company,
-      country,
-      webAnalystName,
-      preAnalysisProfile,
-      preAnalysisSummary,
-      editableKeywords,
-    });
+  const handleConfirmReportExport = (selectedFields: string[]) => {
+    setExportReportModalOpen(false);
+    exportReportMasterPdf({ fullName, company, country, webAnalystName, preAnalysisProfile, preAnalysisSummary, editableKeywords, selectedFields });
   };
 
   const handleDescriptionChange = (val: string) => {
@@ -1366,6 +1388,8 @@ function EaluminatePageInner() {
         pagesCap,
         scanFocus: scanFocus !== "all" ? scanFocus : undefined,
         keywords: editableKeywords,
+        keywordsReady: true,
+        preAnalysisDone: true,
       }));
       startPolling(data.job_id);
       // loading state stays active — startPolling clears it when done
@@ -1526,6 +1550,22 @@ function EaluminatePageInner() {
           isResuming={isResuming}
         />
       </div>
+      {exportSummaryModalOpen && (
+        <ExportFieldsModal
+          title="Export Internal Brief"
+          fields={BRIEF_FIELDS}
+          onConfirm={handleConfirmSummaryExport}
+          onClose={() => setExportSummaryModalOpen(false)}
+        />
+      )}
+      {exportReportModalOpen && (
+        <ExportFieldsModal
+          title="Export Research Summary"
+          fields={RESEARCH_SUMMARY_FIELDS}
+          onConfirm={handleConfirmReportExport}
+          onClose={() => setExportReportModalOpen(false)}
+        />
+      )}
     </div>
   );
 }

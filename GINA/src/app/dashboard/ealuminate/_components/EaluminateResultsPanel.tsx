@@ -521,7 +521,12 @@ export function EaluminateResultsPanel({
                 gap: "0.75rem",
               }}
             >
-              {allLinks.map((item, i) => {
+              {[...allLinks].sort((a, b) => {
+                if (!a.date && !b.date) return 0;
+                if (!a.date) return 1;
+                if (!b.date) return -1;
+                return new Date(b.date).getTime() - new Date(a.date).getTime();
+              }).map((item, i) => {
                 const uiRisk = apiRiskToUi(item.risk);
                 const risk = riskColors[uiRisk];
                 const domain = (() => {
