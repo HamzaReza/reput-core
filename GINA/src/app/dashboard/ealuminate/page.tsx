@@ -733,25 +733,30 @@ function EaluminatePageInner() {
             } catch { /* non-fatal */ }
           }
           if (ctx.clientId) {
-            try {
-              await clientsApi.addEvent(ctx.clientId, {
-                event_type: "scan",
-                event_data: {
-                  score: finalScore,
-                  summary: scanResult.summary ?? null,
-                  links_count: scanResult.links.length,
-                  negative_count: scanResult.negative.length,
-                  keywords: ctx.editableKeywords,
-                  lead_id: currentLeadId ?? undefined,
-                  links: scanResult.links,
-                  useKeywords: ctx.useKeywords,
-                  scanFocus: ctx.scanFocus !== "all" ? ctx.scanFocus : undefined,
-                  countries: ctx.countries,
-                  keywordsCap: ctx.keywordsCap,
-                  pagesCap: ctx.pagesCap,
-                },
-              });
-            } catch { /* non-fatal */ }
+            const writtenKey = `ealuminate_scan_written_${job_id}`;
+            if (!localStorage.getItem(writtenKey)) {
+              localStorage.setItem(writtenKey, "1");
+              setTimeout(() => localStorage.removeItem(writtenKey), 30000);
+              try {
+                await clientsApi.addEvent(ctx.clientId, {
+                  event_type: "scan",
+                  event_data: {
+                    score: finalScore,
+                    summary: scanResult.summary ?? null,
+                    links_count: scanResult.links.length,
+                    negative_count: scanResult.negative.length,
+                    keywords: ctx.editableKeywords,
+                    lead_id: currentLeadId ?? undefined,
+                    links: scanResult.links,
+                    useKeywords: ctx.useKeywords,
+                    scanFocus: ctx.scanFocus !== "all" ? ctx.scanFocus : undefined,
+                    countries: ctx.countries,
+                    keywordsCap: ctx.keywordsCap,
+                    pagesCap: ctx.pagesCap,
+                  },
+                });
+              } catch { /* non-fatal */ }
+            }
           }
         } else if (pollData.status === "failed") {
           clearInterval(pollIntervalRef.current!);
@@ -804,6 +809,8 @@ function EaluminatePageInner() {
       pagesCap?: number;
       scanFocus?: string;
       keywords?: string[];
+      keywordsReady?: boolean;
+      preAnalysisDone?: boolean;
     } | null = null;
     try { stored = JSON.parse(raw); } catch { localStorage.removeItem(JOB_STORAGE_KEY); return cleanup; }
     if (!stored) return cleanup;
@@ -821,6 +828,8 @@ function EaluminatePageInner() {
     if (stored.pagesCap !== undefined) setPagesCap(stored.pagesCap);
     if (stored.scanFocus !== undefined) setScanFocus(stored.scanFocus as KeywordFocus);
     if (stored.keywords?.length) setEditableKeywords(stored.keywords);
+    if (stored.keywordsReady) setKeywordsReady(true);
+    if (stored.preAnalysisDone) setPreAnalysisDone(true);
 
     setIsResuming(true);
     setLoading(true);
@@ -992,6 +1001,7 @@ function EaluminatePageInner() {
             const researchEvent = clientDetail.events
               .filter((e) => e.event_type === "research")
               .find((e) => (e.data?.lead_id as string | undefined) === lead.id);
+            const hasActiveJob = !!localStorage.getItem(JOB_STORAGE_KEY);
             if (researchEvent?.data) {
               const d = researchEvent.data;
               if (d.subjectType === "individual" || d.subjectType === "company")
@@ -1004,7 +1014,7 @@ function EaluminatePageInner() {
                 )
               )
                 setKeywordFocus(d.keywordFocus as KeywordFocus);
-              if (typeof d.pagesCap === "number") setPagesCap(d.pagesCap);
+              if (!hasActiveJob && typeof d.pagesCap === "number") setPagesCap(d.pagesCap);
               if (
                 ["en", "it", "es"].includes(d.reportLanguage as string)
               )
@@ -1032,9 +1042,10 @@ function EaluminatePageInner() {
                 | MeetingSummary
                 | undefined;
             }
-            if (typeof scanEvent?.data?.useKeywords === "boolean")
+            if (!hasActiveJob && typeof scanEvent?.data?.useKeywords === "boolean")
               setUseKeywords(scanEvent.data.useKeywords as boolean);
             if (
+              !hasActiveJob &&
               ["all", "negative", "positive", "neutral"].includes(
                 scanEvent?.data?.scanFocus as string,
               )
@@ -1042,7 +1053,7 @@ function EaluminatePageInner() {
               setScanFocus(scanEvent?.data?.scanFocus as KeywordFocus);
             if (typeof scanEvent?.data?.keywordsCap === "number")
               setKeywordsCap(scanEvent.data.keywordsCap as number);
-            if (typeof scanEvent?.data?.pagesCap === "number")
+            if (!hasActiveJob && typeof scanEvent?.data?.pagesCap === "number")
               setPagesCap(scanEvent.data.pagesCap as number);
           }
         } catch {
@@ -1377,6 +1388,8 @@ function EaluminatePageInner() {
         pagesCap,
         scanFocus: scanFocus !== "all" ? scanFocus : undefined,
         keywords: editableKeywords,
+        keywordsReady: true,
+        preAnalysisDone: true,
       }));
       startPolling(data.job_id);
       // loading state stays active — startPolling clears it when done

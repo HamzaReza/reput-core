@@ -129,6 +129,12 @@ def _parse_serper_date(date_str: str) -> float:
         return datetime.fromisoformat(date_str).timestamp()
     except ValueError:
         pass
+    # "Dec 7, 2023" or "December 7, 2023" — Serper's actual format
+    for fmt in ("%b %d, %Y", "%B %d, %Y"):
+        try:
+            return datetime.strptime(date_str.strip(), fmt).timestamp()
+        except ValueError:
+            pass
     m = re.match(r"^(\d{1,2})\s+([a-záàâäéèêëíìîïóòôöúùûüñç]+)\.?\s+(\d{4})$", date_str.strip(), re.IGNORECASE)
     if m:
         month = MONTH_MAP.get(m.group(2).lower())
