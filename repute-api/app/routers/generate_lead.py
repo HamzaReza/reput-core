@@ -424,7 +424,7 @@ async def _generate_meeting_summary(
 
         response = await client.messages.create(
             model="claude-sonnet-4-6",
-            max_tokens=8192,
+            max_tokens=16000,
             system=(
                 "You are an AI assistant embedded in a professional reputation intelligence platform used by "
                 "reputation management firms. Your task is to analyze publicly available web search results "
