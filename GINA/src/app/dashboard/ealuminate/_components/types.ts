@@ -8,6 +8,15 @@ export interface PreAnalysisProfile {
   negative_findings: string;
   positive_presence: string;
   reputation_notes: string;
+  estimated_negative_links?: {
+    low: number;
+    high: number;
+    reasoning: string;
+    coverage_assessment?: "minimal" | "moderate" | "substantial" | "extensive";
+    confidence?: "low" | "medium" | "high";
+    distinct_negative_sources_seen?: number;
+    saturation?: "saturated" | "unsaturated" | "unknown";
+  };
 }
 
 export interface MeetingSummary {

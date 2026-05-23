@@ -83,9 +83,17 @@ const PROFILE_FIELD_COLORS: Record<string, string> = {
   Associations: "#f59e0b",
   "Recent News": "#48D4B8",
   "Negative Findings": "#ef4444",
+  "Estimated Negative Links": "#FF6B4A",
   "Positive Presence": "#4CAF50",
   "Reputation Notes": "#94a3b8",
 };
+
+function formatEstimatedNegativeLinks(
+  estimate: NonNullable<PreAnalysisProfile["estimated_negative_links"]>,
+): string {
+  const { low, high, reasoning } = estimate;
+  return `Estimated ${low}–${high} links across the web. ${reasoning}`;
+}
 
 function ProfileCollapse({
   label,
@@ -689,19 +697,10 @@ export function EaluminateFormPanel(props: EaluminateFormPanelProps) {
                 backgroundColor: "rgba(245,158,11,0.1)",
                 border: "1px solid rgba(245,158,11,0.35)",
                 display: "flex",
-                alignItems: "flex-start",
+                justifyContent: "center",
                 gap: "0.5rem",
               }}
             >
-              <span
-                style={{
-                  fontSize: "0.875rem",
-                  flexShrink: 0,
-                  marginTop: "0.05rem",
-                }}
-              >
-                ⚠️
-              </span>
               <p
                 style={{
                   margin: 0,
@@ -854,6 +853,14 @@ export function EaluminateFormPanel(props: EaluminateFormPanelProps) {
                         "Negative Findings",
                         preAnalysisProfile.negative_findings,
                       ],
+                      preAnalysisProfile.estimated_negative_links
+                        ? [
+                            "Estimated Negative Links",
+                            formatEstimatedNegativeLinks(
+                              preAnalysisProfile.estimated_negative_links,
+                            ),
+                          ]
+                        : null,
                       [
                         "Positive Presence",
                         preAnalysisProfile.positive_presence,
@@ -1083,19 +1090,10 @@ export function EaluminateFormPanel(props: EaluminateFormPanelProps) {
                     backgroundColor: "rgba(68,121,218,0.08)",
                     border: "1px solid rgba(68,121,218,0.25)",
                     display: "flex",
-                    alignItems: "flex-start",
+                    justifyContent: "center",
                     gap: "0.5rem",
                   }}
                 >
-                  <span
-                    style={{
-                      fontSize: "0.875rem",
-                      flexShrink: 0,
-                      marginTop: "0.05rem",
-                    }}
-                  >
-                    💡
-                  </span>
                   <p
                     style={{
                       margin: 0,
