@@ -141,6 +141,7 @@ interface PreAnalysisProfile {
   negative_findings: string;
   positive_presence: string;
   reputation_notes: string;
+  estimated_negative_links?: { low: number; high: number; reasoning: string };
 }
 
 const FALLBACK_PROFILE: PreAnalysisProfile = {
@@ -309,12 +310,12 @@ export async function POST(req: NextRequest) {
       // Call 2: format prose → structured JSON (no tools)
       const formatMsg = await anthropic.messages.create({
         model: "claude-sonnet-4-6",
-        max_tokens: 2048,
+        max_tokens: 3000,
         system: `You are a data formatter. Convert the research summary into the specified JSON shape. Write ALL field values and ALL keywords in ${languageName}. Output ONLY valid JSON — no markdown fences, no explanation, no extra keys.`,
         messages: [
           {
             role: "user",
-            content: `Research summary about ${subjectLabel}:\n${researchSummary}\n\nReturn ONLY this JSON (no explanation, no markdown):\n{\n  "profile": {\n    "identity": "${formatIdentityHint}",\n    "background": "${formatBackgroundHint}",\n    "associations": "${formatAssociationsHint}",\n    "recent_news": "<3-6 sentences: latest news, articles, announcements, incidents, or developments from the past 12 months — include dates where available; if none found write 'No recent news found in available sources'>",\n    "negative_findings": "<4-8 sentences: legal proceedings, regulatory sanctions, fraud allegations, controversies, scandals, complaints — include dates and specifics where available; if none write 'No negative findings in available sources'>",\n    "positive_presence": "<3-6 sentences: awards, recognitions, successful ventures, positive media coverage, industry leadership, philanthropic activities>",\n    "reputation_notes": "<2-4 sentences: overall reputational standing, key risk indicators, public perception summary, recommended scrutiny level>"\n  },\n  "keywords": ["<keyword1>", ...]\n}\nRules: every field fully populated with detail, based only on the summary above, ${keywordFocusRule}`,
+            content: `Research summary about ${subjectLabel}:\n${researchSummary}\n\nReturn ONLY this JSON (no explanation, no markdown):\n{\n  "profile": {\n    "identity": "${formatIdentityHint}",\n    "background": "${formatBackgroundHint}",\n    "associations": "${formatAssociationsHint}",\n    "recent_news": "<3-6 sentences: latest news, articles, announcements, incidents, or developments from the past 12 months — include dates where available; if none found write 'No recent news found in available sources'>",\n    "negative_findings": "<4-8 sentences: legal proceedings, regulatory sanctions, fraud allegations, controversies, scandals, complaints — include dates and specifics where available; if none write 'No negative findings in available sources'>",\n    "positive_presence": "<3-6 sentences: awards, recognitions, successful ventures, positive media coverage, industry leadership, philanthropic activities>",\n    "reputation_notes": "<2-4 sentences: overall reputational standing, key risk indicators, public perception summary, recommended scrutiny level>"\n  },\n  "keywords": ["<keyword1>", ...]\n}\nRules: every field fully populated with detail, based only on the summary above, ${keywordFocusRule}.`,
           },
         ],
       });

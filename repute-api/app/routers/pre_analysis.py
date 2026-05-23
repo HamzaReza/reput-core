@@ -61,6 +61,29 @@ FALLBACK_PROFILE = {
     "reputation_notes": "Insufficient data to assess reputation.",
 }
 
+def _build_estimate(neg: dict | None) -> dict:
+    """Normalise the negative-estimation call's output into the response shape.
+    Falls back to moderate (101–500) if the call failed or domain count is unavailable."""
+    neg = neg or {}
+    assessment = neg.get("coverage_assessment", "moderate")
+    domains = neg.get("distinct_negative_sources_seen") or 0
+    if domains > 0:
+        # Each observed domain realistically holds 4–10 negative pages in its full archive.
+        low = domains * 4
+        high = domains * 10
+    else:
+        low, high = 101, 500
+
+    return {
+        "coverage_assessment": assessment,
+        "confidence": neg.get("confidence", "low"),
+        "distinct_negative_sources_seen": domains,
+        "saturation": neg.get("saturation", "unknown"),
+        "low": low,
+        "high": high,
+        "reasoning": neg.get("reasoning", "Estimate based on typical adverse coverage patterns."),
+    }
+
 
 def _country_code(country: str) -> str | None:
     k = country.lower().strip()
@@ -123,11 +146,12 @@ async def pre_analysis(
     keyword_focus_rules = {
         "negative": f"keywords: up to {cap} items (minimum 1) — ADVERSE terms only: legal disputes, fraud, misconduct, scandal, complaints, litigation. {no_name_instruction} All keywords in {language_name}.",
         "positive": f"keywords: up to {cap} items (minimum 1) — POSITIVE terms only: achievements, awards, leadership, philanthropy, recognition. {no_name_instruction} All keywords in {language_name}.",
-        "neutral": f"keywords: up to {cap} items (minimum 1) — NEUTRAL factual terms only: role, organisation, sector, projects. {no_name_instruction} All keywords in {language_name}.",
-        "all": f"keywords: up to {cap} items (minimum 1), 1-2 words each, balanced mix across positive, negative and neutral reputation angles. {no_name_instruction} All keywords in {language_name}.",
+        "neutral":  f"keywords: up to {cap} items (minimum 1) — NEUTRAL factual terms only: role, organisation, sector, projects. {no_name_instruction} All keywords in {language_name}.",
+        "all":      f"keywords: up to {cap} items (minimum 1), 1-2 words each, balanced mix across positive, negative and neutral reputation angles. {no_name_instruction} All keywords in {language_name}.",
     }
     keyword_focus_rule = keyword_focus_rules.get(body.keywordFocus, keyword_focus_rules["all"])
 
+    # ── Search call (main research summary) ──────────────────────────────────
     if body.subjectType == "company":
         search_system = (
             f"You are a senior investigative research analyst with web search access. Search thoroughly for public information about the company described. "
@@ -166,19 +190,81 @@ async def pre_analysis(
         format_background_hint = "<5-7 sentences: career arc from early career to present, key employers, roles held, major projects or deals, educational background if known, industry standing>"
         format_associations_hint = "<3-5 sentences: known business partners, employers, investors, political or professional affiliations, notable co-founders or collaborators, family business connections>"
 
+    # ── Negative estimation call (dedicated adverse search) ───────────────────
+    subject_prefix = (
+        f"Company: {body.company}" if body.subjectType == "company"
+        else f"Name: {full_name}"
+    )
+    adverse_context = body.description.strip()
+
+    neg_system = (
+        "You are a negative coverage analyst. Your sole task is to find adverse, negative, or critical "
+        "content about the subject using web search. "
+        "Run 8-10 searches using different combinations of: the subject's name/identifier, "
+        "the adverse context terms provided, country names, and relevant adverse keywords such as "
+        "fraud, lawsuit, investigation, sanction, scandal, allegations, war crimes, corruption, "
+        "criminal, indictment, controversy. "
+        "Use the adverse context as your primary guide for which angles to search — "
+        "those are the terms the client has flagged as relevant. "
+        "After completing all searches, output ONLY a single JSON object — no explanation, no prose, no markdown fences:\n"
+        '{"coverage_assessment": "minimal|low|moderate|substantial|extensive", '
+        '"confidence": "low|medium|high", '
+        '"distinct_negative_sources_seen": <integer: count of distinct domains/URLs carrying negative material you actually observed across all searches>, '
+        '"saturation": "saturated|unsaturated", '
+        '"reasoning": "<2-3 sentences: which angles you searched, how many distinct negative sources appeared, '
+        'and whether new sources kept appearing in later queries (unsaturated) or results kept repeating (saturated)>"}\n'
+        "\nDefinitions to apply consistently:\n"
+        "coverage_assessment — "
+        "minimal: 0–50 negative sources, very little adverse material found; "
+        "low: 50–100 sources, limited adverse coverage across a handful of outlets; "
+        "moderate: 101–500 sources, clear adverse coverage across multiple outlets; "
+        "substantial: 501–1000 sources, recurring adverse coverage across many distinct sources; "
+        "extensive: more than 1000 sources, pervasive adverse coverage still surfacing new sources in later queries.\n"
+        "saturation — saturated: later queries returned mostly sources already seen; "
+        "unsaturated: each new query kept surfacing fresh distinct negative sources.\n"
+        "confidence — how much the search results actually support the assessment: "
+        "low if few searches returned results or the topic is obscure; "
+        "medium if coverage is clear but incomplete; high if results were consistently dense and varied."
+    )
+    neg_content = (
+        f"Find all negative coverage about this subject:\n\n"
+        f"{subject_prefix}\n"
+        f"Countries: {countries_label}\n"
+        f"Adverse context: {adverse_context if adverse_context else 'None provided — search broadly for any negative material.'}"
+    )
+
+    # ── Parallel execution: research summary + negative estimation ────────────
     client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
     profile = dict(FALLBACK_PROFILE)
     keywords: list[str] = []
+    neg_links: dict | None = None
 
     try:
-        print(f"[pre-analysis] starting search for: {subject_label!r} | countries={countries}")
-        search_msg = await client.messages.create(
-            model="claude-sonnet-4-6",
-            max_tokens=16000,
-            system=search_system,
-            tools=[{"type": "web_search_20260209", "name": "web_search"}],  # type: ignore[list-item]
-            messages=[{"role": "user", "content": search_content}],
+        print(f"[pre-analysis] starting parallel calls for: {subject_label!r} | countries={countries}")
+
+        search_result, neg_result = await asyncio.gather(
+            client.messages.create(
+                model="claude-sonnet-4-6",
+                max_tokens=16000,
+                system=search_system,
+                tools=[{"type": "web_search_20260209", "name": "web_search", "max_uses": 12}],  # type: ignore[list-item]
+                messages=[{"role": "user", "content": search_content}],
+            ),
+            client.messages.create(
+                model="claude-sonnet-4-6",
+                max_tokens=8096,
+                system=neg_system,
+                tools=[{"type": "web_search_20260209", "name": "web_search", "max_uses": 10}],  # type: ignore[list-item]
+                messages=[{"role": "user", "content": neg_content}],
+            ),
+            return_exceptions=True,
         )
+
+        # ── Handle search result ──────────────────────────────────────────────
+        if isinstance(search_result, Exception):
+            raise search_result
+
+        search_msg = search_result
         print(f"[pre-analysis] search done — stop_reason={search_msg.stop_reason!r} | blocks={[b.type for b in search_msg.content]}")
         for i, block in enumerate(search_msg.content):
             if block.type == "text":
@@ -191,14 +277,44 @@ async def pre_analysis(
         ).strip()
 
         if not research_summary:
-            print(f"[pre-analysis] EMPTY SUMMARY — returning fallback")
+            print("[pre-analysis] EMPTY SUMMARY — returning fallback")
+            profile["estimated_negative_links"] = _build_estimate(None)
             return {"profile": profile, "keywords": keywords}
 
+        # ── Handle negative estimation result ─────────────────────────────────
+        if isinstance(neg_result, Exception):
+            print(f"[pre-analysis] negative estimation failed (non-fatal): {neg_result}")
+        else:
+            neg_msg = neg_result
+            print(f"[pre-analysis] neg estimation done — stop_reason={neg_msg.stop_reason!r}")
+            neg_text = "\n".join(
+                block.text for block in neg_msg.content if block.type == "text"
+            ).strip()
+
+            if neg_text:
+                # Try direct parse first, then fall back to regex extraction
+                try:
+                    neg_links = json.loads(neg_text)
+                except json.JSONDecodeError:
+                    m = re.search(r"\{[\s\S]*\}", neg_text)
+                    if m:
+                        try:
+                            neg_links = json.loads(m.group())
+                        except Exception as inner_err:
+                            print(f"[pre-analysis] neg JSON parse failed: {inner_err}")
+            else:
+                print("[pre-analysis] negative estimation returned no text — using minimal fallback")
+
+        # ── Format call: profile + keywords only ──────────────────────────────
         print(f"[pre-analysis] research_summary length={len(research_summary)} chars — proceeding to format")
         format_msg = await client.messages.create(
             model="claude-sonnet-4-6",
-            max_tokens=8192,
-            system=f"You are a data formatter. Convert the research summary into the specified JSON shape. Write ALL field values and ALL keywords in {language_name}. Output ONLY valid JSON — no markdown fences, no explanation, no extra keys.",
+            max_tokens=16000,
+            system=(
+                f"You are a data formatter. Convert the research summary into the specified JSON shape. "
+                f"Write ALL field values and ALL keywords in {language_name}. "
+                f"Output ONLY valid JSON — no markdown fences, no explanation, no extra keys."
+            ),
             messages=[
                 {
                     "role": "user",
@@ -213,8 +329,9 @@ async def pre_analysis(
                         f'    "negative_findings": "<4-8 sentences: legal proceedings, regulatory sanctions, fraud allegations, controversies, scandals, complaints — include dates and specifics where available; if none write \'No negative findings in available sources\'>",\n'
                         f'    "positive_presence": "<3-6 sentences: awards, recognitions, successful ventures, positive media coverage, industry leadership, philanthropic activities>",\n'
                         f'    "reputation_notes": "<2-4 sentences: overall reputational standing, key risk indicators, public perception summary, recommended scrutiny level>"\n'
-                        f'  }},\n  "keywords": ["<keyword1>", ...]\n}}\n'
-                        f"Rules: every field fully populated with detail, based only on the summary above, {keyword_focus_rule}"
+                        f'  }},\n'
+                        f'  "keywords": ["<keyword1>", ...]\n}}\n'
+                        f"Rules: every field fully populated with detail, based only on the summary above, {keyword_focus_rule}."
                     ),
                 }
             ],
@@ -233,5 +350,9 @@ async def pre_analysis(
         import traceback
         print(f"[pre-analysis] EXCEPTION: {e}")
         print(traceback.format_exc())
+
+    # Inject the estimate on every return path — success, format failure, or exception.
+    if "estimated_negative_links" not in profile:
+        profile["estimated_negative_links"] = _build_estimate(neg_links)
 
     return {"profile": profile, "keywords": keywords}
