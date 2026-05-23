@@ -850,6 +850,10 @@ export function EaluminateFormPanel(props: EaluminateFormPanelProps) {
                         ? ["Recent News", preAnalysisProfile.recent_news]
                         : null,
                       [
+                        "Positive Presence",
+                        preAnalysisProfile.positive_presence,
+                      ],
+                      [
                         "Negative Findings",
                         preAnalysisProfile.negative_findings,
                       ],
@@ -861,10 +865,6 @@ export function EaluminateFormPanel(props: EaluminateFormPanelProps) {
                             ),
                           ]
                         : null,
-                      [
-                        "Positive Presence",
-                        preAnalysisProfile.positive_presence,
-                      ],
                       ["Reputation Notes", preAnalysisProfile.reputation_notes],
                     ].filter(Boolean) as [string, string][]
                   ).map(([label, text]) => (
