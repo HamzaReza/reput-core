@@ -101,6 +101,7 @@ class PreAnalysisRequest(BaseModel):
     keywordFocus: Literal["all", "negative", "positive", "neutral"] = "all"
     subjectType: Literal["individual", "company"] = "individual"
     reportLanguage: str | None = None
+    scanTier: Literal["standard", "advanced"] = "standard"
 
 
 @router.post("")
@@ -122,6 +123,9 @@ async def pre_analysis(
         raise HTTPException(status_code=400, detail="firstName and lastName are required for individual subjects.")
     if body.subjectType == "company" and not body.company:
         raise HTTPException(status_code=400, detail="company is required for company subjects.")
+
+    model = "claude-haiku-4-5-20251001" if body.scanTier == "standard" else "claude-sonnet-4-6"
+    web_search_tool = "web_search_20250305" if body.scanTier == "standard" else "web_search_20260209"
 
     country = countries[0]
     cap = min(8, max(3, body.keywordsCap or 5))
@@ -212,7 +216,8 @@ async def pre_analysis(
         '"distinct_negative_sources_seen": <integer: count of distinct domains/URLs carrying negative material you actually observed across all searches>, '
         '"saturation": "saturated|unsaturated", '
         '"reasoning": "<2-3 sentences: which angles you searched, how many distinct negative sources appeared, '
-        'and whether new sources kept appearing in later queries (unsaturated) or results kept repeating (saturated)>"}\n'
+        f'and whether new sources kept appearing in later queries (unsaturated) or results kept repeating (saturated)>"}}\n'
+        f"Write the reasoning field in {language_name}.\n"
         "\nDefinitions to apply consistently:\n"
         "coverage_assessment — "
         "minimal: 0–50 negative sources, very little adverse material found; "
@@ -244,17 +249,17 @@ async def pre_analysis(
 
         search_result, neg_result = await asyncio.gather(
             client.messages.create(
-                model="claude-sonnet-4-6",
+                model=model,
                 max_tokens=16000,
                 system=search_system,
-                tools=[{"type": "web_search_20260209", "name": "web_search", "max_uses": 12}],  # type: ignore[list-item]
+                tools=[{"type": web_search_tool, "name": "web_search", "max_uses": 12}],  # type: ignore[list-item]
                 messages=[{"role": "user", "content": search_content}],
             ),
             client.messages.create(
-                model="claude-sonnet-4-6",
+                model=model,
                 max_tokens=8096,
                 system=neg_system,
-                tools=[{"type": "web_search_20260209", "name": "web_search", "max_uses": 10}],  # type: ignore[list-item]
+                tools=[{"type": web_search_tool, "name": "web_search", "max_uses": 10}],  # type: ignore[list-item]
                 messages=[{"role": "user", "content": neg_content}],
             ),
             return_exceptions=True,
@@ -308,7 +313,7 @@ async def pre_analysis(
         # ── Format call: profile + keywords only ──────────────────────────────
         print(f"[pre-analysis] research_summary length={len(research_summary)} chars — proceeding to format")
         format_msg = await client.messages.create(
-            model="claude-sonnet-4-6",
+            model=model,
             max_tokens=16000,
             system=(
                 f"You are a data formatter. Convert the research summary into the specified JSON shape. "

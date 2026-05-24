@@ -523,6 +523,20 @@ export async function exportReportMasterPdf(
         { key: "recent_news",       label: "Recent News",       value: preAnalysisProfile.recent_news },
         { key: "negative_findings", label: "Negative Findings", value: preAnalysisProfile.negative_findings },
         { key: "positive_presence", label: "Positive Presence", value: preAnalysisProfile.positive_presence },
+        ...(preAnalysisProfile.estimated_negative_links
+          ? [{
+              key: "estimated_negative_links",
+              label: "Estimated Negative Links",
+              value: (() => {
+                const { low, high, reasoning, coverage_assessment, confidence } =
+                  preAnalysisProfile.estimated_negative_links!;
+                const badges = [coverage_assessment, confidence ? `${confidence} confidence` : null]
+                  .filter(Boolean)
+                  .join(" · ");
+                return `${low.toLocaleString()}–${high.toLocaleString()} estimated negative links across the web${badges ? ` (${badges})` : ""}. ${reasoning}`;
+              })(),
+            }]
+          : []),
         { key: "reputation_notes",  label: "Reputation Notes",  value: preAnalysisProfile.reputation_notes },
       ]
         .filter((f) => f.value && (!selectedFields || selectedFields.includes(f.key)))

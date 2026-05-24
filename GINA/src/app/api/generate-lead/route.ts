@@ -404,6 +404,7 @@ async function classifyWithClaude(
   subjectType: "individual" | "company" = "individual",
   languageName = "English",
   scanFocus?: string,
+  model = "claude-haiku-4-5-20251001",
 ): Promise<WebLink[]> {
   if (articles.length === 0) return [];
 
@@ -518,7 +519,7 @@ Return a JSON array only — no explanation, no markdown code fences. Each eleme
 Return ONLY the JSON array. If no valid articles, return [].`;
 
   const stream = client.messages.stream({
-    model: "claude-sonnet-4-6",
+    model,
     max_tokens: 64000,
     messages: [{ role: "user", content: prompt }],
   });
@@ -586,6 +587,7 @@ async function generateMeetingSummary(
   score: number,
   links: WebLink[],
   languageName = "English",
+  model = "claude-haiku-4-5-20251001",
 ): Promise<{
   headline: string;
   issues: string[];
@@ -647,7 +649,7 @@ Return ONLY a JSON object with these 5 fields (no markdown, no explanation):
 Write all output in ${languageName}.`;
 
   const response = await client.messages.create({
-    model: "claude-sonnet-4-6",
+    model,
     max_tokens: 4096,
     messages: [{ role: "user", content: prompt }],
   });
@@ -694,6 +696,7 @@ export async function POST(req: NextRequest) {
     reportLanguage,
     useKeywords = true,
     scanFocus,
+    scanTier = "standard",
   } = (await req.json()) as {
     firstName?: string;
     lastName?: string;
@@ -706,7 +709,10 @@ export async function POST(req: NextRequest) {
     reportLanguage?: string;
     useKeywords?: boolean;
     scanFocus?: "negative" | "positive" | "neutral";
+    scanTier?: "standard" | "advanced";
   };
+
+  const tierModel = scanTier === "standard" ? "claude-haiku-4-5-20251001" : "claude-sonnet-4-6";
 
   // Normalize to array — accept both legacy `country` string and new `countries` array
   const countries: string[] =
@@ -875,6 +881,7 @@ export async function POST(req: NextRequest) {
       subjectType,
       outputLanguageName,
       scanFocus,
+      tierModel,
     );
 
     const deduped = dedupeLinks(classified)
@@ -904,6 +911,7 @@ export async function POST(req: NextRequest) {
       deriveScoreServer(negative.length, positive.length),
       deduped,
       outputLanguageName,
+      tierModel,
     );
 
     return NextResponse.json({
