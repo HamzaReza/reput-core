@@ -871,18 +871,25 @@ export async function POST(req: NextRequest) {
 
     const urlsSentToClaude = articles.map((a) => a.url);
 
-    // ── Phase 3: Claude classification ───────────────────────────────────────
-    const classified = await classifyWithClaude(
-      client,
-      articles,
-      sanitizedSubject,
-      countries,
-      keywords,
-      subjectType,
-      outputLanguageName,
-      scanFocus,
-      tierModel,
-    );
+    // ── Phase 3: Claude classification (batched to stay under 200K token limit) ──
+    const CLASSIFY_BATCH_SIZE = 20;
+    const classifiedBatches: WebLink[][] = [];
+    for (let b = 0; b < articles.length; b += CLASSIFY_BATCH_SIZE) {
+      const batch = articles.slice(b, b + CLASSIFY_BATCH_SIZE);
+      const batchResult = await classifyWithClaude(
+        client,
+        batch,
+        sanitizedSubject,
+        countries,
+        keywords,
+        subjectType,
+        outputLanguageName,
+        scanFocus,
+        tierModel,
+      );
+      classifiedBatches.push(batchResult);
+    }
+    const classified = classifiedBatches.flat();
 
     const deduped = dedupeLinks(classified)
       .map((link) => ({
