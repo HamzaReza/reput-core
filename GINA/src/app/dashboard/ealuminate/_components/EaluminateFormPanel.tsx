@@ -75,6 +75,8 @@ interface EaluminateFormPanelProps {
   scanFocus: KeywordFocus;
   setScanFocus: (value: KeywordFocus) => void;
   pipeline: ReactNode;
+  scanTier: "standard" | "advanced";
+  setScanTier: (value: "standard" | "advanced") => void;
 }
 
 const PROFILE_FIELD_COLORS: Record<string, string> = {
@@ -88,12 +90,6 @@ const PROFILE_FIELD_COLORS: Record<string, string> = {
   "Reputation Notes": "#94a3b8",
 };
 
-function formatEstimatedNegativeLinks(
-  estimate: NonNullable<PreAnalysisProfile["estimated_negative_links"]>,
-): string {
-  const { low, high, reasoning } = estimate;
-  return `Estimated ${low}–${high} links across the web. ${reasoning}`;
-}
 
 function ProfileCollapse({
   label,
@@ -331,6 +327,8 @@ export function EaluminateFormPanel(props: EaluminateFormPanelProps) {
     scanFocus,
     setScanFocus,
     pipeline,
+    scanTier,
+    setScanTier,
     handleSkipToScan,
   } = props;
 
@@ -657,6 +655,40 @@ export function EaluminateFormPanel(props: EaluminateFormPanelProps) {
             </p>
           </div>
 
+          <div>
+            <label style={labelStyle}>Scan Mode</label>
+            <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+              {(["standard", "advanced"] as const).map((tier) => (
+                <button
+                  key={tier}
+                  type="button"
+                  onClick={() => setScanTier(tier)}
+                  style={{
+                    padding: "0.4rem 1rem",
+                    borderRadius: "999px",
+                    fontSize: "0.875rem",
+                    fontWeight: 500,
+                    cursor: "pointer",
+                    transition: "all 0.15s",
+                    border: "1.5px solid",
+                    borderColor:
+                      scanTier === tier
+                        ? "#4479DA"
+                        : "var(--color-border, #e2e8f0)",
+                    backgroundColor:
+                      scanTier === tier ? "#eef3ff" : "#ffffff",
+                    color:
+                      scanTier === tier
+                        ? "#4479DA"
+                        : "var(--color-muted, #64748b)",
+                  }}
+                >
+                  {tier === "standard" ? "Standard" : "Advanced"}
+                </button>
+              ))}
+            </div>
+          </div>
+
           {error && (
             <p style={{ margin: 0, fontSize: "0.875rem", color: "#ef4444" }}>
               {error}
@@ -857,14 +889,6 @@ export function EaluminateFormPanel(props: EaluminateFormPanelProps) {
                         "Negative Findings",
                         preAnalysisProfile.negative_findings,
                       ],
-                      preAnalysisProfile.estimated_negative_links
-                        ? [
-                            "Estimated Negative Links",
-                            formatEstimatedNegativeLinks(
-                              preAnalysisProfile.estimated_negative_links,
-                            ),
-                          ]
-                        : null,
                       ["Reputation Notes", preAnalysisProfile.reputation_notes],
                     ].filter(Boolean) as [string, string][]
                   ).map(([label, text]) => (
@@ -895,6 +919,61 @@ export function EaluminateFormPanel(props: EaluminateFormPanelProps) {
               )}
             </div>
           )}
+
+          {preAnalysisDone &&
+            preAnalysisSummary &&
+            preAnalysisProfile?.estimated_negative_links &&
+            (() => {
+              const { low, high, reasoning } =
+                preAnalysisProfile.estimated_negative_links;
+              return (
+                <div
+                  style={{
+                    borderRadius: "0.875rem",
+                    border: "2px solid #FF6B4A",
+                    backgroundColor: "#fff5f2",
+                    padding: "1.25rem 1.5rem",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "0.5rem",
+                  }}
+                >
+                  <p
+                    style={{
+                      margin: 0,
+                      fontSize: "0.7rem",
+                      fontWeight: 700,
+                      letterSpacing: "0.08em",
+                      color: "#FF6B4A",
+                      textTransform: "uppercase",
+                    }}
+                  >
+                    Estimated Negative Links
+                  </p>
+                  <p
+                    style={{
+                      margin: 0,
+                      fontSize: "2.25rem",
+                      fontWeight: 800,
+                      color: "#c0392b",
+                      lineHeight: 1,
+                    }}
+                  >
+                    {low.toLocaleString()}–{high.toLocaleString()}
+                  </p>
+                  <p
+                    style={{
+                      margin: 0,
+                      fontSize: "0.8rem",
+                      color: "#64748b",
+                      lineHeight: 1.6,
+                    }}
+                  >
+                    {reasoning}
+                  </p>
+                </div>
+              );
+            })()}
 
           {keywordsReady && (
             <>

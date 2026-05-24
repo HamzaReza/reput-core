@@ -24,9 +24,10 @@ const RESEARCH_SUMMARY_FIELDS = [
   { key: "background",        label: "Background",        color: "#6366f1" },
   { key: "associations",      label: "Associations",      color: "#f59e0b" },
   { key: "recent_news",       label: "Recent News",       color: "#48D4B8" },
-  { key: "negative_findings", label: "Negative Findings", color: "#ef4444" },
-  { key: "positive_presence", label: "Positive Presence", color: "#4CAF50" },
-  { key: "reputation_notes",  label: "Reputation Notes",  color: "#94a3b8" },
+  { key: "negative_findings",        label: "Negative Findings",        color: "#ef4444" },
+  { key: "positive_presence",        label: "Positive Presence",        color: "#4CAF50" },
+  { key: "estimated_negative_links", label: "Estimated Negative Links", color: "#FF6B4A" },
+  { key: "reputation_notes",         label: "Reputation Notes",         color: "#94a3b8" },
 ];
 
 const BRIEF_FIELDS = [
@@ -592,6 +593,7 @@ function EaluminatePageInner() {
   const [reportLanguage, setReportLanguage] = useState<ReportLanguage>("en");
   const [useKeywords, setUseKeywords] = useState(true);
   const [scanFocus, setScanFocus] = useState<KeywordFocus>("all");
+  const [scanTier, setScanTier] = useState<"standard" | "advanced">("standard");
 
   const [editableKeywords, setEditableKeywords] = useState<string[]>([]);
   const [keywordsReady, setKeywordsReady] = useState(false);
@@ -759,6 +761,7 @@ function EaluminatePageInner() {
                     countries: ctx.countries,
                     keywordsCap: ctx.keywordsCap,
                     pagesCap: ctx.pagesCap,
+                    scanTier: ctx.scanTier,
                   },
                 });
               } catch { /* non-fatal */ }
@@ -814,6 +817,7 @@ function EaluminatePageInner() {
       useKeywords?: boolean;
       pagesCap?: number;
       scanFocus?: string;
+      scanTier?: "standard" | "advanced";
       keywords?: string[];
       keywordsReady?: boolean;
       preAnalysisDone?: boolean;
@@ -833,6 +837,7 @@ function EaluminatePageInner() {
     if (stored.useKeywords !== undefined) setUseKeywords(stored.useKeywords);
     if (stored.pagesCap !== undefined) setPagesCap(stored.pagesCap);
     if (stored.scanFocus !== undefined) setScanFocus(stored.scanFocus as KeywordFocus);
+    if (stored.scanTier !== undefined) setScanTier(stored.scanTier);
     if (stored.keywords?.length) setEditableKeywords(stored.keywords);
     if (stored.keywordsReady) setKeywordsReady(true);
     if (stored.preAnalysisDone) setPreAnalysisDone(true);
@@ -1032,6 +1037,8 @@ function EaluminatePageInner() {
                 setCountries(d.countries as string[]);
               else if (typeof d.country === "string" && d.country)
                 setCountries([d.country as string]);
+              if (d.scanTier === "standard" || d.scanTier === "advanced")
+                setScanTier(d.scanTier as "standard" | "advanced");
             }
             const scanEvents = clientDetail.events.filter(
               (e) =>
@@ -1061,6 +1068,8 @@ function EaluminatePageInner() {
               setKeywordsCap(scanEvent.data.keywordsCap as number);
             if (!hasActiveJob && typeof scanEvent?.data?.pagesCap === "number")
               setPagesCap(scanEvent.data.pagesCap as number);
+            if (scanEvent?.data?.scanTier === "standard" || scanEvent?.data?.scanTier === "advanced")
+              setScanTier(scanEvent.data.scanTier as "standard" | "advanced");
           }
         } catch {
           /* non-fatal */
@@ -1076,7 +1085,7 @@ function EaluminatePageInner() {
           } catch {
             /* legacy plain-text summary — profile stays null */
           }
-          setKeywordsReady(lead.keywords_suggested.length > 0);
+          setKeywordsReady(true);
           setPreAnalysisDone(true);
         }
 
@@ -1270,6 +1279,7 @@ function EaluminatePageInner() {
           keywordFocus,
           subjectType,
           reportLanguage,
+          scanTier,
         }),
       });
       if (res.status === 401) {
@@ -1319,6 +1329,7 @@ function EaluminatePageInner() {
             pagesCap,
             reportLanguage,
             countries,
+            scanTier,
           },
         });
         if (cl.id) setClientId(cl.id);
@@ -1378,6 +1389,7 @@ function EaluminatePageInner() {
           reportLanguage,
           useKeywords,
           scanFocus: scanFocus !== "all" ? scanFocus : undefined,
+          scanTier,
         }),
       });
       if (res.status === 401) { router.replace("/login?reason=session_expired"); return; }
@@ -1395,6 +1407,7 @@ function EaluminatePageInner() {
         useKeywords,
         pagesCap,
         scanFocus: scanFocus !== "all" ? scanFocus : undefined,
+        scanTier,
         keywords: editableKeywords,
         keywordsReady: true,
         preAnalysisDone: true,
@@ -1529,6 +1542,8 @@ function EaluminatePageInner() {
           setUseKeywords={setUseKeywords}
           scanFocus={scanFocus}
           setScanFocus={setScanFocus}
+          scanTier={scanTier}
+          setScanTier={setScanTier}
           pipeline={
             <EaluminatePipelinePanel
               pipelineStep={pipelineStep}
