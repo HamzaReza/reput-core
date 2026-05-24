@@ -98,6 +98,7 @@ interface EaluminateResultsPanelProps {
   GaugeComponent: ComponentType<{ score: number }>;
   useKeywords: boolean;
   isResuming?: boolean;
+  scanDuration?: number | null;
 }
 
 function KeywordsUsed({
@@ -184,6 +185,7 @@ export function EaluminateResultsPanel({
   GaugeComponent,
   useKeywords,
   isResuming,
+  scanDuration,
 }: EaluminateResultsPanelProps) {
   const [openBriefSection, setOpenBriefSection] = useState<string | null>(null);
 
@@ -389,6 +391,22 @@ export function EaluminateResultsPanel({
             allLinks={allLinks}
             useKeywords={useKeywords}
           />
+
+          {process.env.NODE_ENV === "development" && scanDuration != null && (
+            <div style={{ marginTop: "1rem", display: "flex", justifyContent: "flex-end" }}>
+              <span style={{
+                fontSize: "0.7rem",
+                fontFamily: "monospace",
+                color: "#94a3b8",
+                backgroundColor: "#f1f5f9",
+                border: "1px solid #e2e8f0",
+                borderRadius: "0.375rem",
+                padding: "0.2rem 0.5rem",
+              }}>
+                ⏱ scan took {scanDuration >= 60 ? `${Math.floor(scanDuration / 60)}m ${scanDuration % 60}s` : `${scanDuration}s`}
+              </span>
+            </div>
+          )}
 
           {result.summary && (
             <div
@@ -662,90 +680,86 @@ export function EaluminateResultsPanel({
                         style={{
                           display: "flex",
                           alignItems: "center",
-                          justifyContent: "space-between",
                           gap: "0.5rem",
                           marginTop: "0.375rem",
                         }}
                       >
-                        <div
-                          style={{
-                            display: "flex",
-                            alignItems: "center",
-                            gap: "0.5rem",
-                          }}
-                        >
-                          <span
-                            style={{ fontSize: "0.6875rem", color: "#94a3b8" }}
-                          >
-                            {domain}
-                          </span>
-                          <span
-                            style={{ fontSize: "0.6875rem", color: "#cbd5e1" }}
-                          >
-                            ·
-                          </span>
-                          <span
-                            style={{
-                              fontSize: "0.6875rem",
-                              fontWeight: 600,
-                              color: risk.color,
-                            }}
-                          >
-                            {uiRisk}
-                          </span>
-                          {useKeywords && (() => {
-                            const kws = item.keywords?.length
-                              ? item.keywords
-                              : item.keyword
-                              ? [item.keyword]
-                              : [];
-                            return kws.map((kw, ki) => (
-                              <React.Fragment key={ki}>
-                                <span style={{ fontSize: "0.6875rem", color: "#cbd5e1" }}>·</span>
-                                <span
-                                  style={{
-                                    fontSize: "0.6875rem",
-                                    fontWeight: 500,
-                                    color: "#6366f1",
-                                    backgroundColor: "rgba(99,102,241,0.08)",
-                                    padding: "0.125rem 0.5rem",
-                                    borderRadius: "999px",
-                                  }}
-                                >
-                                  {kw}
-                                </span>
-                              </React.Fragment>
-                            ));
-                          })()}
-                          {item.country && (
-                            <>
-                              <span
-                                style={{
-                                  fontSize: "0.6875rem",
-                                  color: "#cbd5e1",
-                                }}
-                              >
-                                ·
-                              </span>
-                              <span
-                                style={{
-                                  fontSize: "0.6875rem",
-                                  fontWeight: 500,
-                                  color: "#0ea5e9",
-                                  backgroundColor: "rgba(14,165,233,0.08)",
-                                  padding: "0.125rem 0.5rem",
-                                  borderRadius: "999px",
-                                }}
-                              >
-                                {item.country}
-                              </span>
-                            </>
-                          )}
-                        </div>
+                        {/* domain — always visible */}
+                        <span style={{ fontSize: "0.6875rem", color: "#94a3b8", flexShrink: 0 }}>
+                          {domain}
+                        </span>
+                        <span style={{ fontSize: "0.6875rem", color: "#cbd5e1", flexShrink: 0 }}>·</span>
+                        {/* sentiment — always visible */}
+                        <span style={{ fontSize: "0.6875rem", fontWeight: 600, color: risk.color, flexShrink: 0 }}>
+                          {uiRisk}
+                        </span>
+                        {/* keyword chips — scrollable */}
+                        {useKeywords && (() => {
+                          const kws = item.keywords?.length
+                            ? item.keywords
+                            : item.keyword
+                            ? [item.keyword]
+                            : [];
+                          if (!kws.length) return null;
+                          return (
+                            <div
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: "0.5rem",
+                                flex: 1,
+                                minWidth: 0,
+                                overflowX: "auto",
+                                flexWrap: "nowrap",
+                                scrollbarWidth: "none",
+                                msOverflowStyle: "none",
+                              } as React.CSSProperties}
+                            >
+                              {kws.map((kw, ki) => (
+                                <React.Fragment key={ki}>
+                                  <span style={{ fontSize: "0.6875rem", color: "#cbd5e1", flexShrink: 0 }}>·</span>
+                                  <span
+                                    style={{
+                                      fontSize: "0.6875rem",
+                                      fontWeight: 500,
+                                      color: "#6366f1",
+                                      backgroundColor: "rgba(99,102,241,0.08)",
+                                      padding: "0.125rem 0.5rem",
+                                      borderRadius: "999px",
+                                      flexShrink: 0,
+                                      whiteSpace: "nowrap",
+                                    }}
+                                  >
+                                    {kw}
+                                  </span>
+                                </React.Fragment>
+                              ))}
+                            </div>
+                          );
+                        })()}
+                        {/* country — always visible */}
+                        {item.country && (
+                          <>
+                            <span style={{ fontSize: "0.6875rem", color: "#cbd5e1", flexShrink: 0 }}>·</span>
+                            <span
+                              style={{
+                                fontSize: "0.6875rem",
+                                fontWeight: 500,
+                                color: "#0ea5e9",
+                                backgroundColor: "rgba(14,165,233,0.08)",
+                                padding: "0.125rem 0.5rem",
+                                borderRadius: "999px",
+                                flexShrink: 0,
+                                whiteSpace: "nowrap",
+                              }}
+                            >
+                              {item.country}
+                            </span>
+                          </>
+                        )}
+                        {/* date — always visible, pushed to the right */}
                         {item.date && (
-                          <span
-                            style={{ fontSize: "0.6875rem", color: "#94a3b8" }}
-                          >
+                          <span style={{ fontSize: "0.6875rem", color: "#94a3b8", flexShrink: 0, whiteSpace: "nowrap", marginLeft: "auto" }}>
                             {item.date}
                           </span>
                         )}
