@@ -276,6 +276,7 @@ async def _classify_with_claude(
     subject_type: str,
     language_name: str,
     scan_focus: str | None,
+    model: str = "claude-haiku-4-5-20251001",
 ) -> list[dict]:
     if not articles:
         return []
@@ -360,7 +361,7 @@ async def _classify_with_claude(
     )
 
     async with client.messages.stream(
-        model="claude-sonnet-4-6",
+        model=model,
         max_tokens=64000,
         messages=[{"role": "user", "content": prompt}],
     ) as stream:
@@ -387,6 +388,7 @@ async def _generate_meeting_summary(
     score: int,
     links: list[dict],
     language_name: str,
+    model: str = "claude-haiku-4-5-20251001",
 ) -> dict:
     try:
         neg_links = [l for l in links if l.get("sentiment") == "negative" or l.get("risk") in ("high", "medium")]
@@ -428,7 +430,7 @@ async def _generate_meeting_summary(
         )
 
         response = await client.messages.create(
-            model="claude-sonnet-4-6",
+            model=model,
             max_tokens=16000,
             system=(
                 "You are an AI assistant embedded in a professional reputation intelligence platform used by "
@@ -465,6 +467,7 @@ class GenerateLeadRequest(BaseModel):
     reportLanguage: str | None = None
     useKeywords: bool = True
     scanFocus: str | None = None
+    scanTier: Literal["standard", "advanced"] = "standard"
 
 
 # ── Core logic (extracted so background runner can call it) ──────────────────
@@ -476,6 +479,8 @@ async def _execute_generate_lead(body: GenerateLeadRequest, settings) -> dict:
     )
     if not countries or (body.useKeywords and not body.keywords):
         raise ValueError("Required fields missing")
+
+    tier_model = "claude-haiku-4-5-20251001" if body.scanTier == "standard" else "claude-sonnet-4-6"
 
     search_subject = (
         (body.company or "").strip() if body.subjectType == "company" and body.company
@@ -592,7 +597,7 @@ async def _execute_generate_lead(body: GenerateLeadRequest, settings) -> dict:
     # ── Phase 3: Claude classification ───────────────────────────────────────
     classified = await _classify_with_claude(
         client, articles, sanitized_subject, countries,
-        body.keywords, body.subjectType, output_language_name, body.scanFocus,
+        body.keywords, body.subjectType, output_language_name, body.scanFocus, tier_model,
     )
 
     def sort_key(link: dict) -> tuple:
@@ -618,7 +623,7 @@ async def _execute_generate_lead(body: GenerateLeadRequest, settings) -> dict:
     neutral = [l for l in deduped if l.get("sentiment") == "neutral"]
     score = _derive_score(len(negative), len(positive))
 
-    summary = await _generate_meeting_summary(client, sanitized_subject, score, deduped, output_language_name)
+    summary = await _generate_meeting_summary(client, sanitized_subject, score, deduped, output_language_name, tier_model)
 
     return {
         "links": deduped,
@@ -627,6 +632,7 @@ async def _execute_generate_lead(body: GenerateLeadRequest, settings) -> dict:
         "neutral": neutral,
         "summary": summary,
         "score": score,
+        "scanTier": body.scanTier,
         "_serper": [
             {
                 "keyword": body.keywords[kw_idx] if body.useKeywords and kw_idx < len(body.keywords) else all_searches[i]["q"],
