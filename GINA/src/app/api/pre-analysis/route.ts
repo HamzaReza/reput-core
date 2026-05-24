@@ -185,6 +185,7 @@ export async function POST(req: NextRequest) {
       keywordFocus = "all",
       subjectType = "individual",
       reportLanguage,
+      scanTier = "standard",
     } = body as {
       firstName?: string;
       lastName?: string;
@@ -196,7 +197,11 @@ export async function POST(req: NextRequest) {
       keywordFocus?: string;
       subjectType?: "individual" | "company";
       reportLanguage?: string;
+      scanTier?: "standard" | "advanced";
     };
+
+    const model = scanTier === "standard" ? "claude-haiku-4-5-20251001" : "claude-sonnet-4-6";
+    const webSearchTool = scanTier === "standard" ? "web_search_20250305" : "web_search_20260209";
 
     // Normalize to array — accept both legacy `country` string and new `countries` array
     const countries: string[] = Array.isArray(countriesRaw) && countriesRaw.length > 0
@@ -289,11 +294,11 @@ export async function POST(req: NextRequest) {
     try {
       // Call 1: web search → prose research summary
       const searchMsg = await anthropic.messages.create({
-        model: "claude-sonnet-4-6",
+        model,
         max_tokens: 4096,
         system: searchSystem,
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        tools: [{ type: "web_search_20260209", name: "web_search" } as any],
+        tools: [{ type: webSearchTool, name: "web_search" } as any],
         messages: [{ role: "user", content: searchContent }],
       });
 
@@ -309,7 +314,7 @@ export async function POST(req: NextRequest) {
 
       // Call 2: format prose → structured JSON (no tools)
       const formatMsg = await anthropic.messages.create({
-        model: "claude-sonnet-4-6",
+        model,
         max_tokens: 3000,
         system: `You are a data formatter. Convert the research summary into the specified JSON shape. Write ALL field values and ALL keywords in ${languageName}. Output ONLY valid JSON — no markdown fences, no explanation, no extra keys.`,
         messages: [
