@@ -211,7 +211,7 @@ async def _search_serper(
     num_pages: int,
     serper_key: str,
     http: httpx.AsyncClient,
-) -> tuple[list[dict], list[dict]]:
+) -> tuple[list[dict], list[dict], int]:
     def make_payload(page: int) -> dict:
         payload: dict = {"q": query, "page": page}
         gl, hl = _get_serper_locale(country_code)
@@ -234,13 +234,18 @@ async def _search_serper(
         return r.json()
 
     raw: list[dict] = []
+    pages_fetched = 0
     for i in range(num_pages):
         if i > 0:
             await asyncio.sleep(0.3)
-        raw.append(await fetch_page(i + 1))
+        page_data = await fetch_page(i + 1)
+        raw.append(page_data)
+        pages_fetched += 1
+        if not page_data.get("organic"):
+            break
 
     organic = [item for page in raw for item in page.get("organic", [])]
-    return organic, raw
+    return organic, raw, pages_fetched
 
 
 async def _scrape_firecrawl(url: str, firecrawl_key: str, http: httpx.AsyncClient) -> str | None:
@@ -511,7 +516,7 @@ async def _execute_generate_lead(body: GenerateLeadRequest, settings) -> dict:
             for cfg in country_configs
         ]
 
-        serper_results: list[tuple[list[dict], list[dict]]] = []
+        serper_results: list[tuple[list[dict], list[dict], int]] = []
         for search in all_searches:
             if serper_results:
                 await asyncio.sleep(0.3)
@@ -524,6 +529,7 @@ async def _execute_generate_lead(body: GenerateLeadRequest, settings) -> dict:
 
         all_organic = [r[0] for r in serper_results]
         all_raw = [r[1] for r in serper_results]
+        all_pages_fetched = [r[2] for r in serper_results]
 
         # ── Phase 2: Deduplicate & scrape ─────────────────────────────────────
         seen_urls: set[str] = set()
@@ -626,6 +632,7 @@ async def _execute_generate_lead(body: GenerateLeadRequest, settings) -> dict:
                 "keyword": body.keywords[kw_idx] if body.useKeywords and kw_idx < len(body.keywords) else all_searches[i]["q"],
                 "country": countries[i % num_countries] if i % num_countries < len(countries) else "unknown",
                 "query": all_searches[i]["q"],
+                "pagesTraversed": all_pages_fetched[i] if i < len(all_pages_fetched) else 0,
                 "count": len(all_organic[i]) if i < len(all_organic) else 0,
                 "links": [r.get("link") for page in (all_raw[i] if i < len(all_raw) else []) for r in page.get("organic", [])],
             }

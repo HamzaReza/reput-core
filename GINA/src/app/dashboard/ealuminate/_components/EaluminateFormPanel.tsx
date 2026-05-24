@@ -1038,7 +1038,7 @@ export function EaluminateFormPanel(props: EaluminateFormPanelProps) {
                             : "var(--color-muted, #64748b)",
                       }}
                     >
-                      {page}
+                      {page === 50 ? "Max" : page}
                     </button>
                   ))}
                 </div>
