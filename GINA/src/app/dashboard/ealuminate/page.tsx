@@ -635,7 +635,7 @@ function EaluminatePageInner() {
   const persistContextRef = useRef({
     leadId, clientId, fullName: `${firstName.trim()} ${lastName.trim()}`.trim(),
     company, country: countries[0] ?? "", description, preAnalysisSummary,
-    editableKeywords, useKeywords, scanFocus, countries, keywordsCap, pagesCap,
+    editableKeywords, useKeywords, scanFocus, scanTier, countries, keywordsCap, pagesCap,
   });
 
   const stopCycles = () => {
@@ -799,10 +799,10 @@ function EaluminatePageInner() {
       leadId, clientId,
       fullName: `${firstName.trim()} ${lastName.trim()}`.trim(),
       company, country: countries[0] ?? "", description, preAnalysisSummary,
-      editableKeywords, useKeywords, scanFocus, countries, keywordsCap, pagesCap,
+      editableKeywords, useKeywords, scanFocus, scanTier, countries, keywordsCap, pagesCap,
     };
   }, [leadId, clientId, firstName, lastName, company, countries, description,
-      preAnalysisSummary, editableKeywords, useKeywords, scanFocus, keywordsCap, pagesCap]);
+      preAnalysisSummary, editableKeywords, useKeywords, scanFocus, scanTier, keywordsCap, pagesCap]);
 
   // Resume an in-progress job if one was saved before navigating away
   useEffect(() => {
