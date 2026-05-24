@@ -55,7 +55,7 @@ declare global {
 }
 
 // ── Constants ──────────────────────────────────────────────────────────────────
-const PAGES_CAP_OPTIONS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+const PAGES_CAP_OPTIONS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 50];
 const JOB_STORAGE_KEY = "ealuminate_job_id";
 const KEYWORDS_CAP_OPTIONS = [3, 4, 5, 6, 7, 8, 9, 10];
 
@@ -611,6 +611,8 @@ function EaluminatePageInner() {
     useState<PreAnalysisProfile | null>(null);
 
   const [loading, setLoading] = useState(false);
+  const [scanDuration, setScanDuration] = useState<number | null>(null);
+  const scanStartRef = useRef<number | null>(null);
   const [statusIdx, setStatusIdx] = useState(0);
   const [statusVisible, setStatusVisible] = useState(true);
   const [tipIdx, setTipIdx] = useState(0);
@@ -703,6 +705,10 @@ function EaluminatePageInner() {
           setResult(scanResult);
           setScanComplete(true);
           setIsResuming(false);
+          if (scanStartRef.current !== null) {
+            setScanDuration(Math.round((Date.now() - scanStartRef.current) / 1000));
+            scanStartRef.current = null;
+          }
           setLoading(false);
 
           // Post-scan persistence — read from ref so values are always fresh (not stale closures)
@@ -1334,8 +1340,10 @@ function EaluminatePageInner() {
     setError("");
     setResult(null);
     setScore(0);
+    setScanDuration(null);
     setExpandedLinkIndex(null);
     setUsedKeywords([...editableKeywords]);
+    scanStartRef.current = Date.now();
     setLoading(true);
     startCycles();
 
@@ -1548,6 +1556,7 @@ function EaluminatePageInner() {
           onExportSummary={handleExportSummaryPdf}
           GaugeComponent={RepuGauge}
           isResuming={isResuming}
+          scanDuration={scanDuration}
         />
       </div>
       {exportSummaryModalOpen && (
