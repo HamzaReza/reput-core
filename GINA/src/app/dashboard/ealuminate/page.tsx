@@ -1371,6 +1371,12 @@ function EaluminatePageInner() {
       return;
     }
 
+    if (leadId) {
+      try {
+        await leads.update(leadId, { keywords_suggested: editableKeywords });
+      } catch { /* non-fatal */ }
+    }
+
     try {
       const res = await fetch(`${scanApiUrl}/generate-lead`, {
         method: "POST",
