@@ -1,6 +1,5 @@
 import asyncio
 import json
-import math
 import re
 import uuid
 from datetime import datetime, timezone
@@ -99,13 +98,12 @@ def _get_serper_locale(country_code: str | None) -> tuple[str | None, str]:
 
 LANG_CODE_TO_NAME: dict[str, str] = {
     "en": "English", "it": "Italian", "es": "Spanish", "fr": "French",
-    "de": "German", "pt": "Portuguese", "pt-br": "Portuguese", "nl": "Dutch",
-    "pl": "Polish", "ro": "Romanian", "hu": "Hungarian", "cs": "Czech",
-    "ru": "Russian", "uk": "Ukrainian", "tr": "Turkish", "ja": "Japanese",
-    "ko": "Korean", "zh-cn": "Chinese", "zh-tw": "Chinese", "ar": "Arabic",
-    "hi": "Hindi", "th": "Thai", "vi": "Vietnamese", "id": "Indonesian",
-    "ms": "Malay", "el": "Greek", "sv": "Swedish", "no": "Norwegian",
-    "fi": "Finnish", "da": "Danish",
+    "de": "German", "pt": "Portuguese", "nl": "Dutch", "pl": "Polish",
+    "ro": "Romanian", "hu": "Hungarian", "cs": "Czech", "ru": "Russian",
+    "uk": "Ukrainian", "tr": "Turkish", "ja": "Japanese", "ko": "Korean",
+    "zh-CN": "Chinese", "ar": "Arabic", "hi": "Hindi", "th": "Thai",
+    "vi": "Vietnamese", "id": "Indonesian", "ms": "Malay", "el": "Greek",
+    "sv": "Swedish", "no": "Norwegian", "fi": "Finnish", "da": "Danish",
 }
 
 REPORT_LANG_MAP: dict[str, str] = {"en": "English", "it": "Italian", "es": "Spanish"}
@@ -198,20 +196,12 @@ async def _is_pdf(url: str, http: httpx.AsyncClient) -> bool:
     if ".pdf" in url.lower().split("?")[0]:
         return True
     try:
-        r = await http.head(url, timeout=3.0)
+        r = await http.get(url, timeout=3.0)
         content_type = r.headers.get("content-type", "")
         content_disp = r.headers.get("content-disposition", "")
         return "application/pdf" in content_type or ".pdf" in content_disp.lower()
     except Exception:
         return False
-
-
-async def _scrape_or_skip(
-    a: dict, firecrawl_key: str, http: httpx.AsyncClient
-) -> str | None:
-    if await _is_pdf(a["url"], http):
-        return None
-    return await _scrape_firecrawl(a["url"], firecrawl_key, http)
 
 
 async def _search_serper(
@@ -511,9 +501,11 @@ async def _execute_generate_lead(body: GenerateLeadRequest, settings) -> dict:
 
     async with httpx.AsyncClient() as http:
         # ── Phase 1: Serper searches ──────────────────────────────────────────
-        search_queries = [sanitized_subject]
-        if body.useKeywords:
-            search_queries += [f"{sanitized_subject} {kw}" for kw in body.keywords]
+        search_queries = (
+            [f"{sanitized_subject} {kw}" for kw in body.keywords]
+            if body.useKeywords
+            else [sanitized_subject]
+        )
 
         country_configs = [
             {
@@ -554,9 +546,7 @@ async def _execute_generate_lead(body: GenerateLeadRequest, settings) -> dict:
 
         for kw_idx, results in enumerate(all_organic):
             country_idx = kw_idx % num_countries
-            query_idx = kw_idx // num_countries
-            kw_keyword_idx = query_idx - 1
-            kw = body.keywords[kw_keyword_idx] if body.useKeywords and 0 <= kw_keyword_idx < len(body.keywords) else None
+            kw = body.keywords[kw_idx] if body.useKeywords and kw_idx < len(body.keywords) else None
             for r in results:
                 url = r.get("link", "")
                 if not url:
@@ -583,8 +573,8 @@ async def _execute_generate_lead(body: GenerateLeadRequest, settings) -> dict:
             batch = articles[b_start: b_start + BATCH_SIZE]
             batch_results = await asyncio.gather(
                 *[
-                    _scrape_or_skip(a, settings.firecrawl_api_key, http)
-                    if settings.firecrawl_api_key
+                    _scrape_firecrawl(a["url"], settings.firecrawl_api_key, http)
+                    if not await _is_pdf(a["url"], http) and settings.firecrawl_api_key
                     else asyncio.sleep(0)
                     for a in batch
                 ],
@@ -607,20 +597,17 @@ async def _execute_generate_lead(body: GenerateLeadRequest, settings) -> dict:
     # ── Phase 3: Claude classification (batched to stay under 200K token limit) ──
     CLASSIFY_BATCH_SIZE = 20
     classified: list[dict] = []
-    classification_failed = False
     for b_start in range(0, len(articles), CLASSIFY_BATCH_SIZE):
         batch = articles[b_start:b_start + CLASSIFY_BATCH_SIZE]
         batch_result = await _classify_with_claude(
             client, batch, sanitized_subject, countries,
             body.keywords, body.subjectType, output_language_name, body.scanFocus, tier_model,
         )
-        if not batch_result and batch:
-            classification_failed = True
-            print(f"[classify] WARNING: batch {b_start}–{b_start + CLASSIFY_BATCH_SIZE} returned empty")
         classified.extend(batch_result)
 
     def sort_key(link: dict) -> tuple:
         ts = _parse_serper_date(link.get("date") or "")
+        import math
         return (0, -ts) if not math.isnan(ts) else (1, 0)
 
     deduped = sorted(
@@ -651,14 +638,9 @@ async def _execute_generate_lead(body: GenerateLeadRequest, settings) -> dict:
         "summary": summary,
         "score": score,
         "scanTier": body.scanTier,
-        "classificationFailed": classification_failed,
         "_serper": [
             {
-                "keyword": (
-                    body.keywords[kw_idx - 1]
-                    if body.useKeywords and kw_idx >= 1 and kw_idx - 1 < len(body.keywords)
-                    else all_searches[i]["q"]
-                ),
+                "keyword": body.keywords[kw_idx] if body.useKeywords and kw_idx < len(body.keywords) else all_searches[i]["q"],
                 "country": countries[i % num_countries] if i % num_countries < len(countries) else "unknown",
                 "query": all_searches[i]["q"],
                 "pagesTraversed": all_pages_fetched[i] if i < len(all_pages_fetched) else 0,
