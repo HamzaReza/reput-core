@@ -1,5 +1,6 @@
 import asyncio
 import json
+import math
 import re
 import uuid
 from datetime import datetime, timezone
@@ -98,12 +99,13 @@ def _get_serper_locale(country_code: str | None) -> tuple[str | None, str]:
 
 LANG_CODE_TO_NAME: dict[str, str] = {
     "en": "English", "it": "Italian", "es": "Spanish", "fr": "French",
-    "de": "German", "pt": "Portuguese", "nl": "Dutch", "pl": "Polish",
-    "ro": "Romanian", "hu": "Hungarian", "cs": "Czech", "ru": "Russian",
-    "uk": "Ukrainian", "tr": "Turkish", "ja": "Japanese", "ko": "Korean",
-    "zh-CN": "Chinese", "ar": "Arabic", "hi": "Hindi", "th": "Thai",
-    "vi": "Vietnamese", "id": "Indonesian", "ms": "Malay", "el": "Greek",
-    "sv": "Swedish", "no": "Norwegian", "fi": "Finnish", "da": "Danish",
+    "de": "German", "pt": "Portuguese", "pt-br": "Portuguese", "nl": "Dutch",
+    "pl": "Polish", "ro": "Romanian", "hu": "Hungarian", "cs": "Czech",
+    "ru": "Russian", "uk": "Ukrainian", "tr": "Turkish", "ja": "Japanese",
+    "ko": "Korean", "zh-cn": "Chinese", "zh-tw": "Chinese", "ar": "Arabic",
+    "hi": "Hindi", "th": "Thai", "vi": "Vietnamese", "id": "Indonesian",
+    "ms": "Malay", "el": "Greek", "sv": "Swedish", "no": "Norwegian",
+    "fi": "Finnish", "da": "Danish",
 }
 
 REPORT_LANG_MAP: dict[str, str] = {"en": "English", "it": "Italian", "es": "Spanish"}
@@ -501,11 +503,9 @@ async def _execute_generate_lead(body: GenerateLeadRequest, settings) -> dict:
 
     async with httpx.AsyncClient() as http:
         # ── Phase 1: Serper searches ──────────────────────────────────────────
-        search_queries = (
-            [f"{sanitized_subject} {kw}" for kw in body.keywords]
-            if body.useKeywords
-            else [sanitized_subject]
-        )
+        search_queries = [sanitized_subject]
+        if body.useKeywords:
+            search_queries += [f"{sanitized_subject} {kw}" for kw in body.keywords]
 
         country_configs = [
             {
@@ -546,7 +546,9 @@ async def _execute_generate_lead(body: GenerateLeadRequest, settings) -> dict:
 
         for kw_idx, results in enumerate(all_organic):
             country_idx = kw_idx % num_countries
-            kw = body.keywords[kw_idx] if body.useKeywords and kw_idx < len(body.keywords) else None
+            query_idx = kw_idx // num_countries
+            kw_keyword_idx = query_idx - 1
+            kw = body.keywords[kw_keyword_idx] if body.useKeywords and 0 <= kw_keyword_idx < len(body.keywords) else None
             for r in results:
                 url = r.get("link", "")
                 if not url:
@@ -607,7 +609,6 @@ async def _execute_generate_lead(body: GenerateLeadRequest, settings) -> dict:
 
     def sort_key(link: dict) -> tuple:
         ts = _parse_serper_date(link.get("date") or "")
-        import math
         return (0, -ts) if not math.isnan(ts) else (1, 0)
 
     deduped = sorted(
@@ -640,7 +641,11 @@ async def _execute_generate_lead(body: GenerateLeadRequest, settings) -> dict:
         "scanTier": body.scanTier,
         "_serper": [
             {
-                "keyword": body.keywords[kw_idx] if body.useKeywords and kw_idx < len(body.keywords) else all_searches[i]["q"],
+                "keyword": (
+                    body.keywords[kw_idx - 1]
+                    if body.useKeywords and kw_idx >= 1 and kw_idx - 1 < len(body.keywords)
+                    else all_searches[i]["q"]
+                ),
                 "country": countries[i % num_countries] if i % num_countries < len(countries) else "unknown",
                 "query": all_searches[i]["q"],
                 "pagesTraversed": all_pages_fetched[i] if i < len(all_pages_fetched) else 0,
