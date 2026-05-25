@@ -170,7 +170,9 @@ async def pre_analysis(
             f"For each search, look for: founding history and ownership, business model and revenue streams, key executives and leadership, "
             f"regulatory filings or sanctions, litigation or legal disputes, customer reviews or complaints, financial performance, industry reputation, "
             f"media coverage, partnerships and affiliations. Also explicitly search for the latest news — recent articles, press releases, announcements, "
-            f"incidents, or developments from the past 12 months. Write a detailed, comprehensive factual summary covering all angles. Write in {language_name}."
+            f"incidents, or developments from the past 12 months. Write a detailed, comprehensive factual summary covering all angles. Write in {language_name}. "
+            f"At the very end of your summary, add one line in exactly this format (do not translate it): "
+            f"SEARCH_QUERIES_USED: query1 | query2 | query3 | ... — list every search query you actually ran."
         )
         search_content = (
             f"Research this company:\n\nCompany: {body.company}\nCountry: {countries_label}"
@@ -188,7 +190,9 @@ async def pre_analysis(
             f"legal proceedings or regulatory actions, media mentions and interviews, social media presence, awards or public recognition, "
             f"controversies or allegations, known associates and partners. Also explicitly search for the latest news — recent articles, interviews, "
             f"public statements, incidents, or developments involving this person from the past 12 months. "
-            f"Write a detailed, comprehensive factual summary covering all angles. Write in {language_name}."
+            f"Write a detailed, comprehensive factual summary covering all angles. Write in {language_name}. "
+            f"At the very end of your summary, add one line in exactly this format (do not translate it): "
+            f"SEARCH_QUERIES_USED: query1 | query2 | query3 | ... — list every search query you actually ran."
         )
         search_content = (
             f"Research this person:\n\nName: {full_name}"
@@ -287,6 +291,12 @@ async def pre_analysis(
             block.text for block in search_msg.content if block.type == "text"
         ).strip()
 
+        search_queries_used: list[str] = []
+        queries_match = re.search(r"SEARCH_QUERIES_USED:\s*(.+)$", research_summary, re.MULTILINE)
+        if queries_match:
+            search_queries_used = [q.strip() for q in queries_match.group(1).split("|") if q.strip()]
+            research_summary = research_summary[:queries_match.start()].strip()
+
         if not research_summary:
             print("[pre-analysis] EMPTY SUMMARY — returning fallback")
             profile["estimated_negative_links"] = _build_estimate(None)
@@ -318,6 +328,21 @@ async def pre_analysis(
 
         # ── Format call: profile + keywords only ──────────────────────────────
         print(f"[pre-analysis] research_summary length={len(research_summary)} chars — proceeding to format")
+
+        queries_section = (
+            "\n\nSearch queries actually executed during research:\n"
+            + "\n".join(f"- {q}" for q in search_queries_used)
+            if search_queries_used else ""
+        )
+        keywords_instruction = (
+            f"{keyword_focus_rule} "
+            f"Derive keywords strictly from the search queries listed above — "
+            f"use the actual terms that were searched, not words extracted from the summary prose. "
+            f"Do NOT invent keywords that were not part of the actual research."
+            if search_queries_used
+            else keyword_focus_rule
+        )
+
         format_msg = await client.messages.create(
             model=model,
             max_tokens=16000,
@@ -330,7 +355,7 @@ async def pre_analysis(
                 {
                     "role": "user",
                     "content": (
-                        f"Research summary about {subject_label}:\n{research_summary}\n\n"
+                        f"Research summary about {subject_label}:\n{research_summary}{queries_section}\n\n"
                         f"Return ONLY this JSON (no explanation, no markdown):\n"
                         f'{{\n  "profile": {{\n'
                         f'    "identity": "{format_identity_hint}",\n'
@@ -342,7 +367,7 @@ async def pre_analysis(
                         f'    "reputation_notes": "<2-4 sentences: overall reputational standing, key risk indicators, public perception summary, recommended scrutiny level>"\n'
                         f'  }},\n'
                         f'  "keywords": ["<keyword1>", ...]\n}}\n'
-                        f"Rules: every field fully populated with detail, based only on the summary above, {keyword_focus_rule}."
+                        f"Rules: every field fully populated with detail, based only on the summary above, {keywords_instruction}."
                     ),
                 }
             ],
