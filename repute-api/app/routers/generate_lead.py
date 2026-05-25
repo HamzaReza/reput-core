@@ -198,13 +198,20 @@ async def _is_pdf(url: str, http: httpx.AsyncClient) -> bool:
     if ".pdf" in url.lower().split("?")[0]:
         return True
     try:
-        r = await http.get(url, timeout=3.0)
+        r = await http.head(url, timeout=3.0)
         content_type = r.headers.get("content-type", "")
         content_disp = r.headers.get("content-disposition", "")
         return "application/pdf" in content_type or ".pdf" in content_disp.lower()
     except Exception:
         return False
 
+
+async def _scrape_or_skip(
+    a: dict, firecrawl_key: str, http: httpx.AsyncClient
+) -> str | None:
+    if await _is_pdf(a["url"], http):
+        return None
+    return await _scrape_firecrawl(a["url"], firecrawl_key, http)
 
 
 async def _search_serper(
@@ -576,8 +583,8 @@ async def _execute_generate_lead(body: GenerateLeadRequest, settings) -> dict:
             batch = articles[b_start: b_start + BATCH_SIZE]
             batch_results = await asyncio.gather(
                 *[
-                    _scrape_firecrawl(a["url"], settings.firecrawl_api_key, http)
-                    if not await _is_pdf(a["url"], http) and settings.firecrawl_api_key
+                    _scrape_or_skip(a, settings.firecrawl_api_key, http)
+                    if settings.firecrawl_api_key
                     else asyncio.sleep(0)
                     for a in batch
                 ],
