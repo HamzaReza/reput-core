@@ -63,25 +63,31 @@ FALLBACK_PROFILE = {
 
 def _build_estimate(neg: dict | None) -> dict:
     """Normalise the negative-estimation call's output into the response shape.
-    Falls back to moderate (101–500) if the call failed or domain count is unavailable."""
+    Uses observed domain count directly — no arbitrary multiplier.
+    Zero domains found — reports 0,0 (no invented coverage)."""
     neg = neg or {}
-    assessment = neg.get("coverage_assessment", "moderate")
+    assessment = neg.get("coverage_assessment", "minimal")
     domains = neg.get("distinct_negative_sources_seen") or 0
-    if domains > 0:
-        # Each observed domain realistically holds 4–10 negative pages in its full archive.
-        low = domains * 4
-        high = domains * 10
+    saturation = neg.get("saturation", "unknown")
+    confidence = neg.get("confidence", "low")
+
+    if domains == 0:
+        low, high = 0, 0
+    elif saturation == "saturated":
+        low = max(1, int(domains * 0.8))
+        high = int(domains * 1.3)
     else:
-        low, high = 101, 500
+        low = domains
+        high = int(domains * 2.5)
 
     return {
         "coverage_assessment": assessment,
-        "confidence": neg.get("confidence", "low"),
+        "confidence": confidence,
         "distinct_negative_sources_seen": domains,
-        "saturation": neg.get("saturation", "unknown"),
+        "saturation": saturation,
         "low": low,
         "high": high,
-        "reasoning": neg.get("reasoning", "Estimate based on typical adverse coverage patterns."),
+        "reasoning": neg.get("reasoning", "Estimate based on observed sources."),
     }
 
 
