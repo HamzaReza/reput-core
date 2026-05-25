@@ -594,11 +594,16 @@ async def _execute_generate_lead(body: GenerateLeadRequest, settings) -> dict:
 
         urls_sent_to_claude = [a["url"] for a in articles]
 
-    # ── Phase 3: Claude classification ───────────────────────────────────────
-    classified = await _classify_with_claude(
-        client, articles, sanitized_subject, countries,
-        body.keywords, body.subjectType, output_language_name, body.scanFocus, tier_model,
-    )
+    # ── Phase 3: Claude classification (batched to stay under 200K token limit) ──
+    CLASSIFY_BATCH_SIZE = 20
+    classified: list[dict] = []
+    for b_start in range(0, len(articles), CLASSIFY_BATCH_SIZE):
+        batch = articles[b_start:b_start + CLASSIFY_BATCH_SIZE]
+        batch_result = await _classify_with_claude(
+            client, batch, sanitized_subject, countries,
+            body.keywords, body.subjectType, output_language_name, body.scanFocus, tier_model,
+        )
+        classified.extend(batch_result)
 
     def sort_key(link: dict) -> tuple:
         ts = _parse_serper_date(link.get("date") or "")

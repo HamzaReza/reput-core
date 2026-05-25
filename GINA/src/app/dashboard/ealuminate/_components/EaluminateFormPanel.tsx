@@ -90,7 +90,6 @@ const PROFILE_FIELD_COLORS: Record<string, string> = {
   "Reputation Notes": "#94a3b8",
 };
 
-
 function ProfileCollapse({
   label,
   text,
@@ -675,8 +674,7 @@ export function EaluminateFormPanel(props: EaluminateFormPanelProps) {
                       scanTier === tier
                         ? "#4479DA"
                         : "var(--color-border, #e2e8f0)",
-                    backgroundColor:
-                      scanTier === tier ? "#eef3ff" : "#ffffff",
+                    backgroundColor: scanTier === tier ? "#eef3ff" : "#ffffff",
                     color:
                       scanTier === tier
                         ? "#4479DA"
