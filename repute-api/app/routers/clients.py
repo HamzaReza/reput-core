@@ -267,6 +267,8 @@ async def list_clients(
     for row in rows.mappings():
         latest_data = row["latest_event_data"] or {}
         latest_score = latest_data.get("score") if row["latest_event_type"] == "scan" else None
+        latest_links_found = latest_data.get("links_count") if row["latest_event_type"] == "scan" else None
+        latest_negative_links = latest_data.get("negative_count") if row["latest_event_type"] == "scan" else None
         out.append({
             "id": str(row["id"]),
             "name": row["name"],
@@ -283,6 +285,8 @@ async def list_clients(
             "latest_event_type": row["latest_event_type"],
             "latest_event_at": row["latest_event_at"].isoformat() if row["latest_event_at"] else None,
             "latest_score": latest_score,
+            "latest_links_found": latest_links_found,
+            "latest_negative_links": latest_negative_links,
         })
     return out
 

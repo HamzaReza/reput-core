@@ -676,6 +676,8 @@ export interface ClientListItem {
   latest_event_type: ClientEventType | null;
   latest_event_at: string | null;
   latest_score: number | null;
+  latest_links_found: number | null;
+  latest_negative_links: number | null;
 }
 
 export interface ClientDetail {
