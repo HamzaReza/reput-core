@@ -131,7 +131,8 @@ async def pre_analysis(
         raise HTTPException(status_code=400, detail="company is required for company subjects.")
 
     model = "claude-haiku-4-5-20251001" if body.scanTier == "standard" else "claude-sonnet-4-6"
-    web_search_tool = "web_search_20250305" if body.scanTier == "standard" else "web_search_20260209"
+    # web_search_tool = "web_search_20250305" if body.scanTier == "standard" else "web_search_20260209"
+    web_search_tool = "web_search_20250305"
 
     country = countries[0]
     cap = min(8, max(3, body.keywordsCap or 5))
