@@ -19,6 +19,8 @@ from app.utils.auth import get_current_web_analyst
 
 router = APIRouter(prefix="/generate-lead", tags=["generate-lead"])
 
+_background_tasks: set[asyncio.Task] = set()
+
 # ── Lookup tables ────────────────────────────────────────────────────────────
 
 NATIONALITY_ALIASES: dict[str, str] = {
@@ -884,12 +886,12 @@ async def _execute_generate_lead(body: GenerateLeadRequest, settings) -> dict:
             for cfg in country_configs
         ]
 
-        serper_results: list[tuple[list[dict], list[dict], int]] = []
-        for search in all_searches:
-            if serper_results:
-                await asyncio.sleep(0.3)
-            serper_results.append(
-                await _search_serper(
+        _serper_sem = asyncio.Semaphore(5)
+
+        async def _fetch_one_serper(search: dict) -> tuple[list[dict], list[dict], int]:
+            async with _serper_sem:
+                await asyncio.sleep(0.1)
+                return await _search_serper(
                     search["q"],
                     search["cc"],
                     search["lc"],
@@ -897,7 +899,10 @@ async def _execute_generate_lead(body: GenerateLeadRequest, settings) -> dict:
                     settings.serper_api_key,
                     http,
                 )
-            )
+
+        serper_results: list[tuple[list[dict], list[dict], int]] = list(
+            await asyncio.gather(*[_fetch_one_serper(s) for s in all_searches])
+        )
 
         all_organic = [r[0] for r in serper_results]
         all_raw = [r[1] for r in serper_results]
@@ -979,21 +984,28 @@ async def _execute_generate_lead(body: GenerateLeadRequest, settings) -> dict:
 
     # ── Phase 3: Claude classification (batched to stay under 200K token limit) ──
     CLASSIFY_BATCH_SIZE = 20
-    classified: list[dict] = []
-    for b_start in range(0, len(articles), CLASSIFY_BATCH_SIZE):
-        batch = articles[b_start : b_start + CLASSIFY_BATCH_SIZE]
-        batch_result = await _classify_with_claude(
-            client,
-            batch,
-            sanitized_subject,
-            countries,
-            body.keywords,
-            body.subjectType,
-            output_language_name,
-            body.scanFocus,
-            tier_model,
-        )
-        classified.extend(batch_result)
+    _claude_sem = asyncio.Semaphore(3)
+
+    async def _classify_batch(batch: list[dict]) -> list[dict]:
+        async with _claude_sem:
+            return await _classify_with_claude(
+                client,
+                batch,
+                sanitized_subject,
+                countries,
+                body.keywords,
+                body.subjectType,
+                output_language_name,
+                body.scanFocus,
+                tier_model,
+            )
+
+    batches = [
+        articles[i : i + CLASSIFY_BATCH_SIZE]
+        for i in range(0, len(articles), CLASSIFY_BATCH_SIZE)
+    ]
+    batch_results = await asyncio.gather(*[_classify_batch(b) for b in batches])
+    classified: list[dict] = [item for result in batch_results for item in result]
 
     def sort_key(link: dict) -> tuple:
         ts = _parse_serper_date(link.get("date") or "")
@@ -1105,22 +1117,34 @@ async def _execute_generate_lead(body: GenerateLeadRequest, settings) -> dict:
 # ── Background runner ────────────────────────────────────────────────────────
 
 
+async def _update_job_status(
+    job_id: uuid.UUID,
+    status: str,
+    result: dict | None = None,
+    error: str | None = None,
+) -> None:
+    async with AsyncSessionLocal() as db:
+        job = await db.get(GenerateLeadJob, job_id)
+        job.status = status
+        job.result = result
+        job.error = error
+        job.completed_at = datetime.now(timezone.utc)
+        await db.commit()
+
+
 async def _run_job(job_id: uuid.UUID, body: GenerateLeadRequest) -> None:
     async with AsyncSessionLocal() as db:
         job = await db.get(GenerateLeadJob, job_id)
         job.status = "running"
         await db.commit()
-        try:
-            settings = get_settings()
-            result = await _execute_generate_lead(body, settings)
-            job.status = "done"
-            job.result = result
-            job.completed_at = datetime.now(timezone.utc)
-        except Exception as e:
-            job.status = "failed"
-            job.error = str(e)
-            job.completed_at = datetime.now(timezone.utc)
-        await db.commit()
+    # session closed — no long-lived connection held open during the scan
+    try:
+        settings = get_settings()
+        result = await _execute_generate_lead(body, settings)
+        await _update_job_status(job_id, "done", result=result)
+    except BaseException as e:
+        await _update_job_status(job_id, "failed", error=f"{type(e).__name__}: {e}")
+        raise
 
 
 # ── Routes ───────────────────────────────────────────────────────────────────
@@ -1152,7 +1176,9 @@ async def generate_lead(
     job_id = job.id
     await db.commit()
 
-    asyncio.create_task(_run_job(job_id, body))
+    task = asyncio.create_task(_run_job(job_id, body))
+    _background_tasks.add(task)
+    task.add_done_callback(_background_tasks.discard)
     return {"job_id": str(job_id)}
 
 

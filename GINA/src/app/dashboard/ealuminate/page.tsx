@@ -9,6 +9,7 @@ import countryList from "react-select-country-list";
 import { EaluminateFormPanel } from "./_components/EaluminateFormPanel";
 import { EaluminatePipelinePanel } from "./_components/EaluminatePipelinePanel";
 import { EaluminateResultsPanel } from "./_components/EaluminateResultsPanel";
+import ExportFieldsModal from "./_components/ExportFieldsModal";
 import type {
   KeywordFocus,
   MeetingSummary,
@@ -17,23 +18,26 @@ import type {
   ScanResult,
 } from "./_components/types";
 import { exportReportMasterPdf, exportSummaryPdf } from "./_utils/pdfExports";
-import ExportFieldsModal from "./_components/ExportFieldsModal";
 
 const RESEARCH_SUMMARY_FIELDS = [
-  { key: "identity",          label: "Identity",          color: "#4479DA" },
-  { key: "background",        label: "Background",        color: "#6366f1" },
-  { key: "associations",      label: "Associations",      color: "#f59e0b" },
-  { key: "recent_news",       label: "Recent News",       color: "#48D4B8" },
-  { key: "negative_findings",        label: "Negative Findings",        color: "#ef4444" },
-  { key: "positive_presence",        label: "Positive Presence",        color: "#4CAF50" },
-  { key: "estimated_negative_links", label: "Estimated Negative Links", color: "#FF6B4A" },
-  { key: "reputation_notes",         label: "Reputation Notes",         color: "#94a3b8" },
+  { key: "identity", label: "Identity", color: "#4479DA" },
+  { key: "background", label: "Background", color: "#6366f1" },
+  { key: "associations", label: "Associations", color: "#f59e0b" },
+  { key: "recent_news", label: "Recent News", color: "#48D4B8" },
+  { key: "negative_findings", label: "Negative Findings", color: "#ef4444" },
+  { key: "positive_presence", label: "Positive Presence", color: "#4CAF50" },
+  {
+    key: "estimated_negative_links",
+    label: "Estimated Negative Links",
+    color: "#FF6B4A",
+  },
+  { key: "reputation_notes", label: "Reputation Notes", color: "#94a3b8" },
 ];
 
 const BRIEF_FIELDS = [
-  { key: "key_points",         label: "Key Points",         color: "#4479DA" },
-  { key: "meeting_angles",     label: "Meeting Angles",     color: "#6366f1" },
-  { key: "risk_indicators",    label: "Risk Indicators",    color: "#ef4444" },
+  { key: "key_points", label: "Key Points", color: "#4479DA" },
+  { key: "meeting_angles", label: "Meeting Angles", color: "#6366f1" },
+  { key: "risk_indicators", label: "Risk Indicators", color: "#ef4444" },
   { key: "objection_handlers", label: "Objection Handlers", color: "#48D4B8" },
 ];
 
@@ -633,9 +637,20 @@ function EaluminatePageInner() {
   const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [isResuming, setIsResuming] = useState(false);
   const persistContextRef = useRef({
-    leadId, clientId, fullName: `${firstName.trim()} ${lastName.trim()}`.trim(),
-    company, country: countries[0] ?? "", description, preAnalysisSummary,
-    editableKeywords, useKeywords, scanFocus, scanTier, countries, keywordsCap, pagesCap,
+    leadId,
+    clientId,
+    fullName: `${firstName.trim()} ${lastName.trim()}`.trim(),
+    company,
+    country: countries[0] ?? "",
+    description,
+    preAnalysisSummary,
+    editableKeywords,
+    useKeywords,
+    scanFocus,
+    scanTier,
+    countries,
+    keywordsCap,
+    pagesCap,
   });
 
   const stopCycles = () => {
@@ -668,7 +683,8 @@ function EaluminatePageInner() {
     }, 5000);
   };
 
-  const scanApiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
+  const scanApiUrl =
+    process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
 
   const startPolling = (job_id: string) => {
     if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
@@ -697,10 +713,17 @@ function EaluminatePageInner() {
               ? pollData.result.score
               : deriveScore(
                   scanResult.links.filter(
-                    (l) => l.sentiment === "negative" || l.risk === "high" || l.risk === "medium",
+                    (l) =>
+                      l.sentiment === "negative" ||
+                      l.risk === "high" ||
+                      l.risk === "medium",
                   ).length,
                   scanResult.links.filter(
-                    (l) => l.sentiment === "positive" || l.sentiment === "neutral" || l.risk === "low" || l.risk === "none",
+                    (l) =>
+                      l.sentiment === "positive" ||
+                      l.sentiment === "neutral" ||
+                      l.risk === "low" ||
+                      l.risk === "none",
                   ).length,
                 );
           setScore(finalScore);
@@ -708,7 +731,9 @@ function EaluminatePageInner() {
           setScanComplete(true);
           setIsResuming(false);
           if (scanStartRef.current !== null) {
-            setScanDuration(Math.round((Date.now() - scanStartRef.current) / 1000));
+            setScanDuration(
+              Math.round((Date.now() - scanStartRef.current) / 1000),
+            );
             scanStartRef.current = null;
           }
           setLoading(false);
@@ -727,18 +752,27 @@ function EaluminatePageInner() {
                 keywords_suggested: ctx.editableKeywords,
                 force_new: true,
               });
-              if (ld.id) { currentLeadId = ld.id; setLeadId(ld.id); }
-            } catch { /* non-fatal */ }
+              if (ld.id) {
+                currentLeadId = ld.id;
+                setLeadId(ld.id);
+              }
+            } catch {
+              /* non-fatal */
+            }
           }
           if (currentLeadId) {
             try {
               await leads.update(currentLeadId, {
                 links: scanResult.links as unknown[],
-                summary: scanResult.summary ? ({ ...scanResult.summary } as Record<string, unknown>) : undefined,
+                summary: scanResult.summary
+                  ? ({ ...scanResult.summary } as Record<string, unknown>)
+                  : undefined,
                 score: finalScore,
                 keywords_suggested: ctx.editableKeywords,
               });
-            } catch { /* non-fatal */ }
+            } catch {
+              /* non-fatal */
+            }
           }
           if (ctx.clientId) {
             const writtenKey = `ealuminate_scan_written_${job_id}`;
@@ -757,14 +791,17 @@ function EaluminatePageInner() {
                     lead_id: currentLeadId ?? undefined,
                     links: scanResult.links,
                     useKeywords: ctx.useKeywords,
-                    scanFocus: ctx.scanFocus !== "all" ? ctx.scanFocus : undefined,
+                    scanFocus:
+                      ctx.scanFocus !== "all" ? ctx.scanFocus : undefined,
                     countries: ctx.countries,
                     keywordsCap: ctx.keywordsCap,
                     pagesCap: ctx.pagesCap,
                     scanTier: ctx.scanTier,
                   },
                 });
-              } catch { /* non-fatal */ }
+              } catch {
+                /* non-fatal */
+              }
             }
           }
         } else if (pollData.status === "failed") {
@@ -796,17 +833,43 @@ function EaluminatePageInner() {
   // Keep persistContextRef in sync with latest state so checkJob always reads fresh values
   useEffect(() => {
     persistContextRef.current = {
-      leadId, clientId,
+      leadId,
+      clientId,
       fullName: `${firstName.trim()} ${lastName.trim()}`.trim(),
-      company, country: countries[0] ?? "", description, preAnalysisSummary,
-      editableKeywords, useKeywords, scanFocus, scanTier, countries, keywordsCap, pagesCap,
+      company,
+      country: countries[0] ?? "",
+      description,
+      preAnalysisSummary,
+      editableKeywords,
+      useKeywords,
+      scanFocus,
+      scanTier,
+      countries,
+      keywordsCap,
+      pagesCap,
     };
-  }, [leadId, clientId, firstName, lastName, company, countries, description,
-      preAnalysisSummary, editableKeywords, useKeywords, scanFocus, scanTier, keywordsCap, pagesCap]);
+  }, [
+    leadId,
+    clientId,
+    firstName,
+    lastName,
+    company,
+    countries,
+    description,
+    preAnalysisSummary,
+    editableKeywords,
+    useKeywords,
+    scanFocus,
+    scanTier,
+    keywordsCap,
+    pagesCap,
+  ]);
 
   // Resume an in-progress job if one was saved before navigating away
   useEffect(() => {
-    const cleanup = () => { if (pollIntervalRef.current) clearInterval(pollIntervalRef.current); };
+    const cleanup = () => {
+      if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+    };
     const raw = localStorage.getItem(JOB_STORAGE_KEY);
     if (!raw) return cleanup;
 
@@ -822,13 +885,20 @@ function EaluminatePageInner() {
       keywordsReady?: boolean;
       preAnalysisDone?: boolean;
     } | null = null;
-    try { stored = JSON.parse(raw); } catch { localStorage.removeItem(JOB_STORAGE_KEY); return cleanup; }
+    try {
+      stored = JSON.parse(raw);
+    } catch {
+      localStorage.removeItem(JOB_STORAGE_KEY);
+      return cleanup;
+    }
     if (!stored) return cleanup;
 
     const eventParam = new URLSearchParams(window.location.search).get("event");
     if (eventParam) return cleanup;
 
-    const currentLeadParam = new URLSearchParams(window.location.search).get("lead");
+    const currentLeadParam = new URLSearchParams(window.location.search).get(
+      "lead",
+    );
     if (stored.leadId !== currentLeadParam) {
       localStorage.removeItem(JOB_STORAGE_KEY); // stale job from a different client
       return cleanup;
@@ -836,7 +906,8 @@ function EaluminatePageInner() {
 
     if (stored.useKeywords !== undefined) setUseKeywords(stored.useKeywords);
     if (stored.pagesCap !== undefined) setPagesCap(stored.pagesCap);
-    if (stored.scanFocus !== undefined) setScanFocus(stored.scanFocus as KeywordFocus);
+    if (stored.scanFocus !== undefined)
+      setScanFocus(stored.scanFocus as KeywordFocus);
     if (stored.scanTier !== undefined) setScanTier(stored.scanTier);
     if (stored.keywords?.length) setEditableKeywords(stored.keywords);
     if (stored.keywordsReady) setKeywordsReady(true);
@@ -847,7 +918,7 @@ function EaluminatePageInner() {
     startCycles();
     startPolling(stored.job_id);
     return cleanup;
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -1001,18 +1072,40 @@ function EaluminatePageInner() {
         let scanSummary: MeetingSummary | undefined;
         try {
           const clients = await clientsApi.list(200);
-          const inferredType = (lead.name ?? "").trim() ? "individual" : "company";
+          const inferredType = (lead.name ?? "").trim()
+            ? "individual"
+            : "company";
           const candidates = clients.filter((c) => {
             if ((c.subject_type ?? "individual") !== inferredType) return false;
-            if (inferredType === "individual") return c.name === (lead.name ?? "").trim();
+            if (inferredType === "individual")
+              return c.name === (lead.name ?? "").trim();
             return (c.company ?? "") === (lead.company ?? "").trim();
           });
-          const match = candidates.length === 1
-            ? candidates[0]
-            : candidates.find((c) => (c.countries ?? []).includes(lead.country ?? "")) ?? candidates[0];
+          const match =
+            candidates.length === 1
+              ? candidates[0]
+              : (candidates.find((c) =>
+                  (c.countries ?? []).includes(lead.country ?? ""),
+                ) ?? candidates[0]);
+          console.log(
+            "[ealuminate] lead.id:",
+            lead.id,
+            "eventId:",
+            eventId,
+            "match:",
+            match?.id ?? null,
+          );
           if (match) {
             setClientId(match.id);
             const clientDetail = await clientsApi.get(match.id);
+            console.log(
+              "[ealuminate] clientDetail.events count:",
+              clientDetail.events.length,
+            );
+            console.log(
+              "[ealuminate] all event ids:",
+              clientDetail.events.map((e) => `${e.id} (${e.event_type})`),
+            );
             const researchEvent = clientDetail.events
               .filter((e) => e.event_type === "research")
               .find((e) => (e.data?.lead_id as string | undefined) === lead.id);
@@ -1029,10 +1122,9 @@ function EaluminatePageInner() {
                 )
               )
                 setKeywordFocus(d.keywordFocus as KeywordFocus);
-              if (!hasActiveJob && typeof d.pagesCap === "number") setPagesCap(d.pagesCap);
-              if (
-                ["en", "it", "es"].includes(d.reportLanguage as string)
-              )
+              if (!hasActiveJob && typeof d.pagesCap === "number")
+                setPagesCap(d.pagesCap);
+              if (["en", "it", "es"].includes(d.reportLanguage as string))
                 setReportLanguage(d.reportLanguage as ReportLanguage);
               if (
                 Array.isArray(d.countries) &&
@@ -1049,17 +1141,30 @@ function EaluminatePageInner() {
                 e.event_type === "scan" &&
                 (e.data?.lead_id as string | undefined) === lead.id,
             );
+            console.log(
+              "[ealuminate] scanEvents (lead_id filtered):",
+              scanEvents.map((e) => e.id),
+            );
             const scanEvent = eventId
-              ? scanEvents.find((e) => e.id === eventId)
+              ? clientDetail.events.find((e) => e.id === eventId)
               : scanEvents.at(-1);
+            console.log(
+              "[ealuminate] resolved scanEvent id:",
+              scanEvent?.id ?? null,
+            );
             if (scanEvent?.data) {
               scanLinks = scanEvent.data.links as WebLink[] | undefined;
               scanScore = scanEvent.data.score as number | undefined;
               scanSummary = scanEvent.data.summary as
                 | MeetingSummary
                 | undefined;
+              if (Array.isArray(scanEvent.data.keywords))
+                setEditableKeywords(scanEvent.data.keywords as string[]);
             }
-            if (!hasActiveJob && typeof scanEvent?.data?.useKeywords === "boolean")
+            if (
+              !hasActiveJob &&
+              typeof scanEvent?.data?.useKeywords === "boolean"
+            )
               setUseKeywords(scanEvent.data.useKeywords as boolean);
             if (
               !hasActiveJob &&
@@ -1072,7 +1177,10 @@ function EaluminatePageInner() {
               setKeywordsCap(scanEvent.data.keywordsCap as number);
             if (!hasActiveJob && typeof scanEvent?.data?.pagesCap === "number")
               setPagesCap(scanEvent.data.pagesCap as number);
-            if (scanEvent?.data?.scanTier === "standard" || scanEvent?.data?.scanTier === "advanced")
+            if (
+              scanEvent?.data?.scanTier === "standard" ||
+              scanEvent?.data?.scanTier === "advanced"
+            )
               setScanTier(scanEvent.data.scanTier as "standard" | "advanced");
           }
         } catch {
@@ -1080,7 +1188,7 @@ function EaluminatePageInner() {
         }
 
         if (lead.keywords_suggested.length > 0 || lead.pre_analysis_summary) {
-          setEditableKeywords(lead.keywords_suggested);
+          if (!eventId) setEditableKeywords(lead.keywords_suggested);
           const raw = lead.pre_analysis_summary ?? "";
           setPreAnalysisSummary(raw);
           try {
@@ -1143,12 +1251,29 @@ function EaluminatePageInner() {
 
   const handleConfirmSummaryExport = (selectedFields: string[]) => {
     setExportSummaryModalOpen(false);
-    exportSummaryPdf({ fullName, company, country, webAnalystName, score, result, selectedFields });
+    exportSummaryPdf({
+      fullName,
+      company,
+      country,
+      webAnalystName,
+      score,
+      result,
+      selectedFields,
+    });
   };
 
   const handleConfirmReportExport = (selectedFields: string[]) => {
     setExportReportModalOpen(false);
-    exportReportMasterPdf({ fullName, company, country, webAnalystName, preAnalysisProfile, preAnalysisSummary, editableKeywords, selectedFields });
+    exportReportMasterPdf({
+      fullName,
+      company,
+      country,
+      webAnalystName,
+      preAnalysisProfile,
+      preAnalysisSummary,
+      editableKeywords,
+      selectedFields,
+    });
   };
 
   const handleDescriptionChange = (val: string) => {
@@ -1200,7 +1325,10 @@ function EaluminatePageInner() {
         country,
         subject_type: subjectType,
         countries: [...countries].sort(),
-        company: subjectType === "company" ? company.trim() : (company.trim() || undefined),
+        company:
+          subjectType === "company"
+            ? company.trim()
+            : company.trim() || undefined,
         email: email.trim() || undefined,
         phone: phone.trim() || undefined,
         event_type: "research",
@@ -1253,7 +1381,8 @@ function EaluminatePageInner() {
     setPreAnalysisSummary("");
     setLeadId(null);
 
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
+    const apiUrl =
+      process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
     const canScanParams1 = new URLSearchParams({
       name: subjectType === "individual" ? fullName : "",
       company: subjectType === "company" ? company.trim() : "",
@@ -1263,13 +1392,20 @@ function EaluminatePageInner() {
     });
     const checkRes = await fetch(
       `${apiUrl}/clients/can-scan?${canScanParams1.toString()}`,
-      { headers: { Authorization: `Bearer ${getToken()}` } }
+      { headers: { Authorization: `Bearer ${getToken()}` } },
     );
-    if (checkRes.status === 401) { router.replace("/login?reason=session_expired"); return; }
+    if (checkRes.status === 401) {
+      router.replace("/login?reason=session_expired");
+      return;
+    }
     if (!checkRes.ok) {
       const checkData = await checkRes.json();
       const checkDetail = checkData.detail;
-      setError(typeof checkDetail === "string" ? checkDetail : "Cannot scan this client.");
+      setError(
+        typeof checkDetail === "string"
+          ? checkDetail
+          : "Cannot scan this client.",
+      );
       setPreAnalysisLoading(false);
       return;
     }
@@ -1329,7 +1465,10 @@ function EaluminatePageInner() {
           country,
           subject_type: subjectType,
           countries: [...countries].sort(),
-          company: subjectType === "company" ? company.trim() : (company.trim() || undefined),
+          company:
+            subjectType === "company"
+              ? company.trim()
+              : company.trim() || undefined,
           email: email.trim() || undefined,
           phone: phone.trim() || undefined,
           event_type: "research",
@@ -1382,13 +1521,20 @@ function EaluminatePageInner() {
     });
     const scanCheckRes = await fetch(
       `${scanApiUrl}/clients/can-scan?${canScanParams2.toString()}`,
-      { headers: { Authorization: `Bearer ${getToken()}` } }
+      { headers: { Authorization: `Bearer ${getToken()}` } },
     );
-    if (scanCheckRes.status === 401) { router.replace("/login?reason=session_expired"); return; }
+    if (scanCheckRes.status === 401) {
+      router.replace("/login?reason=session_expired");
+      return;
+    }
     if (!scanCheckRes.ok) {
       const scanCheckData = await scanCheckRes.json();
       const scanCheckDetail = scanCheckData.detail;
-      setError(typeof scanCheckDetail === "string" ? scanCheckDetail : "Cannot scan this client.");
+      setError(
+        typeof scanCheckDetail === "string"
+          ? scanCheckDetail
+          : "Cannot scan this client.",
+      );
       setLoading(false);
       return;
     }
@@ -1396,7 +1542,9 @@ function EaluminatePageInner() {
     if (leadId) {
       try {
         await leads.update(leadId, { keywords_suggested: editableKeywords });
-      } catch { /* non-fatal */ }
+      } catch {
+        /* non-fatal */
+      }
     }
 
     try {
@@ -1407,7 +1555,8 @@ function EaluminatePageInner() {
           Authorization: `Bearer ${getToken()}`,
         },
         body: JSON.stringify({
-          firstName: subjectType === "individual" ? firstName.trim() : undefined,
+          firstName:
+            subjectType === "individual" ? firstName.trim() : undefined,
           lastName: subjectType === "individual" ? lastName.trim() : undefined,
           company: company.trim() || undefined,
           countries,
@@ -1420,7 +1569,10 @@ function EaluminatePageInner() {
           scanTier,
         }),
       });
-      if (res.status === 401) { router.replace("/login?reason=session_expired"); return; }
+      if (res.status === 401) {
+        router.replace("/login?reason=session_expired");
+        return;
+      }
       const data = await res.json();
       if (!res.ok || data.error) {
         setError(data.error ?? "Scan failed. Please try again.");
@@ -1428,18 +1580,21 @@ function EaluminatePageInner() {
         stopCycles();
         return;
       }
-      localStorage.setItem(JOB_STORAGE_KEY, JSON.stringify({
-        job_id: data.job_id,
-        leadId: leadId || null,
-        clientId: clientId || null,
-        useKeywords,
-        pagesCap,
-        scanFocus: scanFocus !== "all" ? scanFocus : undefined,
-        scanTier,
-        keywords: editableKeywords,
-        keywordsReady: true,
-        preAnalysisDone: true,
-      }));
+      localStorage.setItem(
+        JOB_STORAGE_KEY,
+        JSON.stringify({
+          job_id: data.job_id,
+          leadId: leadId || null,
+          clientId: clientId || null,
+          useKeywords,
+          pagesCap,
+          scanFocus: scanFocus !== "all" ? scanFocus : undefined,
+          scanTier,
+          keywords: editableKeywords,
+          keywordsReady: true,
+          preAnalysisDone: true,
+        }),
+      );
       startPolling(data.job_id);
       // loading state stays active — startPolling clears it when done
     } catch {
