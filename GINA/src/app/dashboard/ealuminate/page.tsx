@@ -1001,11 +1001,15 @@ function EaluminatePageInner() {
         let scanSummary: MeetingSummary | undefined;
         try {
           const clients = await clientsApi.list(200);
-          const match = clients.find(
-            (c) =>
-              c.name === (lead.name ?? "").trim() &&
-              c.country === (lead.country ?? ""),
-          );
+          const inferredType = (lead.name ?? "").trim() ? "individual" : "company";
+          const candidates = clients.filter((c) => {
+            if ((c.subject_type ?? "individual") !== inferredType) return false;
+            if (inferredType === "individual") return c.name === (lead.name ?? "").trim();
+            return (c.company ?? "") === (lead.company ?? "").trim();
+          });
+          const match = candidates.length === 1
+            ? candidates[0]
+            : candidates.find((c) => (c.countries ?? []).includes(lead.country ?? "")) ?? candidates[0];
           if (match) {
             setClientId(match.id);
             const clientDetail = await clientsApi.get(match.id);
@@ -1192,9 +1196,11 @@ function EaluminatePageInner() {
       if (ld.id) setLeadId(ld.id);
 
       const cl = await clientsApi.upsert({
-        name: fullName,
+        name: subjectType === "individual" ? fullName : "",
         country,
-        company: company.trim() || undefined,
+        subject_type: subjectType,
+        countries: [...countries].sort(),
+        company: subjectType === "company" ? company.trim() : (company.trim() || undefined),
         email: email.trim() || undefined,
         phone: phone.trim() || undefined,
         event_type: "research",
@@ -1248,8 +1254,15 @@ function EaluminatePageInner() {
     setLeadId(null);
 
     const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
+    const canScanParams1 = new URLSearchParams({
+      name: subjectType === "individual" ? fullName : "",
+      company: subjectType === "company" ? company.trim() : "",
+      country,
+      subject_type: subjectType,
+      countries: JSON.stringify([...countries].sort()),
+    });
     const checkRes = await fetch(
-      `${apiUrl}/clients/can-scan?name=${encodeURIComponent(subjectType === "company" ? company.trim() : fullName)}&country=${encodeURIComponent(country)}`,
+      `${apiUrl}/clients/can-scan?${canScanParams1.toString()}`,
       { headers: { Authorization: `Bearer ${getToken()}` } }
     );
     if (checkRes.status === 401) { router.replace("/login?reason=session_expired"); return; }
@@ -1312,9 +1325,11 @@ function EaluminatePageInner() {
         if (ld.id) setLeadId(ld.id);
 
         const cl = await clientsApi.upsert({
-          name: fullName,
+          name: subjectType === "individual" ? fullName : "",
           country,
-          company: company.trim() || undefined,
+          subject_type: subjectType,
+          countries: [...countries].sort(),
+          company: subjectType === "company" ? company.trim() : (company.trim() || undefined),
           email: email.trim() || undefined,
           phone: phone.trim() || undefined,
           event_type: "research",
@@ -1358,8 +1373,15 @@ function EaluminatePageInner() {
     setLoading(true);
     startCycles();
 
+    const canScanParams2 = new URLSearchParams({
+      name: subjectType === "individual" ? fullName : "",
+      company: subjectType === "company" ? company.trim() : "",
+      country,
+      subject_type: subjectType,
+      countries: JSON.stringify([...countries].sort()),
+    });
     const scanCheckRes = await fetch(
-      `${scanApiUrl}/clients/can-scan?name=${encodeURIComponent(subjectType === "company" ? company.trim() : fullName)}&country=${encodeURIComponent(country)}`,
+      `${scanApiUrl}/clients/can-scan?${canScanParams2.toString()}`,
       { headers: { Authorization: `Bearer ${getToken()}` } }
     );
     if (scanCheckRes.status === 401) { router.replace("/login?reason=session_expired"); return; }
