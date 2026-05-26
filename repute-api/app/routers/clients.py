@@ -1,3 +1,4 @@
+import json
 import uuid
 from datetime import datetime, timezone
 
@@ -13,12 +14,22 @@ from app.utils.auth import get_current_web_analyst
 
 router = APIRouter(prefix="/clients", tags=["clients"])
 
-VALID_EVENT_TYPES = {"research", "scan", "quote_sent", "quote_accepted", "quote_rejected", "contract_created", "meeting_set"}
+VALID_EVENT_TYPES = {
+    "research",
+    "scan",
+    "quote_sent",
+    "quote_accepted",
+    "quote_rejected",
+    "contract_created",
+    "meeting_set",
+}
 
 
 class ClientUpsertPayload(BaseModel):
     name: str
-    country: str
+    country: str  # legacy, kept but not used for dedup
+    subject_type: str = "individual"
+    countries: list[str] = []  # sorted set — the actual dedup key
     company: str | None = None
     email: str | None = None
     phone: str | None = None
@@ -42,21 +53,48 @@ async def upsert_client(
     current_web_analyst: WebAnalyst = Depends(get_current_web_analyst),
 ) -> dict:
     if payload.event_type and payload.event_type not in VALID_EVENT_TYPES:
-        raise HTTPException(status_code=400, detail=f"Invalid event_type: {payload.event_type}")
+        raise HTTPException(
+            status_code=400, detail=f"Invalid event_type: {payload.event_type}"
+        )
 
-    result = await db.execute(
-        select(Client).where(
-            Client.name == payload.name,
-            Client.country == payload.country,
-        ).limit(1)
-    )
+    # Rolling-deploy fallback: old frontend sends country but not countries
+    if not payload.countries and payload.country:
+        payload.countries = [payload.country]
+
+    sorted_countries = sorted(payload.countries)
+    sorted_countries_json = json.dumps(sorted_countries, separators=(",", ":"))
+
+    if payload.subject_type == "company":
+        result = await db.execute(
+            select(Client)
+            .where(
+                Client.subject_type == "company",
+                Client.company == (payload.company or "").strip(),
+                text("clients.countries::text = :cj"),
+            )
+            .params(cj=sorted_countries_json)
+            .limit(1)
+        )
+    else:
+        result = await db.execute(
+            select(Client)
+            .where(
+                Client.subject_type == "individual",
+                Client.name == payload.name.strip(),
+                text("clients.countries::text = :cj"),
+            )
+            .params(cj=sorted_countries_json)
+            .limit(1)
+        )
     client = result.scalar_one_or_none()
     created = False
 
     if client is None:
         client = Client(
-            name=payload.name,
-            country=payload.country,
+            name=payload.name.strip() if payload.subject_type == "individual" else "",
+            country=sorted_countries[0] if sorted_countries else "",
+            subject_type=payload.subject_type,
+            countries=sorted_countries,
             company=payload.company,
             email=payload.email,
             phone=payload.phone,
@@ -87,9 +125,7 @@ async def upsert_client(
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail=(
-                    f"This client has already been scanned by "
-                    f"{client.scanned_by_name or 'another analyst'} "
-                    f"and cannot be scanned again by a different user."
+                    f"This client has already been scanned by another analyst and cannot be scanned again by a different user"
                 ),
             )
 
@@ -136,7 +172,9 @@ async def add_event(
     current_web_analyst: WebAnalyst = Depends(get_current_web_analyst),
 ) -> dict:
     if payload.event_type not in VALID_EVENT_TYPES:
-        raise HTTPException(status_code=400, detail=f"Invalid event_type: {payload.event_type}")
+        raise HTTPException(
+            status_code=400, detail=f"Invalid event_type: {payload.event_type}"
+        )
 
     result = await db.execute(select(Client).where(Client.id == client_id))
     client = result.scalar_one_or_none()
@@ -171,7 +209,9 @@ async def assign_client(
     current_web_analyst: WebAnalyst = Depends(get_current_web_analyst),
 ) -> dict:
     if current_web_analyst.role != "admin":
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required.")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required."
+        )
 
     client_result = await db.execute(select(Client).where(Client.id == client_id))
     client = client_result.scalar_one_or_none()
@@ -202,12 +242,46 @@ async def assign_client(
 async def can_scan(
     name: str,
     country: str,
+    subject_type: str = "individual",
+    company: str = "",
+    countries: str = "",
     db: AsyncSession = Depends(get_db),
     current_web_analyst: WebAnalyst = Depends(get_current_web_analyst),
 ) -> dict:
-    result = await db.execute(
-        select(Client).where(Client.name == name, Client.country == country).limit(1)
-    )
+    if countries.startswith("["):
+        try:
+            parsed_countries = json.loads(countries)
+        except Exception:
+            parsed_countries = [c.strip() for c in countries.split(",") if c.strip()]
+    else:
+        parsed_countries = [c.strip() for c in countries.split(",") if c.strip()]
+    if not parsed_countries and country:
+        parsed_countries = [country]
+    sorted_c = sorted(parsed_countries)
+    sorted_json = json.dumps(sorted_c, separators=(",", ":"))
+
+    if subject_type == "company":
+        result = await db.execute(
+            select(Client)
+            .where(
+                Client.subject_type == "company",
+                Client.company == company.strip(),
+                text("clients.countries::text = :cj"),
+            )
+            .params(cj=sorted_json)
+            .limit(1)
+        )
+    else:
+        result = await db.execute(
+            select(Client)
+            .where(
+                Client.subject_type == "individual",
+                Client.name == name.strip(),
+                text("clients.countries::text = :cj"),
+            )
+            .params(cj=sorted_json)
+            .limit(1)
+        )
     client = result.scalar_one_or_none()
     if client is not None and client.scanned_by_id is not None:
         allowed = (
@@ -219,9 +293,7 @@ async def can_scan(
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail=(
-                    f"This client has already been scanned by "
-                    f"{client.scanned_by_name or 'another analyst'} "
-                    f"and cannot be scanned again by a different user."
+                    f"This client has already been scanned by another analyst and cannot be scanned again by a different user"
                 ),
             )
     return {"can_scan": True}
@@ -235,14 +307,20 @@ async def list_clients(
     current_web_analyst: WebAnalyst = Depends(get_current_web_analyst),
 ) -> list[dict]:
     is_admin = current_web_analyst.role == "admin"
-    ownership_filter = "" if is_admin else "AND (c.scanned_by_id = :user_id OR c.assigned_to_id = :user_id)"
+    ownership_filter = (
+        ""
+        if is_admin
+        else "AND (c.scanned_by_id = :user_id OR c.assigned_to_id = :user_id)"
+    )
     params: dict = {"limit": limit, "offset": offset}
     if not is_admin:
         params["user_id"] = current_web_analyst.id
 
-    rows = await db.execute(text(f"""
+    rows = await db.execute(
+        text(
+            f"""
         SELECT
-            c.id, c.name, c.country, c.company,
+            c.id, c.name, c.country, c.subject_type, c.countries, c.company,
             c.email, c.phone,
             c.scanned_by_name, c.scanned_by_role,
             c.assigned_to_id, c.assigned_to_name,
@@ -261,33 +339,60 @@ async def list_clients(
         WHERE 1=1 {ownership_filter}
         ORDER BY c.updated_at DESC
         LIMIT :limit OFFSET :offset
-    """), params)
+    """
+        ),
+        params,
+    )
 
     out = []
     for row in rows.mappings():
         latest_data = row["latest_event_data"] or {}
-        latest_score = latest_data.get("score") if row["latest_event_type"] == "scan" else None
-        latest_links_found = latest_data.get("links_count") if row["latest_event_type"] == "scan" else None
-        latest_negative_links = latest_data.get("negative_count") if row["latest_event_type"] == "scan" else None
-        out.append({
-            "id": str(row["id"]),
-            "name": row["name"],
-            "country": row["country"],
-            "company": row["company"],
-            "email": row["email"],
-            "phone": row["phone"],
-            "scanned_by_name": row["scanned_by_name"],
-            "scanned_by_role": row["scanned_by_role"],
-            "assigned_to_id": str(row["assigned_to_id"]) if row["assigned_to_id"] else None,
-            "assigned_to_name": row["assigned_to_name"],
-            "created_at": row["created_at"].isoformat() if row["created_at"] else None,
-            "updated_at": row["updated_at"].isoformat() if row["updated_at"] else None,
-            "latest_event_type": row["latest_event_type"],
-            "latest_event_at": row["latest_event_at"].isoformat() if row["latest_event_at"] else None,
-            "latest_score": latest_score,
-            "latest_links_found": latest_links_found,
-            "latest_negative_links": latest_negative_links,
-        })
+        latest_score = (
+            latest_data.get("score") if row["latest_event_type"] == "scan" else None
+        )
+        latest_links_found = (
+            latest_data.get("links_count")
+            if row["latest_event_type"] == "scan"
+            else None
+        )
+        latest_negative_links = (
+            latest_data.get("negative_count")
+            if row["latest_event_type"] == "scan"
+            else None
+        )
+        out.append(
+            {
+                "id": str(row["id"]),
+                "name": row["name"],
+                "country": row["country"],
+                "subject_type": row["subject_type"] or "individual",
+                "countries": row["countries"] or [],
+                "company": row["company"],
+                "email": row["email"],
+                "phone": row["phone"],
+                "scanned_by_name": row["scanned_by_name"],
+                "scanned_by_role": row["scanned_by_role"],
+                "assigned_to_id": (
+                    str(row["assigned_to_id"]) if row["assigned_to_id"] else None
+                ),
+                "assigned_to_name": row["assigned_to_name"],
+                "created_at": (
+                    row["created_at"].isoformat() if row["created_at"] else None
+                ),
+                "updated_at": (
+                    row["updated_at"].isoformat() if row["updated_at"] else None
+                ),
+                "latest_event_type": row["latest_event_type"],
+                "latest_event_at": (
+                    row["latest_event_at"].isoformat()
+                    if row["latest_event_at"]
+                    else None
+                ),
+                "latest_score": latest_score,
+                "latest_links_found": latest_links_found,
+                "latest_negative_links": latest_negative_links,
+            }
+        )
     return out
 
 
@@ -307,7 +412,9 @@ async def get_client(
             client.scanned_by_id != current_web_analyst.id
             and client.assigned_to_id != current_web_analyst.id
         ):
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied.")
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, detail="Access denied."
+            )
 
     events_result = await db.execute(
         select(ClientEvent)
@@ -340,22 +447,32 @@ async def get_client(
     analyst_ids = [i for i in [effective_researcher_id, scanned_by_id] if i]
     analysts_map: dict[uuid.UUID, WebAnalyst] = {}
     if analyst_ids:
-        wa_result = await db.execute(select(WebAnalyst).where(WebAnalyst.id.in_(analyst_ids)))
+        wa_result = await db.execute(
+            select(WebAnalyst).where(WebAnalyst.id.in_(analyst_ids))
+        )
         for wa in wa_result.scalars():
             analysts_map[wa.id] = wa
 
-    researched_by = analysts_map.get(effective_researcher_id) if effective_researcher_id else None
+    researched_by = (
+        analysts_map.get(effective_researcher_id) if effective_researcher_id else None
+    )
     scanned_by = analysts_map.get(scanned_by_id) if scanned_by_id else None
 
     return {
         "id": str(client.id),
         "name": client.name,
         "country": client.country,
+        "subject_type": client.subject_type or "individual",
+        "countries": client.countries or [],
         "company": client.company,
         "email": client.email,
         "phone": client.phone,
-        "researched_by_name": researched_by.name if researched_by else client.scanned_by_name,
-        "researched_by_role": researched_by.role if researched_by else client.scanned_by_role,
+        "researched_by_name": (
+            researched_by.name if researched_by else client.scanned_by_name
+        ),
+        "researched_by_role": (
+            researched_by.role if researched_by else client.scanned_by_role
+        ),
         "scanned_by_name": scanned_by.name if scanned_by else None,
         "scanned_by_role": scanned_by.role if scanned_by else None,
         "assigned_to_id": str(client.assigned_to_id) if client.assigned_to_id else None,
