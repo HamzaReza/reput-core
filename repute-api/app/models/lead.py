@@ -69,6 +69,7 @@ class GenerateLeadJob(Base):
     )
     result: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    current_step: Mapped[str | None] = mapped_column(String(50), nullable=True)
     created_by_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("web_analysts.id"), nullable=False
     )

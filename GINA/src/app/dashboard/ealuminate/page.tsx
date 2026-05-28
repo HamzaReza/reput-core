@@ -82,22 +82,22 @@ const PIPELINE_STEPS = [
   {
     n: "01",
     title: "Profile research",
-    desc: "Identity, background, and context discovery",
+    desc: "Identity, employment, and context discovery.",
   },
   {
     n: "02",
     title: "Keyword preparation",
-    desc: "Search intent and query terms finalized",
+    desc: "Build a relevant set of keywords and filters.",
   },
   {
     n: "03",
     title: "Scan and classification",
-    desc: "Sources fetched and reputation signals scored",
+    desc: "Sources scanned and signals are categorized.",
   },
   {
     n: "04",
     title: "Brief ready",
-    desc: "Meeting summary and talking points generated",
+    desc: "Findings summarized into an executive-ready report.",
   },
 ] as const;
 
@@ -636,6 +636,8 @@ function EaluminatePageInner() {
   const tipSwapRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [isResuming, setIsResuming] = useState(false);
+  const [currentStep, setCurrentStep] = useState<string | null>(null);
+  const [jobId, setJobId] = useState<string | null>(null);
   const persistContextRef = useRef({
     leadId,
     clientId,
@@ -689,6 +691,9 @@ function EaluminatePageInner() {
   const startPolling = (job_id: string) => {
     if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
 
+    let consecutiveFailures = 0;
+    const MAX_FAILURES = 5;
+
     const checkJob = async () => {
       try {
         const poll = await fetch(`${scanApiUrl}/generate-lead/${job_id}`, {
@@ -701,11 +706,17 @@ function EaluminatePageInner() {
           return;
         }
         const pollData = await poll.json();
+        consecutiveFailures = 0;
+
+        if (pollData.current_step) {
+          setCurrentStep(pollData.current_step);
+        }
 
         if (pollData.status === "done") {
           clearInterval(pollIntervalRef.current!);
           localStorage.removeItem(JOB_STORAGE_KEY);
           stopCycles();
+          setCurrentStep(null);
 
           const scanResult = pollData.result as ScanResult;
           const finalScore =
@@ -808,6 +819,7 @@ function EaluminatePageInner() {
           clearInterval(pollIntervalRef.current!);
           localStorage.removeItem(JOB_STORAGE_KEY);
           stopCycles();
+          setCurrentStep(null);
           setResult(null);
           setScanComplete(false);
           setScore(0);
@@ -817,9 +829,12 @@ function EaluminatePageInner() {
         }
         // "pending" | "running" → keep polling
       } catch {
+        consecutiveFailures++;
+        if (consecutiveFailures < MAX_FAILURES) return;
         clearInterval(pollIntervalRef.current!);
         localStorage.removeItem(JOB_STORAGE_KEY);
         stopCycles();
+        setCurrentStep(null);
         setError("Network error while polling.");
         setIsResuming(false);
         setLoading(false);
@@ -916,6 +931,7 @@ function EaluminatePageInner() {
     setIsResuming(true);
     setLoading(true);
     startCycles();
+    setJobId(stored.job_id);
     startPolling(stored.job_id);
     return cleanup;
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1595,6 +1611,7 @@ function EaluminatePageInner() {
           preAnalysisDone: true,
         }),
       );
+      setJobId(data.job_id);
       startPolling(data.job_id);
       // loading state stays active — startPolling clears it when done
     } catch {
@@ -1627,17 +1644,13 @@ function EaluminatePageInner() {
       }}
     >
       <style>{`
-        @keyframes repu-logo-spin {
-          from { transform: rotate(0deg); }
-          to   { transform: rotate(360deg); }
+        @keyframes eal-dot-pulse {
+          0%, 100% { transform: scale(1);   opacity: 0.7; }
+          50%      { transform: scale(1.4); opacity: 1;   }
         }
-        @keyframes repu-ring-pulse {
-          0%   { transform: scale(1);    opacity: 0.6; }
-          100% { transform: scale(2.8);  opacity: 0; }
-        }
-        @keyframes reput-label-breathe {
-          0%, 100% { opacity: 0.4; }
-          50%      { opacity: 0.85; }
+        @keyframes eal-shimmer {
+          0%   { transform: translateX(-100%); }
+          100% { transform: translateX(100%); }
         }
         .lead-name-grid {
           display: grid;
@@ -1656,12 +1669,53 @@ function EaluminatePageInner() {
           width: 18.5rem;
           flex-shrink: 0;
         }
+        
+        /* Mobile (max 480px) */
         @media (max-width: 480px) {
-          .lead-name-grid { grid-template-columns: 1fr; }
+          .lead-name-grid { 
+            grid-template-columns: 1fr; 
+            gap: 0.75rem;
+          }
+          .eal-card-body { 
+            flex-direction: column;
+            gap: 1rem;
+          }
+          .eal-pipeline { 
+            width: 100% !important;
+            position: relative !important;
+            top: auto !important;
+          }
         }
-        @media (max-width: 768px) {
-          .eal-card-body { flex-direction: column; }
-          .eal-pipeline { width: 100% !important; }
+        
+        /* Tablet (481px - 768px) */
+        @media (min-width: 481px) and (max-width: 768px) {
+          .lead-name-grid { 
+            grid-template-columns: 1fr;
+            gap: 0.75rem;
+          }
+          .eal-card-body { 
+            flex-direction: column;
+            gap: 1.5rem;
+          }
+          .eal-pipeline { 
+            width: 100% !important;
+            position: relative !important;
+            top: auto !important;
+          }
+        }
+        
+        /* Tablet landscape (769px - 1024px) */
+        @media (min-width: 769px) and (max-width: 1024px) {
+          .eal-pipeline {
+            width: 16rem;
+          }
+        }
+        
+        /* Large screens (1025px+) */
+        @media (min-width: 1025px) {
+          .eal-pipeline {
+            width: 18.5rem;
+          }
         }
       `}</style>
 
@@ -1755,6 +1809,8 @@ function EaluminatePageInner() {
           GaugeComponent={RepuGauge}
           isResuming={isResuming}
           scanDuration={scanDuration}
+          currentStep={currentStep}
+          jobId={jobId}
         />
       </div>
       {exportSummaryModalOpen && (
