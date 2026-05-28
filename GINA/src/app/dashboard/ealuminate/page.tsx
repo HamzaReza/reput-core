@@ -41,6 +41,11 @@ const BRIEF_FIELDS = [
   { key: "objection_handlers", label: "Objection Handlers", color: "#48D4B8" },
 ];
 
+type MockLoadingOptions = {
+  msPerStage?: number;
+  finishWithMock?: boolean;
+};
+
 declare global {
   interface Window {
     __EALU_DEBUG__?: {
@@ -53,7 +58,14 @@ declare global {
       setPreAnalysisSummary: (value: string) => void;
       setEditableKeywords: (value: string[]) => void;
       setError: (value: string) => void;
+      setCurrentStep: (value: string | null) => void;
+      setPreAnalysisLoading: (value: boolean) => void;
+      loadingSteps: readonly string[];
       seedMockScan: () => void;
+      mockLoadingStage: (step: string) => void;
+      mockLoadingStages: (opts?: MockLoadingOptions) => void;
+      mockPipelineLoading: (opts?: MockLoadingOptions) => void;
+      stopMockLoading: () => void;
       resetUi: () => void;
     };
   }
@@ -99,6 +111,14 @@ const PIPELINE_STEPS = [
     title: "Brief ready",
     desc: "Findings summarized into an executive-ready report.",
   },
+] as const;
+
+const SCAN_LOADING_STEPS = [
+  "building_queries",
+  "serper_search",
+  "firecrawl_scrape",
+  "claude_classification",
+  "generating_brief",
 ] as const;
 
 const RISK_COLORS: Record<
@@ -635,6 +655,9 @@ function EaluminatePageInner() {
   const tipIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const tipSwapRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const mockLoadingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
   const [isResuming, setIsResuming] = useState(false);
   const [currentStep, setCurrentStep] = useState<string | null>(null);
   const [jobId, setJobId] = useState<string | null>(null);
@@ -940,6 +963,200 @@ function EaluminatePageInner() {
   useEffect(() => {
     if (process.env.NODE_ENV === "production") return;
 
+    const stopMockLoadingTimers = () => {
+      if (mockLoadingTimerRef.current) {
+        clearTimeout(mockLoadingTimerRef.current);
+        mockLoadingTimerRef.current = null;
+      }
+    };
+
+    const scheduleMockStage = (fn: () => void, ms: number) => {
+      mockLoadingTimerRef.current = setTimeout(fn, ms);
+    };
+
+    const prepareScanLoadingUi = () => {
+      setError("");
+      setResult(null);
+      setScore(0);
+      setScanComplete(false);
+      setPreAnalysisDone(true);
+      setPreAnalysisSummary("Mock pre-analysis for UI testing.");
+      setEditableKeywords(["reputation", "news coverage", "public profile"]);
+      setKeywordsReady(true);
+      setPreAnalysisLoading(false);
+      setLoading(true);
+      startCycles();
+    };
+
+    const seedMockScan = () => {
+      const mockLinks: WebLink[] = [
+        {
+          url: "https://example.com/news/john-doe-profile",
+          title: "Public profile and industry mentions",
+          snippet:
+            "Overview of public mentions and reputation-related context.",
+          sentiment: "neutral",
+          risk: "low",
+          source: "Example News",
+          type: "news",
+        },
+        {
+          url: "https://example.com/blog/interview",
+          title: "Interview coverage",
+          snippet:
+            "Interview article with generally positive coverage and quotes.",
+          sentiment: "positive",
+          risk: "none",
+          source: "Example Blog",
+          type: "blog",
+        },
+        {
+          url: "https://example.com/forum/thread",
+          title: "Forum thread discussion",
+          snippet:
+            "A thread containing mixed and partially critical opinions.",
+          sentiment: "negative",
+          risk: "medium",
+          source: "Example Forum",
+          type: "forum",
+        },
+      ];
+
+      const negative = mockLinks.filter(
+        (l) =>
+          l.sentiment === "negative" ||
+          l.risk === "high" ||
+          l.risk === "medium",
+      );
+      const positive = mockLinks.filter(
+        (l) =>
+          l.sentiment === "positive" ||
+          l.sentiment === "neutral" ||
+          l.risk === "low" ||
+          l.risk === "none",
+      );
+      const neutral = mockLinks.filter((l) => l.sentiment === "neutral");
+      const seededResult: ScanResult = {
+        links: mockLinks,
+        negative,
+        positive,
+        neutral,
+        summary: {
+          headline: "Mixed public footprint with manageable risk indicators.",
+          issues: [
+            "Negative forum discussion around a prior business decision.",
+          ],
+          talkingPoints: [
+            "Emphasize documented wins and transparent communication.",
+          ],
+        },
+      };
+
+      stopMockLoadingTimers();
+      stopCycles();
+      setLoading(false);
+      setCurrentStep(null);
+      setError("");
+      setPreAnalysisDone(true);
+      setPreAnalysisSummary(
+        "Seeded dev summary for UI testing without API requests.",
+      );
+      setEditableKeywords(["reputation", "news coverage", "public profile"]);
+      setKeywordsReady(true);
+      setResult(seededResult);
+      setScore(deriveScore(negative.length, positive.length));
+      setScanComplete(true);
+    };
+
+    const mockLoadingStage = (step: string) => {
+      stopMockLoadingTimers();
+      prepareScanLoadingUi();
+      setCurrentStep(step);
+    };
+
+    const mockLoadingStages = (opts?: MockLoadingOptions) => {
+      const msPerStage = opts?.msPerStage ?? 2500;
+      const finishWithMock = opts?.finishWithMock ?? true;
+
+      stopMockLoadingTimers();
+      prepareScanLoadingUi();
+
+      let idx = 0;
+      const advance = () => {
+        if (idx >= SCAN_LOADING_STEPS.length) {
+          if (finishWithMock) {
+            seedMockScan();
+          } else {
+            stopCycles();
+            setLoading(false);
+            setCurrentStep(null);
+          }
+          return;
+        }
+
+        setCurrentStep(SCAN_LOADING_STEPS[idx]);
+        idx += 1;
+        scheduleMockStage(advance, msPerStage);
+      };
+
+      setCurrentStep(SCAN_LOADING_STEPS[0]);
+      idx = 1;
+      scheduleMockStage(advance, msPerStage);
+    };
+
+    const mockPipelineLoading = (opts?: MockLoadingOptions) => {
+      const msPerStage = opts?.msPerStage ?? 2500;
+      const finishWithMock = opts?.finishWithMock ?? true;
+
+      stopMockLoadingTimers();
+      stopCycles();
+      setError("");
+      setResult(null);
+      setScore(0);
+      setScanComplete(false);
+      setKeywordsReady(false);
+      setPreAnalysisDone(false);
+      setPreAnalysisSummary("");
+      setEditableKeywords([]);
+      setLoading(false);
+      setCurrentStep(null);
+      setPreAnalysisLoading(true);
+
+      scheduleMockStage(() => {
+        setPreAnalysisLoading(false);
+        setPreAnalysisDone(true);
+        setPreAnalysisSummary("Mock profile research complete.");
+        setEditableKeywords(["reputation", "news coverage", "public profile"]);
+        setKeywordsReady(true);
+
+        scheduleMockStage(() => {
+          prepareScanLoadingUi();
+
+          let idx = 0;
+          const advanceScan = () => {
+            if (idx >= SCAN_LOADING_STEPS.length) {
+              if (finishWithMock) {
+                seedMockScan();
+              } else {
+                stopCycles();
+                setLoading(false);
+                setCurrentStep(null);
+              }
+              return;
+            }
+
+            setCurrentStep(SCAN_LOADING_STEPS[idx]);
+            idx += 1;
+            scheduleMockStage(advanceScan, msPerStage);
+          };
+
+          setCurrentStep(SCAN_LOADING_STEPS[0]);
+          idx = 1;
+          scheduleMockStage(advanceScan, msPerStage);
+        }, msPerStage);
+      }, msPerStage);
+    };
+
     window.__EALU_DEBUG__ = {
       setLoading,
       setResult,
@@ -950,84 +1167,23 @@ function EaluminatePageInner() {
       setPreAnalysisSummary,
       setEditableKeywords,
       setError,
-      seedMockScan: () => {
-        const mockLinks: WebLink[] = [
-          {
-            url: "https://example.com/news/john-doe-profile",
-            title: "Public profile and industry mentions",
-            snippet:
-              "Overview of public mentions and reputation-related context.",
-            sentiment: "neutral",
-            risk: "low",
-            source: "Example News",
-            type: "news",
-          },
-          {
-            url: "https://example.com/blog/interview",
-            title: "Interview coverage",
-            snippet:
-              "Interview article with generally positive coverage and quotes.",
-            sentiment: "positive",
-            risk: "none",
-            source: "Example Blog",
-            type: "blog",
-          },
-          {
-            url: "https://example.com/forum/thread",
-            title: "Forum thread discussion",
-            snippet:
-              "A thread containing mixed and partially critical opinions.",
-            sentiment: "negative",
-            risk: "medium",
-            source: "Example Forum",
-            type: "forum",
-          },
-        ];
-
-        const negative = mockLinks.filter(
-          (l) =>
-            l.sentiment === "negative" ||
-            l.risk === "high" ||
-            l.risk === "medium",
-        );
-        const positive = mockLinks.filter(
-          (l) =>
-            l.sentiment === "positive" ||
-            l.sentiment === "neutral" ||
-            l.risk === "low" ||
-            l.risk === "none",
-        );
-        const neutral = mockLinks.filter((l) => l.sentiment === "neutral");
-        const seededResult: ScanResult = {
-          links: mockLinks,
-          negative,
-          positive,
-          neutral,
-          summary: {
-            headline: "Mixed public footprint with manageable risk indicators.",
-            issues: [
-              "Negative forum discussion around a prior business decision.",
-            ],
-            talkingPoints: [
-              "Emphasize documented wins and transparent communication.",
-            ],
-          },
-        };
-
-        setLoading(false);
-        setError("");
-        setPreAnalysisDone(true);
-        setPreAnalysisSummary(
-          "Seeded dev summary for UI testing without API requests.",
-        );
-        setEditableKeywords(["reputation", "news coverage", "public profile"]);
-        setKeywordsReady(true);
-        setResult(seededResult);
-        setScore(deriveScore(negative.length, positive.length));
-        setScanComplete(true);
+      setCurrentStep,
+      setPreAnalysisLoading,
+      loadingSteps: SCAN_LOADING_STEPS,
+      seedMockScan,
+      mockLoadingStage,
+      mockLoadingStages,
+      mockPipelineLoading,
+      stopMockLoading: () => {
+        stopMockLoadingTimers();
+        stopCycles();
       },
       resetUi: () => {
+        stopMockLoadingTimers();
+        stopCycles();
         setLoading(false);
+        setCurrentStep(null);
+        setPreAnalysisLoading(false);
         setError("");
         setResult(null);
         setScore(0);
@@ -1040,6 +1196,7 @@ function EaluminatePageInner() {
     };
 
     return () => {
+      stopMockLoadingTimers();
       delete window.__EALU_DEBUG__;
     };
   }, []);
