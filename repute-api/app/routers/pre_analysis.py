@@ -14,39 +14,127 @@ from app.utils.auth import get_current_web_analyst
 router = APIRouter(prefix="/pre-analysis", tags=["pre-analysis"])
 
 NATIONALITY_ALIASES: dict[str, str] = {
-    "american": "US", "australian": "AU", "austrian": "AT", "belgian": "BE",
-    "brazilian": "BR", "british": "GB", "canadian": "CA", "chinese": "CN",
-    "czech": "CZ", "danish": "DK", "dutch": "NL", "egyptian": "EG",
-    "emirati": "AE", "finnish": "FI", "french": "FR", "german": "DE",
-    "greek": "GR", "hungarian": "HU", "indian": "IN", "indonesian": "ID",
-    "iranian": "IR", "irish": "IE", "israeli": "IL", "italian": "IT",
-    "japanese": "JP", "korean": "KR", "malaysian": "MY", "mexican": "MX",
-    "moroccan": "MA", "nigerian": "NG", "norwegian": "NO", "pakistani": "PK",
-    "polish": "PL", "portuguese": "PT", "romanian": "RO", "russian": "RU",
-    "saudi": "SA", "singaporean": "SG", "spanish": "ES", "swedish": "SE",
-    "swiss": "CH", "thai": "TH", "turkish": "TR", "ukrainian": "UA",
-    "uk": "GB", "united kingdom": "GB", "usa": "US", "united states": "US",
-    "south korea": "KR", "turkey": "TR", "uae": "AE", "vietnam": "VN",
+    "american": "US",
+    "australian": "AU",
+    "austrian": "AT",
+    "belgian": "BE",
+    "brazilian": "BR",
+    "british": "GB",
+    "canadian": "CA",
+    "chinese": "CN",
+    "czech": "CZ",
+    "danish": "DK",
+    "dutch": "NL",
+    "egyptian": "EG",
+    "emirati": "AE",
+    "finnish": "FI",
+    "french": "FR",
+    "german": "DE",
+    "greek": "GR",
+    "hungarian": "HU",
+    "indian": "IN",
+    "indonesian": "ID",
+    "iranian": "IR",
+    "irish": "IE",
+    "israeli": "IL",
+    "italian": "IT",
+    "japanese": "JP",
+    "korean": "KR",
+    "malaysian": "MY",
+    "mexican": "MX",
+    "moroccan": "MA",
+    "nigerian": "NG",
+    "norwegian": "NO",
+    "pakistani": "PK",
+    "polish": "PL",
+    "portuguese": "PT",
+    "romanian": "RO",
+    "russian": "RU",
+    "saudi": "SA",
+    "singaporean": "SG",
+    "spanish": "ES",
+    "swedish": "SE",
+    "swiss": "CH",
+    "thai": "TH",
+    "turkish": "TR",
+    "ukrainian": "UA",
+    "uk": "GB",
+    "united kingdom": "GB",
+    "usa": "US",
+    "united states": "US",
+    "south korea": "KR",
+    "turkey": "TR",
+    "uae": "AE",
+    "vietnam": "VN",
     "vietnamese": "VN",
 }
 
 COUNTRY_TO_LANGUAGE: dict[str, str] = {
-    "IT": "it", "FR": "fr", "DE": "de", "ES": "es", "PT": "pt", "NL": "nl",
-    "PL": "pl", "RO": "ro", "HU": "hu", "CZ": "cs", "RU": "ru", "UA": "uk",
-    "TR": "tr", "JP": "ja", "KR": "ko", "CN": "zh-CN", "SA": "ar", "AE": "ar",
-    "EG": "ar", "IN": "hi", "TH": "th", "VN": "vi", "ID": "id", "MY": "ms",
-    "GR": "el", "SE": "sv", "NO": "no", "FI": "fi", "DK": "da",
-    "GB": "en", "US": "en", "CA": "en", "AU": "en", "IE": "en",
+    "IT": "it",
+    "FR": "fr",
+    "DE": "de",
+    "ES": "es",
+    "PT": "pt",
+    "NL": "nl",
+    "PL": "pl",
+    "RO": "ro",
+    "HU": "hu",
+    "CZ": "cs",
+    "RU": "ru",
+    "UA": "uk",
+    "TR": "tr",
+    "JP": "ja",
+    "KR": "ko",
+    "CN": "zh-CN",
+    "SA": "ar",
+    "AE": "ar",
+    "EG": "ar",
+    "IN": "hi",
+    "TH": "th",
+    "VN": "vi",
+    "ID": "id",
+    "MY": "ms",
+    "GR": "el",
+    "SE": "sv",
+    "NO": "no",
+    "FI": "fi",
+    "DK": "da",
+    "GB": "en",
+    "US": "en",
+    "CA": "en",
+    "AU": "en",
+    "IE": "en",
 }
 
 LANGUAGE_CODE_TO_NAME: dict[str, str] = {
-    "en": "English", "it": "Italian", "es": "Spanish", "fr": "French",
-    "de": "German", "pt": "Portuguese", "nl": "Dutch", "pl": "Polish",
-    "ro": "Romanian", "hu": "Hungarian", "cs": "Czech", "ru": "Russian",
-    "uk": "Ukrainian", "tr": "Turkish", "ja": "Japanese", "ko": "Korean",
-    "zh-CN": "Chinese", "ar": "Arabic", "hi": "Hindi", "th": "Thai",
-    "vi": "Vietnamese", "id": "Indonesian", "ms": "Malay", "el": "Greek",
-    "sv": "Swedish", "no": "Norwegian", "fi": "Finnish", "da": "Danish",
+    "en": "English",
+    "it": "Italian",
+    "es": "Spanish",
+    "fr": "French",
+    "de": "German",
+    "pt": "Portuguese",
+    "nl": "Dutch",
+    "pl": "Polish",
+    "ro": "Romanian",
+    "hu": "Hungarian",
+    "cs": "Czech",
+    "ru": "Russian",
+    "uk": "Ukrainian",
+    "tr": "Turkish",
+    "ja": "Japanese",
+    "ko": "Korean",
+    "zh-CN": "Chinese",
+    "ar": "Arabic",
+    "hi": "Hindi",
+    "th": "Thai",
+    "vi": "Vietnamese",
+    "id": "Indonesian",
+    "ms": "Malay",
+    "el": "Greek",
+    "sv": "Swedish",
+    "no": "Norwegian",
+    "fi": "Finnish",
+    "da": "Danish",
 }
 
 REPORT_LANG_MAP: dict[str, str] = {"en": "English", "it": "Italian", "es": "Spanish"}
@@ -61,6 +149,7 @@ FALLBACK_PROFILE = {
     "reputation_notes": "Insufficient data to assess reputation.",
 }
 
+
 def _build_estimate(neg: dict | None) -> dict:
     """Normalise the negative-estimation call's output into the response shape.
     Uses observed domain count directly — no arbitrary multiplier.
@@ -73,12 +162,9 @@ def _build_estimate(neg: dict | None) -> dict:
 
     if domains == 0:
         low, high = 0, 0
-    elif saturation == "saturated":
-        low = max(1, int(domains * 0.8))
-        high = int(domains * 1.3)
     else:
-        low = domains
-        high = int(domains * 2.5)
+        low = int(domains * 3)
+        high = int(domains * 10)
 
     return {
         "coverage_assessment": assessment,
@@ -120,17 +206,27 @@ async def pre_analysis(
         raise HTTPException(status_code=500, detail="ANTHROPIC_API_KEY not configured")
 
     countries: list[str] = (
-        body.countries if body.countries and len(body.countries) > 0
+        body.countries
+        if body.countries and len(body.countries) > 0
         else ([body.country] if body.country else [])
     )
     if not countries:
         raise HTTPException(status_code=400, detail="At least one country is required.")
     if body.subjectType == "individual" and (not body.firstName or not body.lastName):
-        raise HTTPException(status_code=400, detail="firstName and lastName are required for individual subjects.")
+        raise HTTPException(
+            status_code=400,
+            detail="firstName and lastName are required for individual subjects.",
+        )
     if body.subjectType == "company" and not body.company:
-        raise HTTPException(status_code=400, detail="company is required for company subjects.")
+        raise HTTPException(
+            status_code=400, detail="company is required for company subjects."
+        )
 
-    model = "claude-haiku-4-5-20251001" if body.scanTier == "standard" else "claude-sonnet-4-6"
+    model = (
+        "claude-haiku-4-5-20251001"
+        if body.scanTier == "standard"
+        else "claude-sonnet-4-6"
+    )
     # web_search_tool = "web_search_20250305" if body.scanTier == "standard" else "web_search_20260209"
     web_search_tool = "web_search_20250305"
 
@@ -139,11 +235,14 @@ async def pre_analysis(
     country_code = _country_code(country)
     lang = COUNTRY_TO_LANGUAGE.get(country_code.upper()) if country_code else None
     language_name = (
-        REPORT_LANG_MAP.get(body.reportLanguage, "English") if body.reportLanguage
+        REPORT_LANG_MAP.get(body.reportLanguage, "English")
+        if body.reportLanguage
         else LANGUAGE_CODE_TO_NAME.get(lang or "", "English")
     )
 
-    full_name = f"{(body.firstName or '').strip()} {(body.lastName or '').strip()}".strip()
+    full_name = (
+        f"{(body.firstName or '').strip()} {(body.lastName or '').strip()}".strip()
+    )
     subject_label = body.company if body.subjectType == "company" else full_name
     countries_label = ", ".join(countries)
     year = __import__("datetime").date.today().year
@@ -157,10 +256,12 @@ async def pre_analysis(
     keyword_focus_rules = {
         "negative": f"keywords: up to {cap} items (minimum 1) — ADVERSE terms only: legal disputes, fraud, misconduct, scandal, complaints, litigation. {no_name_instruction} All keywords in {language_name}.",
         "positive": f"keywords: up to {cap} items (minimum 1) — POSITIVE terms only: achievements, awards, leadership, philanthropy, recognition. {no_name_instruction} All keywords in {language_name}.",
-        "neutral":  f"keywords: up to {cap} items (minimum 1) — NEUTRAL factual terms only: role, organisation, sector, projects. {no_name_instruction} All keywords in {language_name}.",
-        "all":      f"keywords: up to {cap} items (minimum 1), 1-2 words each, balanced mix across positive, negative and neutral reputation angles. {no_name_instruction} All keywords in {language_name}.",
+        "neutral": f"keywords: up to {cap} items (minimum 1) — NEUTRAL factual terms only: role, organisation, sector, projects. {no_name_instruction} All keywords in {language_name}.",
+        "all": f"keywords: up to {cap} items (minimum 1), 1-2 words each, balanced mix across positive, negative and neutral reputation angles. {no_name_instruction} All keywords in {language_name}.",
     }
-    keyword_focus_rule = keyword_focus_rules.get(body.keywordFocus, keyword_focus_rules["all"])
+    keyword_focus_rule = keyword_focus_rules.get(
+        body.keywordFocus, keyword_focus_rules["all"]
+    )
 
     # ── Search call (main research summary) ──────────────────────────────────
     if body.subjectType == "company":
@@ -177,7 +278,11 @@ async def pre_analysis(
         )
         search_content = (
             f"Research this company:\n\nCompany: {body.company}\nCountry: {countries_label}"
-            + (f"\nContext: {body.description.strip()}" if body.description.strip() else "")
+            + (
+                f"\nContext: {body.description.strip()}"
+                if body.description.strip()
+                else ""
+            )
         )
         format_identity_hint = "<2-3 sentences: company name, industry, country of origin, area of operation, size or scale indicator>"
         format_background_hint = "<5-7 sentences: founding story, business model, growth trajectory, key products or services, market position, major clients or partnerships, geographic reach>"
@@ -199,7 +304,11 @@ async def pre_analysis(
             f"Research this person:\n\nName: {full_name}"
             + (f"\nCompany: {body.company}" if body.company else "")
             + f"\nCountry: {countries_label}"
-            + (f"\nContext: {body.description.strip()}" if body.description.strip() else "")
+            + (
+                f"\nContext: {body.description.strip()}"
+                if body.description.strip()
+                else ""
+            )
         )
         format_identity_hint = "<2-3 sentences: full name, known professional roles, nationality, geographic base, industry sector>"
         format_background_hint = "<5-7 sentences: career arc from early career to present, key employers, roles held, major projects or deals, educational background if known, industry standing>"
@@ -207,7 +316,8 @@ async def pre_analysis(
 
     # ── Negative estimation call (dedicated adverse search) ───────────────────
     subject_prefix = (
-        f"Company: {body.company}" if body.subjectType == "company"
+        f"Company: {body.company}"
+        if body.subjectType == "company"
         else f"Name: {full_name}"
     )
     adverse_context = body.description.strip()
@@ -256,7 +366,9 @@ async def pre_analysis(
     neg_links: dict | None = None
 
     try:
-        print(f"[pre-analysis] starting parallel calls for: {subject_label!r} | countries={countries}")
+        print(
+            f"[pre-analysis] starting parallel calls for: {subject_label!r} | countries={countries}"
+        )
 
         search_result, neg_result = await asyncio.gather(
             client.messages.create(
@@ -281,10 +393,14 @@ async def pre_analysis(
             raise search_result
 
         search_msg = search_result
-        print(f"[pre-analysis] search done — stop_reason={search_msg.stop_reason!r} | blocks={[b.type for b in search_msg.content]}")
+        print(
+            f"[pre-analysis] search done — stop_reason={search_msg.stop_reason!r} | blocks={[b.type for b in search_msg.content]}"
+        )
         for i, block in enumerate(search_msg.content):
             if block.type == "text":
-                print(f"[pre-analysis] text block[{i}] (first 300 chars): {block.text[:300]!r}")
+                print(
+                    f"[pre-analysis] text block[{i}] (first 300 chars): {block.text[:300]!r}"
+                )
             else:
                 print(f"[pre-analysis] non-text block[{i}]: type={block.type!r}")
 
@@ -293,10 +409,14 @@ async def pre_analysis(
         ).strip()
 
         search_queries_used: list[str] = []
-        queries_match = re.search(r"SEARCH_QUERIES_USED:\s*(.+)$", research_summary, re.MULTILINE)
+        queries_match = re.search(
+            r"SEARCH_QUERIES_USED:\s*(.+)$", research_summary, re.MULTILINE
+        )
         if queries_match:
-            search_queries_used = [q.strip() for q in queries_match.group(1).split("|") if q.strip()]
-            research_summary = research_summary[:queries_match.start()].strip()
+            search_queries_used = [
+                q.strip() for q in queries_match.group(1).split("|") if q.strip()
+            ]
+            research_summary = research_summary[: queries_match.start()].strip()
 
         if not research_summary:
             print("[pre-analysis] EMPTY SUMMARY — returning fallback")
@@ -305,10 +425,14 @@ async def pre_analysis(
 
         # ── Handle negative estimation result ─────────────────────────────────
         if isinstance(neg_result, Exception):
-            print(f"[pre-analysis] negative estimation failed (non-fatal): {neg_result}")
+            print(
+                f"[pre-analysis] negative estimation failed (non-fatal): {neg_result}"
+            )
         else:
             neg_msg = neg_result
-            print(f"[pre-analysis] neg estimation done — stop_reason={neg_msg.stop_reason!r}")
+            print(
+                f"[pre-analysis] neg estimation done — stop_reason={neg_msg.stop_reason!r}"
+            )
             neg_text = "\n".join(
                 block.text for block in neg_msg.content if block.type == "text"
             ).strip()
@@ -325,15 +449,20 @@ async def pre_analysis(
                         except Exception as inner_err:
                             print(f"[pre-analysis] neg JSON parse failed: {inner_err}")
             else:
-                print("[pre-analysis] negative estimation returned no text — using minimal fallback")
+                print(
+                    "[pre-analysis] negative estimation returned no text — using minimal fallback"
+                )
 
         # ── Format call: profile + keywords only ──────────────────────────────
-        print(f"[pre-analysis] research_summary length={len(research_summary)} chars — proceeding to format")
+        print(
+            f"[pre-analysis] research_summary length={len(research_summary)} chars — proceeding to format"
+        )
 
         queries_section = (
             "\n\nSearch queries actually executed during research:\n"
             + "\n".join(f"- {q}" for q in search_queries_used)
-            if search_queries_used else ""
+            if search_queries_used
+            else ""
         )
         keywords_instruction = (
             f"{keyword_focus_rule} "
@@ -366,7 +495,7 @@ async def pre_analysis(
                         f'    "negative_findings": "<4-8 sentences: legal proceedings, regulatory sanctions, fraud allegations, controversies, scandals, complaints — include dates and specifics where available; if none write \'No negative findings in available sources\'>",\n'
                         f'    "positive_presence": "<3-6 sentences: awards, recognitions, successful ventures, positive media coverage, industry leadership, philanthropic activities>",\n'
                         f'    "reputation_notes": "<2-4 sentences: overall reputational standing, key risk indicators, public perception summary, recommended scrutiny level>"\n'
-                        f'  }},\n'
+                        f"  }},\n"
                         f'  "keywords": ["<keyword1>", ...]\n}}\n'
                         f"Rules: every field fully populated with detail, based only on the summary above, {keywords_instruction}."
                     ),
@@ -385,6 +514,7 @@ async def pre_analysis(
 
     except Exception as e:
         import traceback
+
         print(f"[pre-analysis] EXCEPTION: {e}")
         print(traceback.format_exc())
 
