@@ -832,7 +832,7 @@ class GenerateLeadRequest(BaseModel):
 # ── Core logic (extracted so background runner can call it) ──────────────────
 
 
-async def _execute_generate_lead(body: GenerateLeadRequest, settings) -> dict:
+async def _execute_generate_lead(body: GenerateLeadRequest, settings, job_id: uuid.UUID | None = None) -> dict:
     countries: list[str] = (
         body.countries
         if body.countries and len(body.countries) > 0
@@ -868,6 +868,8 @@ async def _execute_generate_lead(body: GenerateLeadRequest, settings) -> dict:
 
     async with httpx.AsyncClient() as http:
         # ── Phase 1: Serper searches ──────────────────────────────────────────
+        if job_id:
+            await _set_step(job_id, "serper_search")
         search_queries = [sanitized_subject]
         if body.useKeywords:
             search_queries += [f"{sanitized_subject} {kw}" for kw in body.keywords]
@@ -909,6 +911,8 @@ async def _execute_generate_lead(body: GenerateLeadRequest, settings) -> dict:
         all_pages_fetched = [r[2] for r in serper_results]
 
         # ── Phase 2: Deduplicate & scrape ─────────────────────────────────────
+        if job_id:
+            await _set_step(job_id, "firecrawl_scrape")
         seen_urls: set[str] = set()
         articles: list[dict] = []
         date_map: dict[str, str] = {}
@@ -983,6 +987,8 @@ async def _execute_generate_lead(body: GenerateLeadRequest, settings) -> dict:
         urls_sent_to_claude = [a["url"] for a in articles]
 
     # ── Phase 3: Claude classification (batched to stay under 200K token limit) ──
+    if job_id:
+        await _set_step(job_id, "claude_classification")
     CLASSIFY_BATCH_SIZE = 20
     _claude_sem = asyncio.Semaphore(3)
 
@@ -1029,6 +1035,8 @@ async def _execute_generate_lead(body: GenerateLeadRequest, settings) -> dict:
     neutral = [l for l in deduped if l.get("sentiment") == "neutral"]
     score = _derive_score(len(negative), len(positive))
 
+    if job_id:
+        await _set_step(job_id, "generating_brief")
     summary = await _generate_meeting_summary(
         client, sanitized_subject, score, deduped, output_language_name, tier_model
     )
@@ -1132,15 +1140,24 @@ async def _update_job_status(
         await db.commit()
 
 
+async def _set_step(job_id: uuid.UUID, step: str) -> None:
+    async with AsyncSessionLocal() as db:
+        job = await db.get(GenerateLeadJob, job_id)
+        if job:
+            job.current_step = step
+            await db.commit()
+
+
 async def _run_job(job_id: uuid.UUID, body: GenerateLeadRequest) -> None:
     async with AsyncSessionLocal() as db:
         job = await db.get(GenerateLeadJob, job_id)
         job.status = "running"
+        job.current_step = "building_queries"
         await db.commit()
     # session closed — no long-lived connection held open during the scan
     try:
         settings = get_settings()
-        result = await _execute_generate_lead(body, settings)
+        result = await _execute_generate_lead(body, settings, job_id=job_id)
         await _update_job_status(job_id, "done", result=result)
     except BaseException as e:
         await _update_job_status(job_id, "failed", error=f"{type(e).__name__}: {e}")
@@ -1191,4 +1208,4 @@ async def get_generate_lead_job(
     job = await db.get(GenerateLeadJob, job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
-    return {"status": job.status, "result": job.result, "error": job.error}
+    return {"status": job.status, "result": job.result, "error": job.error, "current_step": job.current_step}

@@ -271,11 +271,21 @@ async def get_activity_by_region(
 ) -> dict:
     sql = """
         SELECT country_name, COUNT(*)::int AS scan_count
-        FROM client_events,
-             jsonb_array_elements_text(data->'countries') AS country_name
-        WHERE event_type = 'scan'
-          AND data ? 'countries'
-          AND jsonb_array_length(data->'countries') > 0
+        FROM client_events ce
+        JOIN clients c ON c.id = ce.client_id,
+             jsonb_array_elements_text(
+               CASE
+                 WHEN ce.data ? 'countries'
+                      AND jsonb_array_length(ce.data->'countries') > 0
+                 THEN ce.data->'countries'
+                 ELSE c.countries
+               END
+             ) AS country_name
+        WHERE ce.event_type = 'scan'
+          AND (
+            (ce.data ? 'countries' AND jsonb_array_length(ce.data->'countries') > 0)
+            OR (c.countries IS NOT NULL AND jsonb_array_length(c.countries) > 0)
+          )
         GROUP BY country_name
         ORDER BY scan_count DESC
     """

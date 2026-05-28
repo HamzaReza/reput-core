@@ -40,6 +40,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           collapsed={sidebarCollapsed}
         />
         <button
+          className="gina-sidebar-collapse-btn"
           onClick={() => setSidebarCollapsed((c) => !c)}
           aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
           style={{
@@ -139,7 +140,15 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       <style>{`
         @media (max-width: 767px) {
           .gina-topbar { display: flex !important; }
-          .gina-sidebar-wrapper { display: none; }
+          .gina-sidebar-wrapper {
+            width: 0;
+            min-width: 0;
+            flex: 0 0 0;
+            overflow: visible;
+          }
+          .gina-sidebar-collapse-btn {
+            display: none !important;
+          }
         }
       `}</style>
     </div>
