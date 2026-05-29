@@ -9,6 +9,7 @@ import countryList from "react-select-country-list";
 import { EaluminateFormPanel } from "./_components/EaluminateFormPanel";
 import { EaluminatePipelinePanel } from "./_components/EaluminatePipelinePanel";
 import { EaluminateResultsPanel } from "./_components/EaluminateResultsPanel";
+import ExportFieldsModal from "./_components/ExportFieldsModal";
 import type {
   KeywordFocus,
   MeetingSummary,
@@ -17,25 +18,33 @@ import type {
   ScanResult,
 } from "./_components/types";
 import { exportReportMasterPdf, exportSummaryPdf } from "./_utils/pdfExports";
-import ExportFieldsModal from "./_components/ExportFieldsModal";
 
 const RESEARCH_SUMMARY_FIELDS = [
-  { key: "identity",          label: "Identity",          color: "#4479DA" },
-  { key: "background",        label: "Background",        color: "#6366f1" },
-  { key: "associations",      label: "Associations",      color: "#f59e0b" },
-  { key: "recent_news",       label: "Recent News",       color: "#48D4B8" },
-  { key: "negative_findings",        label: "Negative Findings",        color: "#ef4444" },
-  { key: "positive_presence",        label: "Positive Presence",        color: "#4CAF50" },
-  { key: "estimated_negative_links", label: "Estimated Negative Links", color: "#FF6B4A" },
-  { key: "reputation_notes",         label: "Reputation Notes",         color: "#94a3b8" },
+  { key: "identity", label: "Identity", color: "#4479DA" },
+  { key: "background", label: "Background", color: "#6366f1" },
+  { key: "associations", label: "Associations", color: "#f59e0b" },
+  { key: "recent_news", label: "Recent News", color: "#48D4B8" },
+  { key: "negative_findings", label: "Negative Findings", color: "#ef4444" },
+  { key: "positive_presence", label: "Positive Presence", color: "#4CAF50" },
+  {
+    key: "estimated_negative_links",
+    label: "Estimated Negative Links",
+    color: "#FF6B4A",
+  },
+  { key: "reputation_notes", label: "Reputation Notes", color: "#94a3b8" },
 ];
 
 const BRIEF_FIELDS = [
-  { key: "key_points",         label: "Key Points",         color: "#4479DA" },
-  { key: "meeting_angles",     label: "Meeting Angles",     color: "#6366f1" },
-  { key: "risk_indicators",    label: "Risk Indicators",    color: "#ef4444" },
+  { key: "key_points", label: "Key Points", color: "#4479DA" },
+  { key: "meeting_angles", label: "Meeting Angles", color: "#6366f1" },
+  { key: "risk_indicators", label: "Risk Indicators", color: "#ef4444" },
   { key: "objection_handlers", label: "Objection Handlers", color: "#48D4B8" },
 ];
+
+type MockLoadingOptions = {
+  msPerStage?: number;
+  finishWithMock?: boolean;
+};
 
 declare global {
   interface Window {
@@ -49,7 +58,14 @@ declare global {
       setPreAnalysisSummary: (value: string) => void;
       setEditableKeywords: (value: string[]) => void;
       setError: (value: string) => void;
+      setCurrentStep: (value: string | null) => void;
+      setPreAnalysisLoading: (value: boolean) => void;
+      loadingSteps: readonly string[];
       seedMockScan: () => void;
+      mockLoadingStage: (step: string) => void;
+      mockLoadingStages: (opts?: MockLoadingOptions) => void;
+      mockPipelineLoading: (opts?: MockLoadingOptions) => void;
+      stopMockLoading: () => void;
       resetUi: () => void;
     };
   }
@@ -78,23 +94,31 @@ const PIPELINE_STEPS = [
   {
     n: "01",
     title: "Profile research",
-    desc: "Identity, background, and context discovery",
+    desc: "Identity, employment, and context discovery.",
   },
   {
     n: "02",
     title: "Keyword preparation",
-    desc: "Search intent and query terms finalized",
+    desc: "Build a relevant set of keywords and filters.",
   },
   {
     n: "03",
     title: "Scan and classification",
-    desc: "Sources fetched and reputation signals scored",
+    desc: "Sources scanned and signals are categorized.",
   },
   {
     n: "04",
     title: "Brief ready",
-    desc: "Meeting summary and talking points generated",
+    desc: "Findings summarized into an executive-ready report.",
   },
+] as const;
+
+const SCAN_LOADING_STEPS = [
+  "building_queries",
+  "serper_search",
+  "firecrawl_scrape",
+  "claude_classification",
+  "generating_brief",
 ] as const;
 
 const RISK_COLORS: Record<
@@ -631,11 +655,27 @@ function EaluminatePageInner() {
   const tipIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const tipSwapRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const mockLoadingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
   const [isResuming, setIsResuming] = useState(false);
+  const [currentStep, setCurrentStep] = useState<string | null>(null);
+  const [jobId, setJobId] = useState<string | null>(null);
   const persistContextRef = useRef({
-    leadId, clientId, fullName: `${firstName.trim()} ${lastName.trim()}`.trim(),
-    company, country: countries[0] ?? "", description, preAnalysisSummary,
-    editableKeywords, useKeywords, scanFocus, scanTier, countries, keywordsCap, pagesCap,
+    leadId,
+    clientId,
+    fullName: `${firstName.trim()} ${lastName.trim()}`.trim(),
+    company,
+    country: countries[0] ?? "",
+    description,
+    preAnalysisSummary,
+    editableKeywords,
+    useKeywords,
+    scanFocus,
+    scanTier,
+    countries,
+    keywordsCap,
+    pagesCap,
   });
 
   const stopCycles = () => {
@@ -668,10 +708,14 @@ function EaluminatePageInner() {
     }, 5000);
   };
 
-  const scanApiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
+  const scanApiUrl =
+    process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
 
   const startPolling = (job_id: string) => {
     if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+
+    let consecutiveFailures = 0;
+    const MAX_FAILURES = 5;
 
     const checkJob = async () => {
       try {
@@ -685,11 +729,17 @@ function EaluminatePageInner() {
           return;
         }
         const pollData = await poll.json();
+        consecutiveFailures = 0;
+
+        if (pollData.current_step) {
+          setCurrentStep(pollData.current_step);
+        }
 
         if (pollData.status === "done") {
           clearInterval(pollIntervalRef.current!);
           localStorage.removeItem(JOB_STORAGE_KEY);
           stopCycles();
+          setCurrentStep(null);
 
           const scanResult = pollData.result as ScanResult;
           const finalScore =
@@ -697,10 +747,17 @@ function EaluminatePageInner() {
               ? pollData.result.score
               : deriveScore(
                   scanResult.links.filter(
-                    (l) => l.sentiment === "negative" || l.risk === "high" || l.risk === "medium",
+                    (l) =>
+                      l.sentiment === "negative" ||
+                      l.risk === "high" ||
+                      l.risk === "medium",
                   ).length,
                   scanResult.links.filter(
-                    (l) => l.sentiment === "positive" || l.sentiment === "neutral" || l.risk === "low" || l.risk === "none",
+                    (l) =>
+                      l.sentiment === "positive" ||
+                      l.sentiment === "neutral" ||
+                      l.risk === "low" ||
+                      l.risk === "none",
                   ).length,
                 );
           setScore(finalScore);
@@ -708,7 +765,9 @@ function EaluminatePageInner() {
           setScanComplete(true);
           setIsResuming(false);
           if (scanStartRef.current !== null) {
-            setScanDuration(Math.round((Date.now() - scanStartRef.current) / 1000));
+            setScanDuration(
+              Math.round((Date.now() - scanStartRef.current) / 1000),
+            );
             scanStartRef.current = null;
           }
           setLoading(false);
@@ -727,18 +786,27 @@ function EaluminatePageInner() {
                 keywords_suggested: ctx.editableKeywords,
                 force_new: true,
               });
-              if (ld.id) { currentLeadId = ld.id; setLeadId(ld.id); }
-            } catch { /* non-fatal */ }
+              if (ld.id) {
+                currentLeadId = ld.id;
+                setLeadId(ld.id);
+              }
+            } catch {
+              /* non-fatal */
+            }
           }
           if (currentLeadId) {
             try {
               await leads.update(currentLeadId, {
                 links: scanResult.links as unknown[],
-                summary: scanResult.summary ? ({ ...scanResult.summary } as Record<string, unknown>) : undefined,
+                summary: scanResult.summary
+                  ? ({ ...scanResult.summary } as Record<string, unknown>)
+                  : undefined,
                 score: finalScore,
                 keywords_suggested: ctx.editableKeywords,
               });
-            } catch { /* non-fatal */ }
+            } catch {
+              /* non-fatal */
+            }
           }
           if (ctx.clientId) {
             const writtenKey = `ealuminate_scan_written_${job_id}`;
@@ -757,20 +825,24 @@ function EaluminatePageInner() {
                     lead_id: currentLeadId ?? undefined,
                     links: scanResult.links,
                     useKeywords: ctx.useKeywords,
-                    scanFocus: ctx.scanFocus !== "all" ? ctx.scanFocus : undefined,
+                    scanFocus:
+                      ctx.scanFocus !== "all" ? ctx.scanFocus : undefined,
                     countries: ctx.countries,
                     keywordsCap: ctx.keywordsCap,
                     pagesCap: ctx.pagesCap,
                     scanTier: ctx.scanTier,
                   },
                 });
-              } catch { /* non-fatal */ }
+              } catch {
+                /* non-fatal */
+              }
             }
           }
         } else if (pollData.status === "failed") {
           clearInterval(pollIntervalRef.current!);
           localStorage.removeItem(JOB_STORAGE_KEY);
           stopCycles();
+          setCurrentStep(null);
           setResult(null);
           setScanComplete(false);
           setScore(0);
@@ -780,9 +852,12 @@ function EaluminatePageInner() {
         }
         // "pending" | "running" → keep polling
       } catch {
+        consecutiveFailures++;
+        if (consecutiveFailures < MAX_FAILURES) return;
         clearInterval(pollIntervalRef.current!);
         localStorage.removeItem(JOB_STORAGE_KEY);
         stopCycles();
+        setCurrentStep(null);
         setError("Network error while polling.");
         setIsResuming(false);
         setLoading(false);
@@ -796,17 +871,43 @@ function EaluminatePageInner() {
   // Keep persistContextRef in sync with latest state so checkJob always reads fresh values
   useEffect(() => {
     persistContextRef.current = {
-      leadId, clientId,
+      leadId,
+      clientId,
       fullName: `${firstName.trim()} ${lastName.trim()}`.trim(),
-      company, country: countries[0] ?? "", description, preAnalysisSummary,
-      editableKeywords, useKeywords, scanFocus, scanTier, countries, keywordsCap, pagesCap,
+      company,
+      country: countries[0] ?? "",
+      description,
+      preAnalysisSummary,
+      editableKeywords,
+      useKeywords,
+      scanFocus,
+      scanTier,
+      countries,
+      keywordsCap,
+      pagesCap,
     };
-  }, [leadId, clientId, firstName, lastName, company, countries, description,
-      preAnalysisSummary, editableKeywords, useKeywords, scanFocus, scanTier, keywordsCap, pagesCap]);
+  }, [
+    leadId,
+    clientId,
+    firstName,
+    lastName,
+    company,
+    countries,
+    description,
+    preAnalysisSummary,
+    editableKeywords,
+    useKeywords,
+    scanFocus,
+    scanTier,
+    keywordsCap,
+    pagesCap,
+  ]);
 
   // Resume an in-progress job if one was saved before navigating away
   useEffect(() => {
-    const cleanup = () => { if (pollIntervalRef.current) clearInterval(pollIntervalRef.current); };
+    const cleanup = () => {
+      if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+    };
     const raw = localStorage.getItem(JOB_STORAGE_KEY);
     if (!raw) return cleanup;
 
@@ -822,13 +923,20 @@ function EaluminatePageInner() {
       keywordsReady?: boolean;
       preAnalysisDone?: boolean;
     } | null = null;
-    try { stored = JSON.parse(raw); } catch { localStorage.removeItem(JOB_STORAGE_KEY); return cleanup; }
+    try {
+      stored = JSON.parse(raw);
+    } catch {
+      localStorage.removeItem(JOB_STORAGE_KEY);
+      return cleanup;
+    }
     if (!stored) return cleanup;
 
     const eventParam = new URLSearchParams(window.location.search).get("event");
     if (eventParam) return cleanup;
 
-    const currentLeadParam = new URLSearchParams(window.location.search).get("lead");
+    const currentLeadParam = new URLSearchParams(window.location.search).get(
+      "lead",
+    );
     if (stored.leadId !== currentLeadParam) {
       localStorage.removeItem(JOB_STORAGE_KEY); // stale job from a different client
       return cleanup;
@@ -836,7 +944,8 @@ function EaluminatePageInner() {
 
     if (stored.useKeywords !== undefined) setUseKeywords(stored.useKeywords);
     if (stored.pagesCap !== undefined) setPagesCap(stored.pagesCap);
-    if (stored.scanFocus !== undefined) setScanFocus(stored.scanFocus as KeywordFocus);
+    if (stored.scanFocus !== undefined)
+      setScanFocus(stored.scanFocus as KeywordFocus);
     if (stored.scanTier !== undefined) setScanTier(stored.scanTier);
     if (stored.keywords?.length) setEditableKeywords(stored.keywords);
     if (stored.keywordsReady) setKeywordsReady(true);
@@ -845,13 +954,208 @@ function EaluminatePageInner() {
     setIsResuming(true);
     setLoading(true);
     startCycles();
+    setJobId(stored.job_id);
     startPolling(stored.job_id);
     return cleanup;
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
     if (process.env.NODE_ENV === "production") return;
+
+    const stopMockLoadingTimers = () => {
+      if (mockLoadingTimerRef.current) {
+        clearTimeout(mockLoadingTimerRef.current);
+        mockLoadingTimerRef.current = null;
+      }
+    };
+
+    const scheduleMockStage = (fn: () => void, ms: number) => {
+      mockLoadingTimerRef.current = setTimeout(fn, ms);
+    };
+
+    const prepareScanLoadingUi = () => {
+      setError("");
+      setResult(null);
+      setScore(0);
+      setScanComplete(false);
+      setPreAnalysisDone(true);
+      setPreAnalysisSummary("Mock pre-analysis for UI testing.");
+      setEditableKeywords(["reputation", "news coverage", "public profile"]);
+      setKeywordsReady(true);
+      setPreAnalysisLoading(false);
+      setLoading(true);
+      startCycles();
+    };
+
+    const seedMockScan = () => {
+      const mockLinks: WebLink[] = [
+        {
+          url: "https://example.com/news/john-doe-profile",
+          title: "Public profile and industry mentions",
+          snippet:
+            "Overview of public mentions and reputation-related context.",
+          sentiment: "neutral",
+          risk: "low",
+          source: "Example News",
+          type: "news",
+        },
+        {
+          url: "https://example.com/blog/interview",
+          title: "Interview coverage",
+          snippet:
+            "Interview article with generally positive coverage and quotes.",
+          sentiment: "positive",
+          risk: "none",
+          source: "Example Blog",
+          type: "blog",
+        },
+        {
+          url: "https://example.com/forum/thread",
+          title: "Forum thread discussion",
+          snippet:
+            "A thread containing mixed and partially critical opinions.",
+          sentiment: "negative",
+          risk: "medium",
+          source: "Example Forum",
+          type: "forum",
+        },
+      ];
+
+      const negative = mockLinks.filter(
+        (l) =>
+          l.sentiment === "negative" ||
+          l.risk === "high" ||
+          l.risk === "medium",
+      );
+      const positive = mockLinks.filter(
+        (l) =>
+          l.sentiment === "positive" ||
+          l.sentiment === "neutral" ||
+          l.risk === "low" ||
+          l.risk === "none",
+      );
+      const neutral = mockLinks.filter((l) => l.sentiment === "neutral");
+      const seededResult: ScanResult = {
+        links: mockLinks,
+        negative,
+        positive,
+        neutral,
+        summary: {
+          headline: "Mixed public footprint with manageable risk indicators.",
+          issues: [
+            "Negative forum discussion around a prior business decision.",
+          ],
+          talkingPoints: [
+            "Emphasize documented wins and transparent communication.",
+          ],
+        },
+      };
+
+      stopMockLoadingTimers();
+      stopCycles();
+      setLoading(false);
+      setCurrentStep(null);
+      setError("");
+      setPreAnalysisDone(true);
+      setPreAnalysisSummary(
+        "Seeded dev summary for UI testing without API requests.",
+      );
+      setEditableKeywords(["reputation", "news coverage", "public profile"]);
+      setKeywordsReady(true);
+      setResult(seededResult);
+      setScore(deriveScore(negative.length, positive.length));
+      setScanComplete(true);
+    };
+
+    const mockLoadingStage = (step: string) => {
+      stopMockLoadingTimers();
+      prepareScanLoadingUi();
+      setCurrentStep(step);
+    };
+
+    const mockLoadingStages = (opts?: MockLoadingOptions) => {
+      const msPerStage = opts?.msPerStage ?? 2500;
+      const finishWithMock = opts?.finishWithMock ?? true;
+
+      stopMockLoadingTimers();
+      prepareScanLoadingUi();
+
+      let idx = 0;
+      const advance = () => {
+        if (idx >= SCAN_LOADING_STEPS.length) {
+          if (finishWithMock) {
+            seedMockScan();
+          } else {
+            stopCycles();
+            setLoading(false);
+            setCurrentStep(null);
+          }
+          return;
+        }
+
+        setCurrentStep(SCAN_LOADING_STEPS[idx]);
+        idx += 1;
+        scheduleMockStage(advance, msPerStage);
+      };
+
+      setCurrentStep(SCAN_LOADING_STEPS[0]);
+      idx = 1;
+      scheduleMockStage(advance, msPerStage);
+    };
+
+    const mockPipelineLoading = (opts?: MockLoadingOptions) => {
+      const msPerStage = opts?.msPerStage ?? 2500;
+      const finishWithMock = opts?.finishWithMock ?? true;
+
+      stopMockLoadingTimers();
+      stopCycles();
+      setError("");
+      setResult(null);
+      setScore(0);
+      setScanComplete(false);
+      setKeywordsReady(false);
+      setPreAnalysisDone(false);
+      setPreAnalysisSummary("");
+      setEditableKeywords([]);
+      setLoading(false);
+      setCurrentStep(null);
+      setPreAnalysisLoading(true);
+
+      scheduleMockStage(() => {
+        setPreAnalysisLoading(false);
+        setPreAnalysisDone(true);
+        setPreAnalysisSummary("Mock profile research complete.");
+        setEditableKeywords(["reputation", "news coverage", "public profile"]);
+        setKeywordsReady(true);
+
+        scheduleMockStage(() => {
+          prepareScanLoadingUi();
+
+          let idx = 0;
+          const advanceScan = () => {
+            if (idx >= SCAN_LOADING_STEPS.length) {
+              if (finishWithMock) {
+                seedMockScan();
+              } else {
+                stopCycles();
+                setLoading(false);
+                setCurrentStep(null);
+              }
+              return;
+            }
+
+            setCurrentStep(SCAN_LOADING_STEPS[idx]);
+            idx += 1;
+            scheduleMockStage(advanceScan, msPerStage);
+          };
+
+          setCurrentStep(SCAN_LOADING_STEPS[0]);
+          idx = 1;
+          scheduleMockStage(advanceScan, msPerStage);
+        }, msPerStage);
+      }, msPerStage);
+    };
 
     window.__EALU_DEBUG__ = {
       setLoading,
@@ -863,84 +1167,23 @@ function EaluminatePageInner() {
       setPreAnalysisSummary,
       setEditableKeywords,
       setError,
-      seedMockScan: () => {
-        const mockLinks: WebLink[] = [
-          {
-            url: "https://example.com/news/john-doe-profile",
-            title: "Public profile and industry mentions",
-            snippet:
-              "Overview of public mentions and reputation-related context.",
-            sentiment: "neutral",
-            risk: "low",
-            source: "Example News",
-            type: "news",
-          },
-          {
-            url: "https://example.com/blog/interview",
-            title: "Interview coverage",
-            snippet:
-              "Interview article with generally positive coverage and quotes.",
-            sentiment: "positive",
-            risk: "none",
-            source: "Example Blog",
-            type: "blog",
-          },
-          {
-            url: "https://example.com/forum/thread",
-            title: "Forum thread discussion",
-            snippet:
-              "A thread containing mixed and partially critical opinions.",
-            sentiment: "negative",
-            risk: "medium",
-            source: "Example Forum",
-            type: "forum",
-          },
-        ];
-
-        const negative = mockLinks.filter(
-          (l) =>
-            l.sentiment === "negative" ||
-            l.risk === "high" ||
-            l.risk === "medium",
-        );
-        const positive = mockLinks.filter(
-          (l) =>
-            l.sentiment === "positive" ||
-            l.sentiment === "neutral" ||
-            l.risk === "low" ||
-            l.risk === "none",
-        );
-        const neutral = mockLinks.filter((l) => l.sentiment === "neutral");
-        const seededResult: ScanResult = {
-          links: mockLinks,
-          negative,
-          positive,
-          neutral,
-          summary: {
-            headline: "Mixed public footprint with manageable risk indicators.",
-            issues: [
-              "Negative forum discussion around a prior business decision.",
-            ],
-            talkingPoints: [
-              "Emphasize documented wins and transparent communication.",
-            ],
-          },
-        };
-
-        setLoading(false);
-        setError("");
-        setPreAnalysisDone(true);
-        setPreAnalysisSummary(
-          "Seeded dev summary for UI testing without API requests.",
-        );
-        setEditableKeywords(["reputation", "news coverage", "public profile"]);
-        setKeywordsReady(true);
-        setResult(seededResult);
-        setScore(deriveScore(negative.length, positive.length));
-        setScanComplete(true);
+      setCurrentStep,
+      setPreAnalysisLoading,
+      loadingSteps: SCAN_LOADING_STEPS,
+      seedMockScan,
+      mockLoadingStage,
+      mockLoadingStages,
+      mockPipelineLoading,
+      stopMockLoading: () => {
+        stopMockLoadingTimers();
+        stopCycles();
       },
       resetUi: () => {
+        stopMockLoadingTimers();
+        stopCycles();
         setLoading(false);
+        setCurrentStep(null);
+        setPreAnalysisLoading(false);
         setError("");
         setResult(null);
         setScore(0);
@@ -953,6 +1196,7 @@ function EaluminatePageInner() {
     };
 
     return () => {
+      stopMockLoadingTimers();
       delete window.__EALU_DEBUG__;
     };
   }, []);
@@ -1001,14 +1245,40 @@ function EaluminatePageInner() {
         let scanSummary: MeetingSummary | undefined;
         try {
           const clients = await clientsApi.list(200);
-          const match = clients.find(
-            (c) =>
-              c.name === (lead.name ?? "").trim() &&
-              c.country === (lead.country ?? ""),
+          const inferredType = (lead.name ?? "").trim()
+            ? "individual"
+            : "company";
+          const candidates = clients.filter((c) => {
+            if ((c.subject_type ?? "individual") !== inferredType) return false;
+            if (inferredType === "individual")
+              return c.name === (lead.name ?? "").trim();
+            return (c.company ?? "") === (lead.company ?? "").trim();
+          });
+          const match =
+            candidates.length === 1
+              ? candidates[0]
+              : (candidates.find((c) =>
+                  (c.countries ?? []).includes(lead.country ?? ""),
+                ) ?? candidates[0]);
+          console.log(
+            "[ealuminate] lead.id:",
+            lead.id,
+            "eventId:",
+            eventId,
+            "match:",
+            match?.id ?? null,
           );
           if (match) {
             setClientId(match.id);
             const clientDetail = await clientsApi.get(match.id);
+            console.log(
+              "[ealuminate] clientDetail.events count:",
+              clientDetail.events.length,
+            );
+            console.log(
+              "[ealuminate] all event ids:",
+              clientDetail.events.map((e) => `${e.id} (${e.event_type})`),
+            );
             const researchEvent = clientDetail.events
               .filter((e) => e.event_type === "research")
               .find((e) => (e.data?.lead_id as string | undefined) === lead.id);
@@ -1025,10 +1295,9 @@ function EaluminatePageInner() {
                 )
               )
                 setKeywordFocus(d.keywordFocus as KeywordFocus);
-              if (!hasActiveJob && typeof d.pagesCap === "number") setPagesCap(d.pagesCap);
-              if (
-                ["en", "it", "es"].includes(d.reportLanguage as string)
-              )
+              if (!hasActiveJob && typeof d.pagesCap === "number")
+                setPagesCap(d.pagesCap);
+              if (["en", "it", "es"].includes(d.reportLanguage as string))
                 setReportLanguage(d.reportLanguage as ReportLanguage);
               if (
                 Array.isArray(d.countries) &&
@@ -1045,17 +1314,30 @@ function EaluminatePageInner() {
                 e.event_type === "scan" &&
                 (e.data?.lead_id as string | undefined) === lead.id,
             );
+            console.log(
+              "[ealuminate] scanEvents (lead_id filtered):",
+              scanEvents.map((e) => e.id),
+            );
             const scanEvent = eventId
-              ? scanEvents.find((e) => e.id === eventId)
+              ? clientDetail.events.find((e) => e.id === eventId)
               : scanEvents.at(-1);
+            console.log(
+              "[ealuminate] resolved scanEvent id:",
+              scanEvent?.id ?? null,
+            );
             if (scanEvent?.data) {
               scanLinks = scanEvent.data.links as WebLink[] | undefined;
               scanScore = scanEvent.data.score as number | undefined;
               scanSummary = scanEvent.data.summary as
                 | MeetingSummary
                 | undefined;
+              if (Array.isArray(scanEvent.data.keywords))
+                setEditableKeywords(scanEvent.data.keywords as string[]);
             }
-            if (!hasActiveJob && typeof scanEvent?.data?.useKeywords === "boolean")
+            if (
+              !hasActiveJob &&
+              typeof scanEvent?.data?.useKeywords === "boolean"
+            )
               setUseKeywords(scanEvent.data.useKeywords as boolean);
             if (
               !hasActiveJob &&
@@ -1068,7 +1350,10 @@ function EaluminatePageInner() {
               setKeywordsCap(scanEvent.data.keywordsCap as number);
             if (!hasActiveJob && typeof scanEvent?.data?.pagesCap === "number")
               setPagesCap(scanEvent.data.pagesCap as number);
-            if (scanEvent?.data?.scanTier === "standard" || scanEvent?.data?.scanTier === "advanced")
+            if (
+              scanEvent?.data?.scanTier === "standard" ||
+              scanEvent?.data?.scanTier === "advanced"
+            )
               setScanTier(scanEvent.data.scanTier as "standard" | "advanced");
           }
         } catch {
@@ -1076,7 +1361,7 @@ function EaluminatePageInner() {
         }
 
         if (lead.keywords_suggested.length > 0 || lead.pre_analysis_summary) {
-          setEditableKeywords(lead.keywords_suggested);
+          if (!eventId) setEditableKeywords(lead.keywords_suggested);
           const raw = lead.pre_analysis_summary ?? "";
           setPreAnalysisSummary(raw);
           try {
@@ -1139,12 +1424,29 @@ function EaluminatePageInner() {
 
   const handleConfirmSummaryExport = (selectedFields: string[]) => {
     setExportSummaryModalOpen(false);
-    exportSummaryPdf({ fullName, company, country, webAnalystName, score, result, selectedFields });
+    exportSummaryPdf({
+      fullName,
+      company,
+      country,
+      webAnalystName,
+      score,
+      result,
+      selectedFields,
+    });
   };
 
   const handleConfirmReportExport = (selectedFields: string[]) => {
     setExportReportModalOpen(false);
-    exportReportMasterPdf({ fullName, company, country, webAnalystName, preAnalysisProfile, preAnalysisSummary, editableKeywords, selectedFields });
+    exportReportMasterPdf({
+      fullName,
+      company,
+      country,
+      webAnalystName,
+      preAnalysisProfile,
+      preAnalysisSummary,
+      editableKeywords,
+      selectedFields,
+    });
   };
 
   const handleDescriptionChange = (val: string) => {
@@ -1192,9 +1494,14 @@ function EaluminatePageInner() {
       if (ld.id) setLeadId(ld.id);
 
       const cl = await clientsApi.upsert({
-        name: fullName,
+        name: subjectType === "individual" ? fullName : "",
         country,
-        company: company.trim() || undefined,
+        subject_type: subjectType,
+        countries: [...countries].sort(),
+        company:
+          subjectType === "company"
+            ? company.trim()
+            : company.trim() || undefined,
         email: email.trim() || undefined,
         phone: phone.trim() || undefined,
         event_type: "research",
@@ -1247,16 +1554,31 @@ function EaluminatePageInner() {
     setPreAnalysisSummary("");
     setLeadId(null);
 
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
+    const apiUrl =
+      process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
+    const canScanParams1 = new URLSearchParams({
+      name: subjectType === "individual" ? fullName : "",
+      company: subjectType === "company" ? company.trim() : "",
+      country,
+      subject_type: subjectType,
+      countries: JSON.stringify([...countries].sort()),
+    });
     const checkRes = await fetch(
-      `${apiUrl}/clients/can-scan?name=${encodeURIComponent(subjectType === "company" ? company.trim() : fullName)}&country=${encodeURIComponent(country)}`,
-      { headers: { Authorization: `Bearer ${getToken()}` } }
+      `${apiUrl}/clients/can-scan?${canScanParams1.toString()}`,
+      { headers: { Authorization: `Bearer ${getToken()}` } },
     );
-    if (checkRes.status === 401) { router.replace("/login?reason=session_expired"); return; }
+    if (checkRes.status === 401) {
+      router.replace("/login?reason=session_expired");
+      return;
+    }
     if (!checkRes.ok) {
       const checkData = await checkRes.json();
       const checkDetail = checkData.detail;
-      setError(typeof checkDetail === "string" ? checkDetail : "Cannot scan this client.");
+      setError(
+        typeof checkDetail === "string"
+          ? checkDetail
+          : "Cannot scan this client.",
+      );
       setPreAnalysisLoading(false);
       return;
     }
@@ -1312,9 +1634,14 @@ function EaluminatePageInner() {
         if (ld.id) setLeadId(ld.id);
 
         const cl = await clientsApi.upsert({
-          name: fullName,
+          name: subjectType === "individual" ? fullName : "",
           country,
-          company: company.trim() || undefined,
+          subject_type: subjectType,
+          countries: [...countries].sort(),
+          company:
+            subjectType === "company"
+              ? company.trim()
+              : company.trim() || undefined,
           email: email.trim() || undefined,
           phone: phone.trim() || undefined,
           event_type: "research",
@@ -1358,15 +1685,29 @@ function EaluminatePageInner() {
     setLoading(true);
     startCycles();
 
+    const canScanParams2 = new URLSearchParams({
+      name: subjectType === "individual" ? fullName : "",
+      company: subjectType === "company" ? company.trim() : "",
+      country,
+      subject_type: subjectType,
+      countries: JSON.stringify([...countries].sort()),
+    });
     const scanCheckRes = await fetch(
-      `${scanApiUrl}/clients/can-scan?name=${encodeURIComponent(subjectType === "company" ? company.trim() : fullName)}&country=${encodeURIComponent(country)}`,
-      { headers: { Authorization: `Bearer ${getToken()}` } }
+      `${scanApiUrl}/clients/can-scan?${canScanParams2.toString()}`,
+      { headers: { Authorization: `Bearer ${getToken()}` } },
     );
-    if (scanCheckRes.status === 401) { router.replace("/login?reason=session_expired"); return; }
+    if (scanCheckRes.status === 401) {
+      router.replace("/login?reason=session_expired");
+      return;
+    }
     if (!scanCheckRes.ok) {
       const scanCheckData = await scanCheckRes.json();
       const scanCheckDetail = scanCheckData.detail;
-      setError(typeof scanCheckDetail === "string" ? scanCheckDetail : "Cannot scan this client.");
+      setError(
+        typeof scanCheckDetail === "string"
+          ? scanCheckDetail
+          : "Cannot scan this client.",
+      );
       setLoading(false);
       return;
     }
@@ -1374,7 +1715,9 @@ function EaluminatePageInner() {
     if (leadId) {
       try {
         await leads.update(leadId, { keywords_suggested: editableKeywords });
-      } catch { /* non-fatal */ }
+      } catch {
+        /* non-fatal */
+      }
     }
 
     try {
@@ -1385,7 +1728,8 @@ function EaluminatePageInner() {
           Authorization: `Bearer ${getToken()}`,
         },
         body: JSON.stringify({
-          firstName: subjectType === "individual" ? firstName.trim() : undefined,
+          firstName:
+            subjectType === "individual" ? firstName.trim() : undefined,
           lastName: subjectType === "individual" ? lastName.trim() : undefined,
           company: company.trim() || undefined,
           countries,
@@ -1398,7 +1742,10 @@ function EaluminatePageInner() {
           scanTier,
         }),
       });
-      if (res.status === 401) { router.replace("/login?reason=session_expired"); return; }
+      if (res.status === 401) {
+        router.replace("/login?reason=session_expired");
+        return;
+      }
       const data = await res.json();
       if (!res.ok || data.error) {
         setError(data.error ?? "Scan failed. Please try again.");
@@ -1406,18 +1753,22 @@ function EaluminatePageInner() {
         stopCycles();
         return;
       }
-      localStorage.setItem(JOB_STORAGE_KEY, JSON.stringify({
-        job_id: data.job_id,
-        leadId: leadId || null,
-        clientId: clientId || null,
-        useKeywords,
-        pagesCap,
-        scanFocus: scanFocus !== "all" ? scanFocus : undefined,
-        scanTier,
-        keywords: editableKeywords,
-        keywordsReady: true,
-        preAnalysisDone: true,
-      }));
+      localStorage.setItem(
+        JOB_STORAGE_KEY,
+        JSON.stringify({
+          job_id: data.job_id,
+          leadId: leadId || null,
+          clientId: clientId || null,
+          useKeywords,
+          pagesCap,
+          scanFocus: scanFocus !== "all" ? scanFocus : undefined,
+          scanTier,
+          keywords: editableKeywords,
+          keywordsReady: true,
+          preAnalysisDone: true,
+        }),
+      );
+      setJobId(data.job_id);
       startPolling(data.job_id);
       // loading state stays active — startPolling clears it when done
     } catch {
@@ -1450,17 +1801,13 @@ function EaluminatePageInner() {
       }}
     >
       <style>{`
-        @keyframes repu-logo-spin {
-          from { transform: rotate(0deg); }
-          to   { transform: rotate(360deg); }
+        @keyframes eal-dot-pulse {
+          0%, 100% { transform: scale(1);   opacity: 0.7; }
+          50%      { transform: scale(1.4); opacity: 1;   }
         }
-        @keyframes repu-ring-pulse {
-          0%   { transform: scale(1);    opacity: 0.6; }
-          100% { transform: scale(2.8);  opacity: 0; }
-        }
-        @keyframes reput-label-breathe {
-          0%, 100% { opacity: 0.4; }
-          50%      { opacity: 0.85; }
+        @keyframes eal-shimmer {
+          0%   { transform: translateX(-100%); }
+          100% { transform: translateX(100%); }
         }
         .lead-name-grid {
           display: grid;
@@ -1479,12 +1826,53 @@ function EaluminatePageInner() {
           width: 18.5rem;
           flex-shrink: 0;
         }
+        
+        /* Mobile (max 480px) */
         @media (max-width: 480px) {
-          .lead-name-grid { grid-template-columns: 1fr; }
+          .lead-name-grid { 
+            grid-template-columns: 1fr; 
+            gap: 0.75rem;
+          }
+          .eal-card-body { 
+            flex-direction: column;
+            gap: 1rem;
+          }
+          .eal-pipeline { 
+            width: 100% !important;
+            position: relative !important;
+            top: auto !important;
+          }
         }
-        @media (max-width: 768px) {
-          .eal-card-body { flex-direction: column; }
-          .eal-pipeline { width: 100% !important; }
+        
+        /* Tablet (481px - 768px) */
+        @media (min-width: 481px) and (max-width: 768px) {
+          .lead-name-grid { 
+            grid-template-columns: 1fr;
+            gap: 0.75rem;
+          }
+          .eal-card-body { 
+            flex-direction: column;
+            gap: 1.5rem;
+          }
+          .eal-pipeline { 
+            width: 100% !important;
+            position: relative !important;
+            top: auto !important;
+          }
+        }
+        
+        /* Tablet landscape (769px - 1024px) */
+        @media (min-width: 769px) and (max-width: 1024px) {
+          .eal-pipeline {
+            width: 16rem;
+          }
+        }
+        
+        /* Large screens (1025px+) */
+        @media (min-width: 1025px) {
+          .eal-pipeline {
+            width: 18.5rem;
+          }
         }
       `}</style>
 
@@ -1578,6 +1966,8 @@ function EaluminatePageInner() {
           GaugeComponent={RepuGauge}
           isResuming={isResuming}
           scanDuration={scanDuration}
+          currentStep={currentStep}
+          jobId={jobId}
         />
       </div>
       {exportSummaryModalOpen && (
