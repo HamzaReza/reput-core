@@ -666,6 +666,8 @@ export interface ClientListItem {
   id: string;
   name: string;
   country: string;
+  subject_type: "individual" | "company";
+  countries: string[];
   company: string | null;
   scanned_by_name: string | null;
   scanned_by_role: string | null;
@@ -684,6 +686,8 @@ export interface ClientDetail {
   id: string;
   name: string;
   country: string;
+  subject_type: "individual" | "company";
+  countries: string[];
   company: string | null;
   email: string | null;
   phone: string | null;
@@ -701,6 +705,8 @@ export interface ClientDetail {
 export interface ClientUpsertPayload {
   name: string;
   country: string;
+  subject_type?: "individual" | "company";
+  countries?: string[];
   company?: string;
   email?: string;
   phone?: string;

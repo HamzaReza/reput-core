@@ -1,9 +1,9 @@
 "use client";
 
-import { leads, isAdmin, RecentLead } from "@/lib/api";
+import { isAdmin, leads, RecentLead } from "@/lib/api";
 import Link from "next/link";
-import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 
 const RISK_COLORS: Record<string, string> = {
   Good: "#22c55e",
@@ -26,7 +26,6 @@ function riskFromScore(score: number | null): string {
   if (score >= 26) return "Poor";
   return "Negative";
 }
-
 
 function relativeTime(iso: string | null): string {
   if (!iso) return "";
@@ -70,21 +69,65 @@ function SkeletonRow() {
     <tr>
       <td style={{ padding: "0.75rem 0.875rem" }}>
         <div style={{ display: "flex", alignItems: "center", gap: "0.625rem" }}>
-          <div style={{ width: 30, height: 30, borderRadius: "50%", backgroundColor: "#f1f5f9", flexShrink: 0 }} />
+          <div
+            style={{
+              width: 30,
+              height: 30,
+              borderRadius: "50%",
+              backgroundColor: "#f1f5f9",
+              flexShrink: 0,
+            }}
+          />
           <div>
-            <div style={{ height: 11, width: 110, backgroundColor: "#f1f5f9", borderRadius: 4, marginBottom: 4 }} />
-            <div style={{ height: 9, width: 70, backgroundColor: "#f1f5f9", borderRadius: 4 }} />
+            <div
+              style={{
+                height: 11,
+                width: 110,
+                backgroundColor: "#f1f5f9",
+                borderRadius: 4,
+                marginBottom: 4,
+              }}
+            />
+            <div
+              style={{
+                height: 9,
+                width: 70,
+                backgroundColor: "#f1f5f9",
+                borderRadius: 4,
+              }}
+            />
           </div>
         </div>
       </td>
       <td style={{ padding: "0.75rem 0.875rem" }}>
-        <div style={{ height: 20, width: 72, backgroundColor: "#f1f5f9", borderRadius: 999 }} />
+        <div
+          style={{
+            height: 20,
+            width: 72,
+            backgroundColor: "#f1f5f9",
+            borderRadius: 999,
+          }}
+        />
       </td>
       <td style={{ padding: "0.75rem 0.875rem" }}>
-        <div style={{ height: 20, width: 72, backgroundColor: "#f1f5f9", borderRadius: 999 }} />
+        <div
+          style={{
+            height: 20,
+            width: 72,
+            backgroundColor: "#f1f5f9",
+            borderRadius: 999,
+          }}
+        />
       </td>
       <td style={{ padding: "0.75rem 0.875rem" }}>
-        <div style={{ height: 10, width: 80, backgroundColor: "#f1f5f9", borderRadius: 4 }} />
+        <div
+          style={{
+            height: 10,
+            width: 80,
+            backgroundColor: "#f1f5f9",
+            borderRadius: 4,
+          }}
+        />
       </td>
     </tr>
   );
@@ -152,7 +195,16 @@ export default function RecentScans() {
             }}
           >
             View all
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <svg
+              width="12"
+              height="12"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
               <line x1="5" y1="12" x2="19" y2="12" />
               <polyline points="12 5 19 12 12 19" />
             </svg>
@@ -162,10 +214,16 @@ export default function RecentScans() {
 
       {/* Table */}
       <div style={{ overflowX: "auto" }}>
-        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.8rem" }}>
+        <table
+          style={{
+            width: "100%",
+            borderCollapse: "collapse",
+            fontSize: "0.8rem",
+          }}
+        >
           <thead>
             <tr style={{ backgroundColor: "#f8fafc" }}>
-              {["Company", "ReputScore", "Scanned By", "Updated"].map((col) => (
+              {["Name", "ReputScore", "Scanned By", "Updated"].map((col) => (
                 <th
                   key={col}
                   style={{
@@ -213,18 +271,32 @@ export default function RecentScans() {
                 return (
                   <tr
                     key={scan.id}
-                    onClick={() => router.push(`/dashboard/ealuminate?lead=${scan.id}`)}
+                    onClick={() =>
+                      router.push(`/dashboard/ealuminate?lead=${scan.id}`)
+                    }
                     style={{
                       cursor: "pointer",
-                      borderBottom: isLast ? "none" : "1px solid var(--color-border, #e2e8f0)",
+                      borderBottom: isLast
+                        ? "none"
+                        : "1px solid var(--color-border, #e2e8f0)",
                       transition: "background-color 0.1s",
                     }}
-                    onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#f8fafc")}
-                    onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
+                    onMouseEnter={(e) =>
+                      (e.currentTarget.style.backgroundColor = "#f8fafc")
+                    }
+                    onMouseLeave={(e) =>
+                      (e.currentTarget.style.backgroundColor = "transparent")
+                    }
                   >
                     {/* Company + avatar */}
                     <td style={{ padding: "0.75rem 0.875rem" }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: "0.625rem" }}>
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "0.625rem",
+                        }}
+                      >
                         <div
                           style={{
                             width: 30,
@@ -240,7 +312,7 @@ export default function RecentScans() {
                             flexShrink: 0,
                           }}
                         >
-                          {initials(scan.name)}
+                          {initials(scan.name ?? scan.company)}
                         </div>
                         <div style={{ minWidth: 0 }}>
                           <p
@@ -254,23 +326,21 @@ export default function RecentScans() {
                               maxWidth: 160,
                             }}
                           >
-                            {scan.name ?? "—"}
+                            {scan.name ?? scan.company ?? "—"}
                           </p>
-                          {(scan.company || scan.country) && (
-                            <p
-                              style={{
-                                margin: 0,
-                                fontSize: "0.6875rem",
-                                color: "var(--color-muted, #64748b)",
-                                overflow: "hidden",
-                                textOverflow: "ellipsis",
-                                whiteSpace: "nowrap",
-                                maxWidth: 160,
-                              }}
-                            >
-                              {[scan.company, scan.country].filter(Boolean).join(" · ")}
-                            </p>
-                          )}
+                          <p
+                            style={{
+                              margin: 0,
+                              fontSize: "0.6875rem",
+                              color: "var(--color-muted, #64748b)",
+                              overflow: "hidden",
+                              textOverflow: "ellipsis",
+                              whiteSpace: "nowrap",
+                              maxWidth: 160,
+                            }}
+                          >
+                            {scan.country}
+                          </p>
                         </div>
                       </div>
                     </td>
@@ -311,26 +381,64 @@ export default function RecentScans() {
                     <td style={{ padding: "0.75rem 0.875rem" }}>
                       {scan.scanned_by_name ? (
                         <div>
-                          <p style={{ margin: 0, fontWeight: 600, color: "var(--color-foreground, #1e293b)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 120 }}>
+                          <p
+                            style={{
+                              margin: 0,
+                              fontWeight: 600,
+                              color: "var(--color-foreground, #1e293b)",
+                              whiteSpace: "nowrap",
+                              overflow: "hidden",
+                              textOverflow: "ellipsis",
+                              maxWidth: 120,
+                            }}
+                          >
                             {scan.scanned_by_name}
                           </p>
                           {scan.scanned_by_role && (
-                            <p style={{ margin: 0, fontSize: "0.6375rem", color: "var(--color-muted, #64748b)" }}>
+                            <p
+                              style={{
+                                margin: 0,
+                                fontSize: "0.6375rem",
+                                color: "var(--color-muted, #64748b)",
+                              }}
+                            >
                               {scan.scanned_by_role}
                             </p>
                           )}
                         </div>
                       ) : (
-                        <span style={{ color: "#94a3b8", fontSize: "0.6875rem" }}>—</span>
+                        <span
+                          style={{ color: "#94a3b8", fontSize: "0.6875rem" }}
+                        >
+                          —
+                        </span>
                       )}
                     </td>
 
                     {/* Updated */}
-                    <td style={{ padding: "0.75rem 0.875rem", whiteSpace: "nowrap" }}>
-                      <p style={{ margin: 0, fontSize: "0.6875rem", color: "var(--color-foreground, #1e293b)", fontWeight: 500 }}>
+                    <td
+                      style={{
+                        padding: "0.75rem 0.875rem",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      <p
+                        style={{
+                          margin: 0,
+                          fontSize: "0.6875rem",
+                          color: "var(--color-foreground, #1e293b)",
+                          fontWeight: 500,
+                        }}
+                      >
                         {formatDateTime(scan.researched_at)}
                       </p>
-                      <p style={{ margin: 0, fontSize: "0.6rem", color: "var(--color-muted, #64748b)" }}>
+                      <p
+                        style={{
+                          margin: 0,
+                          fontSize: "0.6rem",
+                          color: "var(--color-muted, #64748b)",
+                        }}
+                      >
                         {relativeTime(scan.researched_at)}
                       </p>
                     </td>
