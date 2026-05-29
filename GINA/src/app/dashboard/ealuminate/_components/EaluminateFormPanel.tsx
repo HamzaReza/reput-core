@@ -606,7 +606,7 @@ export function EaluminateFormPanel(props: EaluminateFormPanelProps) {
                         type="text"
                         value={firstName}
                         onChange={(e) => setFirstName(e.target.value)}
-                        placeholder="e.g. Luca"
+                        placeholder="e.g. John"
                         required
                         style={inputStyle}
                       />
@@ -617,7 +617,7 @@ export function EaluminateFormPanel(props: EaluminateFormPanelProps) {
                         type="text"
                         value={lastName}
                         onChange={(e) => setLastName(e.target.value)}
-                        placeholder="e.g. Taglialatela"
+                        placeholder="e.g. Doe"
                         required
                         style={inputStyle}
                       />
@@ -636,7 +636,7 @@ export function EaluminateFormPanel(props: EaluminateFormPanelProps) {
                       type="text"
                       value={company}
                       onChange={(e) => setCompany(e.target.value)}
-                      placeholder="e.g. Ealixir Consulting Limited"
+                      placeholder="e.g. Example Inc."
                       required
                       style={inputStyle}
                     />
@@ -652,7 +652,7 @@ export function EaluminateFormPanel(props: EaluminateFormPanelProps) {
                     type="text"
                     value={company}
                     onChange={(e) => setCompany(e.target.value)}
-                    placeholder="e.g. Ealixir Consulting Limited"
+                    placeholder="e.g. Example Inc."
                     style={inputStyle}
                   />
                 </div>
