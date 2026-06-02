@@ -48,6 +48,7 @@ class LeadGenerated(Base):
     country: Mapped[str | None] = mapped_column(String(255))
     background: Mapped[str | None] = mapped_column(Text)
     pre_analysis_summary: Mapped[str | None] = mapped_column(Text)
+    countries: Mapped[list] = mapped_column(JSONB, default=list, nullable=True)
     keywords_suggested: Mapped[list] = mapped_column(JSONB, default=list, nullable=True)
     links: Mapped[list | None] = mapped_column(JSONB)
     summary: Mapped[dict | None] = mapped_column(JSONB)
