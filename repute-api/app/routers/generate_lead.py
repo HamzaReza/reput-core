@@ -642,6 +642,7 @@ async def _classify_with_claude(
     language_name: str,
     scan_focus: str | None,
     model: str = "claude-haiku-4-5-20251001",
+    background: str | None = None,
 ) -> list[dict]:
     if not articles:
         return []
@@ -693,7 +694,15 @@ async def _classify_with_claude(
             f'Still apply Rule 2 if a clearly different identity is present.\n\n'
             f'RULE 5 — WHEN IN DOUBT → EXCLUDE.\n'
             f'If you cannot confidently confirm the article refers to "{name}" specifically → EXCLUDE.\n\n'
-            f"If EXCLUDED → do not include this article in the output array at all."
+            + (
+                f'RULE 6 — HOMONYM DISAMBIGUATION:\n'
+                f'The subject "{name}" has the following known profile: {background}\n'
+                f'If the article is about someone with the same name but a completely different profile '
+                f'(different profession, country, or industry) with no connection to the above '
+                f'→ this is a different person with the same name → apply Rule 5 (EXCLUDE).\n\n'
+                if background else ""
+            )
+            + f"If EXCLUDED → do not include this article in the output array at all."
         )
 
     scan_focus_rules: dict[str, str] = {
@@ -862,6 +871,7 @@ class GenerateLeadRequest(BaseModel):
     useKeywords: bool = True
     scanFocus: str | None = None
     scanTier: Literal["standard", "advanced"] = "standard"
+    background: str | None = None
 
 
 # ── Core logic (extracted so background runner can call it) ──────────────────
@@ -1039,6 +1049,7 @@ async def _execute_generate_lead(body: GenerateLeadRequest, settings, job_id: uu
                 output_language_name,
                 body.scanFocus,
                 tier_model,
+                background=body.background,
             )
 
     batches = [
