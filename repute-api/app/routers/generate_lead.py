@@ -425,6 +425,14 @@ def _parse_serper_date(date_str: str) -> float:
     return float("nan")
 
 
+def _normalize_url(url: str) -> str:
+    url = url.strip().rstrip("/")
+    for prefix in ("https://", "http://"):
+        if url.startswith(prefix):
+            return url[len(prefix):]
+    return url
+
+
 def _strip_diacritics(s: str) -> str:
     return "".join(
         c for c in unicodedata.normalize("NFKD", s.lower()) if not unicodedata.combining(c)
@@ -433,7 +441,9 @@ def _strip_diacritics(s: str) -> str:
 
 def _passes_name_filter(article: dict, first_name: str, last_name: str) -> bool:
     text = _strip_diacritics(f"{article.get('title', '')} {article.get('snippet', '')}")
-    return _strip_diacritics(first_name) in text and _strip_diacritics(last_name) in text
+    fn = re.escape(_strip_diacritics(first_name))
+    ln = re.escape(_strip_diacritics(last_name))
+    return bool(re.search(rf"\b{fn}\b", text)) and bool(re.search(rf"\b{ln}\b", text))
 
 
 def _dedupe_links(links: list[dict]) -> list[dict]:
@@ -673,9 +683,10 @@ async def _classify_with_claude(
             f'(e.g. "Tibor {last_name}" or "Pavol {last_name}" when subject is "{name}") → EXCLUDE immediately.\n'
             f'Exception: initials only (e.g. "R. {last_name}") → treat as potentially the same person, apply Rule 3.\n\n'
             f'RULE 3 — LAST NAME ONLY (no first name present):\n'
-            f'Only "{last_name}" appears without any first name → INCLUDE only if the article is clearly '
-            f'about the same person based on context (same country, same profession, same known associations). '
-            f'If context is ambiguous → EXCLUDE.\n\n'
+            f'Only "{last_name}" appears without any first name → EXCLUDE unless the article '
+            f'unambiguously identifies the subject by other explicit markers (exact job title, '
+            f'exact company name, exact city) that directly match the search context. '
+            f'If any doubt → EXCLUDE.\n\n'
             f'RULE 4 — CULTURAL NAME VARIATIONS:\n'
             f'For Arabic, Chinese, Japanese, Korean, and Indian names, accept common transliteration variants '
             f'of "{first_name}" as the same person (e.g. "Mohammed"/"Mohammad", "Zhang Wei"/"Wei Zhang"). '
@@ -1042,7 +1053,15 @@ async def _execute_generate_lead(body: GenerateLeadRequest, settings, job_id: uu
         fn = name_parts[0] if name_parts else sanitized_subject
         ln = " ".join(name_parts[1:])
         if fn and ln:
-            classified = [a for a in classified if _passes_name_filter(a, fn, ln)]
+            # Use original Serper title+snippet (not Claude's generated snippet) to avoid
+            # false passes where Claude writes "not Robert Gaspar" in its explanation.
+            orig_map = {_normalize_url(a["url"]): a for a in articles}
+            classified = [
+                a for a in classified
+                if _passes_name_filter(
+                    orig_map.get(_normalize_url(a.get("url", "")), a), fn, ln
+                )
+            ]
 
     def sort_key(link: dict) -> tuple:
         ts = _parse_serper_date(link.get("date") or "")
