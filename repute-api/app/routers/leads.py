@@ -175,15 +175,24 @@ async def list_leads(
     db: AsyncSession = Depends(get_db),
     current_web_analyst: WebAnalyst = Depends(get_current_web_analyst),
 ) -> list[dict]:
+    assigned_to_name_sq = (
+        select(Client.assigned_to_name)
+        .where(
+            Client.name == LeadGenerated.name,
+            Client.countries.op("@>")(func.jsonb_build_array(LeadGenerated.country)),
+        )
+        .limit(1)
+        .correlate(LeadGenerated)
+        .scalar_subquery()
+    )
     query = (
         select(
             LeadGenerated,
             WebAnalyst.name.label("wa_name"),
             WebAnalyst.email.label("wa_email"),
-            Client.assigned_to_name.label("assigned_to_name"),
+            assigned_to_name_sq.label("assigned_to_name"),
         )
         .outerjoin(WebAnalyst, LeadGenerated.scanned_by_id == WebAnalyst.id)
-        .outerjoin(Client, and_(Client.name == LeadGenerated.name, Client.country == LeadGenerated.country))
         .order_by(desc(LeadGenerated.researched_at))
         .limit(limit)
     )
