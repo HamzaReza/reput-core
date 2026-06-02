@@ -4,5 +4,10 @@ from app.models.quote import QuoteRequest
 from app.models.contract import Contract
 from app.models.meeting import Meeting
 from app.models.lead import WebAnalyst, LeadGenerated
+from app.models.news import NewsSource, NewsAgent, NewsDraft, NewsPublished, NewsRules, NewsWPConfig
 
-__all__ = ["User", "UserProfile", "ReputationScan", "QuoteRequest", "Contract", "Meeting", "WebAnalyst", "LeadGenerated"]
+__all__ = [
+    "User", "UserProfile", "ReputationScan", "QuoteRequest", "Contract", "Meeting",
+    "WebAnalyst", "LeadGenerated",
+    "NewsSource", "NewsAgent", "NewsDraft", "NewsPublished", "NewsRules", "NewsWPConfig",
+]

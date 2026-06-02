@@ -1,0 +1,25 @@
+@import "tailwindcss";
+@plugin "@tailwindcss/typography";
+
+
+@theme {
+  --color-primary: #e60000; /* Editorial red */
+  --color-primary-hover: #cc0000;
+  --color-surface: #f9f9f9;
+  --color-surface-hover: #f1f1f1;
+  --color-border: #e2e8f0;
+  --color-text: #1a1a1a;
+  --color-text-muted: #64748b;
+}
+
+body {
+  background-color: var(--color-surface);
+  color: var(--color-text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+@layer utilities {
+  .animate-pulse-slow {
+    animation: pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+}

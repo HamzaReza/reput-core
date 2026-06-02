@@ -12,6 +12,7 @@ from app.models import User, UserProfile, ReputationScan, QuoteRequest  # noqa: 
 from app.models.contract import Contract  # noqa: F401
 from app.models.meeting import Meeting  # noqa: F401
 from app.models.lead import WebAnalyst, LeadGenerated  # noqa: F401
+from app.models.news import NewsSource, NewsAgent, NewsDraft, NewsPublished, NewsRules, NewsWPConfig  # noqa: F401
 from app.database import Base
 from app.config import get_settings
 

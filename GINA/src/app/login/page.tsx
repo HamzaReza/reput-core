@@ -1,6 +1,6 @@
 "use client";
 
-import { auth, setToken } from "@/lib/api";
+import { auth, getToken, setToken } from "@/lib/api";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { toast, ToastContainer } from "react-toastify";
@@ -57,6 +57,19 @@ export default function LoginPage() {
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
+
+    // Already logged in + cross-app redirect → skip the form, forward with token
+    const redirectTo = params.get("redirect");
+    const existingToken = getToken();
+    if (redirectTo && existingToken) {
+      try {
+        const url = new URL(decodeURIComponent(redirectTo));
+        url.searchParams.set("token", existingToken);
+        window.location.replace(url.toString());
+        return;
+      } catch {}
+    }
+
     if (params.get("reason") === "session_expired") {
       toast.error("The session has expired", {
         position: "top-center",
@@ -91,6 +104,22 @@ export default function LoginPage() {
         );
       } catch {}
       window.dispatchEvent(new Event("reput-auth-change"));
+
+      // Cross-app redirect: news-ai (or any trusted app) sends ?redirect=<url>
+      // after login we append the token so the destination can establish its own session
+      const params = new URLSearchParams(window.location.search);
+      const redirectTo = params.get("redirect");
+      if (redirectTo) {
+        try {
+          const url = new URL(decodeURIComponent(redirectTo));
+          url.searchParams.set("token", res.access_token);
+          window.location.href = url.toString();
+          return;
+        } catch {
+          // malformed redirect — fall through to dashboard
+        }
+      }
+
       router.push("/dashboard");
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Login failed.");

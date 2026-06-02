@@ -12,6 +12,7 @@ interface NavItem {
   badge?: number | null;
   icon: React.ReactNode;
   adminOnly?: boolean;
+  external?: boolean;
 }
 
 const NAV_ITEMS: NavItem[] = [
@@ -107,6 +108,28 @@ const NAV_ITEMS: NavItem[] = [
         <circle cx="9" cy="7" r="4" />
         <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
         <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+      </svg>
+    ),
+  },
+  {
+    label: "Newsroom",
+    href: process.env.NEXT_PUBLIC_NEWS_AI_URL || "http://localhost:3001",
+    external: true,
+    icon: (
+      <svg
+        width="18"
+        height="18"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <path d="M4 22h16a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v16a2 2 0 0 1-2 2zm0 0a2 2 0 0 1-2-2v-9c0-1.1.9-2 2-2h2" />
+        <path d="M18 14h-8" />
+        <path d="M15 18h-5" />
+        <path d="M10 6h8v4h-8V6z" />
       </svg>
     ),
   },
@@ -254,70 +277,71 @@ export default function Sidebar({
             item.href === "/dashboard"
               ? pathname === "/dashboard"
               : pathname === item.href || pathname.startsWith(item.href + "/");
+
+          const itemStyle = {
+            display: "flex",
+            alignItems: "center",
+            justifyContent: collapsed ? "center" : "space-between",
+            gap: "0.625rem",
+            padding: collapsed ? "0.65rem 0" : "0.6rem 0.75rem",
+            borderRadius: collapsed ? "0" : "999px",
+            textDecoration: "none",
+            fontSize: "0.9rem",
+            fontWeight: isActive ? 600 : 500,
+            color: isActive ? "#48D4B8" : "#cbd5e1",
+            backgroundColor: isActive ? "rgba(72,212,184,0.12)" : "transparent",
+            transition: "background-color 0.15s, color 0.15s",
+            marginBottom: "0.125rem",
+            whiteSpace: "nowrap" as const,
+            overflow: "hidden",
+            cursor: "pointer",
+          };
+
+          const innerContent = (
+            <>
+              <span style={{ display: "flex", alignItems: "center", gap: "0.625rem", overflow: "hidden" }}>
+                <span style={{ color: isActive ? "#48D4B8" : "var(--color-muted, #64748b)", display: "flex", alignItems: "center", flexShrink: 0 }}>
+                  {item.icon}
+                </span>
+                {!collapsed && item.label}
+              </span>
+              {!collapsed && item.badge != null && (
+                <span style={{ backgroundColor: "#48D4B8", color: "#fff", borderRadius: "999px", fontSize: "0.6875rem", fontWeight: 700, padding: "0.125rem 0.4rem", lineHeight: 1.4, flexShrink: 0 }}>
+                  {item.badge}
+                </span>
+              )}
+            </>
+          );
+
+          if (item.external) {
+            return (
+              <a
+                key={item.href}
+                href={item.href}
+                title={collapsed ? item.label : undefined}
+                style={itemStyle}
+                onClick={(e) => {
+                  e.preventDefault();
+                  onClose();
+                  const token = typeof window !== "undefined" ? localStorage.getItem("reput_token") : null;
+                  const url = token ? `${item.href}?token=${encodeURIComponent(token)}` : item.href;
+                  window.location.href = url;
+                }}
+              >
+                {innerContent}
+              </a>
+            );
+          }
+
           return (
             <Link
               key={item.href}
               href={item.href}
               onClick={onClose}
               title={collapsed ? item.label : undefined}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: collapsed ? "center" : "space-between",
-                gap: "0.625rem",
-                padding: collapsed ? "0.65rem 0" : "0.6rem 0.75rem",
-                borderRadius: collapsed ? "0" : "999px",
-                textDecoration: "none",
-                fontSize: "0.9rem",
-                fontWeight: isActive ? 600 : 500,
-                color: isActive
-                  ? "#48D4B8"
-                  : "#cbd5e1",
-                backgroundColor: isActive
-                  ? "rgba(72,212,184,0.12)"
-                  : "transparent",
-                transition: "background-color 0.15s, color 0.15s",
-                marginBottom: "0.125rem",
-                whiteSpace: "nowrap",
-                overflow: "hidden",
-              }}
+              style={itemStyle}
             >
-              <span
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "0.625rem",
-                  overflow: "hidden",
-                }}
-              >
-                <span
-                  style={{
-                    color: isActive ? "#48D4B8" : "var(--color-muted, #64748b)",
-                    display: "flex",
-                    alignItems: "center",
-                    flexShrink: 0,
-                  }}
-                >
-                  {item.icon}
-                </span>
-                {!collapsed && item.label}
-              </span>
-              {!collapsed && item.badge != null && (
-                <span
-                  style={{
-                    backgroundColor: "#48D4B8",
-                    color: "#fff",
-                    borderRadius: "999px",
-                    fontSize: "0.6875rem",
-                    fontWeight: 700,
-                    padding: "0.125rem 0.4rem",
-                    lineHeight: 1.4,
-                    flexShrink: 0,
-                  }}
-                >
-                  {item.badge}
-                </span>
-              )}
+              {innerContent}
             </Link>
           );
         })}
