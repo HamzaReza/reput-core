@@ -2,6 +2,7 @@ import asyncio
 import json
 import math
 import re
+import unicodedata
 import uuid
 from datetime import datetime, timezone
 from typing import Literal
@@ -424,6 +425,17 @@ def _parse_serper_date(date_str: str) -> float:
     return float("nan")
 
 
+def _strip_diacritics(s: str) -> str:
+    return "".join(
+        c for c in unicodedata.normalize("NFKD", s.lower()) if not unicodedata.combining(c)
+    )
+
+
+def _passes_name_filter(article: dict, first_name: str, last_name: str) -> bool:
+    text = _strip_diacritics(f"{article.get('title', '')} {article.get('snippet', '')}")
+    return _strip_diacritics(first_name) in text and _strip_diacritics(last_name) in text
+
+
 def _dedupe_links(links: list[dict]) -> list[dict]:
     sentiment_priority = {"negative": 3, "neutral": 2, "positive": 1}
     risk_priority = {"high": 4, "medium": 3, "low": 2, "none": 1}
@@ -652,12 +664,24 @@ async def _classify_with_claude(
         )
     else:
         name_filter = (
-            f'MANDATORY NAME FILTER:\nBefore classifying, check whether the subject "{name}" is clearly identifiable in the title, snippet, or content.\n\n'
-            f'INCLUDE the article if:\n• The full name "{name}" appears (case-insensitive), OR\n'
-            f'• Both "{first_name}" AND "{last_name}" appear in close proximity (within the same sentence or paragraph)\n\n'
-            f"EXCLUDE the article if:\n• Only the first name appears without the last name, OR\n"
-            f"• Only the last name appears without the first name, OR\n"
-            f"• The article is clearly about a different person with a similar name OR\n• Neither appears at all\n\n"
+            f'MANDATORY NAME FILTER — apply to EVERY article before classifying:\n'
+            f'SUBJECT: "{name}" | First name: "{first_name}" | Last name: "{last_name}"\n\n'
+            f'RULE 1 — EXACT MATCH (always include):\n'
+            f'The exact full name "{name}" appears verbatim (case-insensitive, diacritic variants accepted) → INCLUDE.\n\n'
+            f'RULE 2 — DIFFERENT FIRST NAME (always exclude — this is the primary filter):\n'
+            f'A first name OTHER than "{first_name}" appears explicitly with "{last_name}" or any diacritic variant of it '
+            f'(e.g. "Tibor {last_name}" or "Pavol {last_name}" when subject is "{name}") → EXCLUDE immediately.\n'
+            f'Exception: initials only (e.g. "R. {last_name}") → treat as potentially the same person, apply Rule 3.\n\n'
+            f'RULE 3 — LAST NAME ONLY (no first name present):\n'
+            f'Only "{last_name}" appears without any first name → INCLUDE only if the article is clearly '
+            f'about the same person based on context (same country, same profession, same known associations). '
+            f'If context is ambiguous → EXCLUDE.\n\n'
+            f'RULE 4 — CULTURAL NAME VARIATIONS:\n'
+            f'For Arabic, Chinese, Japanese, Korean, and Indian names, accept common transliteration variants '
+            f'of "{first_name}" as the same person (e.g. "Mohammed"/"Mohammad", "Zhang Wei"/"Wei Zhang"). '
+            f'Still apply Rule 2 if a clearly different identity is present.\n\n'
+            f'RULE 5 — WHEN IN DOUBT → EXCLUDE.\n'
+            f'If you cannot confidently confirm the article refers to "{name}" specifically → EXCLUDE.\n\n'
             f"If EXCLUDED → do not include this article in the output array at all."
         )
 
@@ -1012,6 +1036,13 @@ async def _execute_generate_lead(body: GenerateLeadRequest, settings, job_id: uu
     ]
     batch_results = await asyncio.gather(*[_classify_batch(b) for b in batches])
     classified: list[dict] = [item for result in batch_results for item in result]
+
+    if body.subjectType != "company":
+        name_parts = sanitized_subject.split()
+        fn = name_parts[0] if name_parts else sanitized_subject
+        ln = " ".join(name_parts[1:])
+        if fn and ln:
+            classified = [a for a in classified if _passes_name_filter(a, fn, ln)]
 
     def sort_key(link: dict) -> tuple:
         ts = _parse_serper_date(link.get("date") or "")
