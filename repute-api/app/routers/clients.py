@@ -4,7 +4,8 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
-from sqlalchemy import delete as sql_delete, desc, select, text
+from sqlalchemy import cast, delete as sql_delete, desc, select, text
+from sqlalchemy.dialects.postgresql import JSONB as PG_JSONB
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
@@ -62,7 +63,6 @@ async def upsert_client(
         payload.countries = [payload.country]
 
     sorted_countries = sorted(payload.countries)
-    sorted_countries_json = json.dumps(sorted_countries, separators=(",", ":"))
 
     if payload.subject_type == "company":
         result = await db.execute(
@@ -70,9 +70,8 @@ async def upsert_client(
             .where(
                 Client.subject_type == "company",
                 Client.company == (payload.company or "").strip(),
-                text("clients.countries::text = :cj"),
+                Client.countries == cast(sorted_countries, PG_JSONB),
             )
-            .params(cj=sorted_countries_json)
             .limit(1)
         )
     else:
@@ -81,9 +80,8 @@ async def upsert_client(
             .where(
                 Client.subject_type == "individual",
                 Client.name == payload.name.strip(),
-                text("clients.countries::text = :cj"),
+                Client.countries == cast(sorted_countries, PG_JSONB),
             )
-            .params(cj=sorted_countries_json)
             .limit(1)
         )
     client = result.scalar_one_or_none()
@@ -258,7 +256,6 @@ async def can_scan(
     if not parsed_countries and country:
         parsed_countries = [country]
     sorted_c = sorted(parsed_countries)
-    sorted_json = json.dumps(sorted_c, separators=(",", ":"))
 
     if subject_type == "company":
         result = await db.execute(
@@ -266,9 +263,8 @@ async def can_scan(
             .where(
                 Client.subject_type == "company",
                 Client.company == company.strip(),
-                text("clients.countries::text = :cj"),
+                Client.countries == cast(sorted_c, PG_JSONB),
             )
-            .params(cj=sorted_json)
             .limit(1)
         )
     else:
@@ -277,9 +273,8 @@ async def can_scan(
             .where(
                 Client.subject_type == "individual",
                 Client.name == name.strip(),
-                text("clients.countries::text = :cj"),
+                Client.countries == cast(sorted_c, PG_JSONB),
             )
-            .params(cj=sorted_json)
             .limit(1)
         )
     client = result.scalar_one_or_none()
