@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
-from sqlalchemy import and_, desc, select
+from sqlalchemy import desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.attributes import flag_modified
 
@@ -19,6 +19,7 @@ class LeadCreate(BaseModel):
     name: str | None = None
     company: str | None = None
     country: str | None = None
+    countries: list[str] = []
     background: str | None = None
     pre_analysis_summary: str | None = None
     keywords_suggested: list[str] = []
@@ -54,6 +55,7 @@ async def create_lead(
         existing.company = payload.company
         existing.background = payload.background
         existing.pre_analysis_summary = payload.pre_analysis_summary
+        existing.countries = payload.countries
         existing.keywords_suggested = payload.keywords_suggested
         existing.researched_at = datetime.now(timezone.utc)
         existing.links = None
@@ -70,6 +72,7 @@ async def create_lead(
         name=payload.name,
         company=payload.company,
         country=payload.country,
+        countries=payload.countries,
         background=payload.background,
         pre_analysis_summary=payload.pre_analysis_summary,
         keywords_suggested=payload.keywords_suggested,
@@ -119,15 +122,24 @@ async def get_lead(
     db: AsyncSession = Depends(get_db),
     current_web_analyst: WebAnalyst = Depends(get_current_web_analyst),
 ) -> dict:
+    assigned_to_name_sq = (
+        select(Client.assigned_to_name)
+        .where(
+            Client.name == LeadGenerated.name,
+            Client.countries.op("@>")(func.jsonb_build_array(LeadGenerated.country)),
+        )
+        .limit(1)
+        .correlate(LeadGenerated)
+        .scalar_subquery()
+    )
     query = (
         select(
             LeadGenerated,
             WebAnalyst.name.label("wa_name"),
             WebAnalyst.email.label("wa_email"),
-            Client.assigned_to_name.label("assigned_to_name"),
+            assigned_to_name_sq.label("assigned_to_name"),
         )
         .outerjoin(WebAnalyst, LeadGenerated.scanned_by_id == WebAnalyst.id)
-        .outerjoin(Client, and_(Client.name == LeadGenerated.name, Client.country == LeadGenerated.country))
         .where(LeadGenerated.id == lead_id)
     )
     if current_web_analyst.role != "admin":
