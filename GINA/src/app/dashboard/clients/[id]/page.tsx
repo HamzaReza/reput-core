@@ -5,6 +5,7 @@ import {
   ClientDetail,
   ClientEventType,
   clientsApi,
+  getToken,
   isAdmin,
   WebAnalystItem,
   webAnalysts,
@@ -724,7 +725,7 @@ function ActionPanel({
         className="glass glow-border"
         style={{ borderRadius: "0.875rem", padding: "1.25rem" }}
       >
-        <style>{`@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }`}</style>
+        <style>{`@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} } @keyframes dotPulse { 0%,100%{box-shadow:0 0 0 2px #f59e0b40} 50%{box-shadow:0 0 0 5px #f59e0b00} }`}</style>
         <div style={{ display: "flex", alignItems: "center", gap: "0.625rem" }}>
           <div
             style={{
@@ -991,6 +992,7 @@ export default function ClientDetailPage() {
   const [client, setClient] = useState<ClientDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [activeJobLeadId, setActiveJobLeadId] = useState<string | null>(null);
 
   const adminView = isAdmin();
   const [analystsList, setAnalystsList] = useState<WebAnalystItem[]>([]);
@@ -1018,6 +1020,99 @@ export default function ClientDetailPage() {
         .then(setAnalystsList)
         .catch(() => {});
   }, [adminView]);
+
+  const jobPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    const EALUMINATE_JOB_KEY = "ealuminate_job_id";
+    const raw = localStorage.getItem(EALUMINATE_JOB_KEY);
+    if (!raw) return;
+
+    let stored: {
+      job_id: string;
+      leadId: string | null;
+      clientId?: string | null;
+      useKeywords?: boolean;
+      pagesCap?: number;
+      scanFocus?: string;
+      keywords?: string[];
+    } | null = null;
+    try { stored = JSON.parse(raw); } catch { localStorage.removeItem(EALUMINATE_JOB_KEY); return; }
+    if (!stored?.leadId) return;
+
+    if (stored.clientId && stored.clientId !== id) return;
+
+    setActiveJobLeadId(stored.leadId);
+
+    const {
+      job_id,
+      leadId: jobLeadId,
+      clientId: jobClientId = null,
+      useKeywords: jobUseKeywords,
+      pagesCap: jobPagesCap,
+      scanFocus: jobScanFocus,
+      keywords: jobKeywords,
+    } = stored;
+    const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
+
+    const checkJob = async () => {
+      try {
+        const token = getToken();
+        const res = await fetch(`${apiBase}/generate-lead/${job_id}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok) return;
+        const pollData = await res.json() as {
+          status: string;
+          result?: Record<string, unknown>;
+          error?: string;
+        };
+
+        if (pollData.status === "done" || pollData.status === "failed") {
+          clearInterval(jobPollRef.current!);
+          jobPollRef.current = null;
+          localStorage.removeItem(EALUMINATE_JOB_KEY);
+
+          const writtenKey = `ealuminate_scan_written_${job_id}`;
+          if (pollData.status === "done" && pollData.result && jobClientId && !localStorage.getItem(writtenKey)) {
+            localStorage.setItem(writtenKey, "1");
+            setTimeout(() => localStorage.removeItem(writtenKey), 30000);
+            const r = pollData.result as {
+              links?: Array<Record<string, unknown>>;
+              negative?: Array<Record<string, unknown>>;
+              summary?: Record<string, unknown>;
+              score?: number;
+            };
+            try {
+              await clientsApi.addEvent(jobClientId, {
+                event_type: "scan",
+                event_data: {
+                  score: r.score,
+                  summary: r.summary ?? null,
+                  links_count: (r.links ?? []).length,
+                  negative_count: (r.negative ?? []).length,
+                  lead_id: jobLeadId ?? undefined,
+                  links: r.links ?? [],
+                  useKeywords: jobUseKeywords,
+                  pagesCap: jobPagesCap,
+                  scanFocus: jobScanFocus ?? undefined,
+                  keywords: jobKeywords ?? [],
+                },
+              });
+            } catch { /* non-fatal */ }
+          }
+
+          setActiveJobLeadId(null);
+          await reload();
+        }
+      } catch { /* non-fatal */ }
+    };
+
+    checkJob();
+    jobPollRef.current = setInterval(checkJob, 5000);
+
+    return () => { if (jobPollRef.current) clearInterval(jobPollRef.current); };
+  }, [id]);
 
   const handleReassign = async () => {
     setReassigning(true);
@@ -1588,6 +1683,7 @@ export default function ClientDetailPage() {
             </p>
           )}
 
+          <style>{`@keyframes dotPulse { 0%,100%{box-shadow:0 0 0 2px #f59e0b40} 50%{box-shadow:0 0 0 5px #f59e0b00} }`}</style>
           <div style={{ position: "relative" }}>
             {client.events.map((event, i) => {
               const meta = EVENT_META[event.event_type as ClientEventType] ?? {
@@ -1595,7 +1691,7 @@ export default function ClientDetailPage() {
                 color: "#64748b",
                 dot: "#94a3b8",
               };
-              const isLast = i === client.events.length - 1;
+              const isLast = i === client.events.length - 1 && !activeJobLeadId;
               const data = event.data ?? {};
               return (
                 <div
@@ -1661,7 +1757,7 @@ export default function ClientDetailPage() {
                     {event.event_type === "research" && (
                       <>
                         <ResearchDetail data={data} />
-                        {!client.events.slice(i + 1).some((e) => {
+                        {activeJobLeadId !== (data.lead_id as string | undefined) && !client.events.slice(i + 1).some((e) => {
                           if (e.event_type !== "scan") return false;
                           const researchLeadId = data.lead_id as
                             | string
@@ -1717,6 +1813,38 @@ export default function ClientDetailPage() {
                 </div>
               );
             })}
+            {activeJobLeadId && (
+              <div style={{ display: "flex", gap: "1rem", position: "relative" }}>
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", flexShrink: 0 }}>
+                  <div style={{
+                    width: 12,
+                    height: 12,
+                    borderRadius: "50%",
+                    backgroundColor: "#f59e0b",
+                    border: "2px solid #fff",
+                    boxShadow: "0 0 0 2px #f59e0b40",
+                    flexShrink: 0,
+                    marginTop: "0.15rem",
+                    animation: "dotPulse 1.8s ease-in-out infinite",
+                  }} />
+                </div>
+                <div style={{ flex: 1, paddingBottom: 0 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.375rem" }}>
+                    <span style={{ fontSize: "0.875rem", fontWeight: 700, color: "#d97706" }}>
+                      Scan in Progress
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => router.push(`/dashboard/ealuminate?lead=${activeJobLeadId}`)}
+                    className="glow-button"
+                    style={{ padding: "0.4rem 1rem", fontWeight: 700, borderRadius: "999px", fontSize: "0.8125rem", cursor: "pointer" }}
+                  >
+                    View in Ealuminate
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>

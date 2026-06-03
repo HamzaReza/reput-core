@@ -1,2 +1,5 @@
 .claude
 .cursor
+deploy.sh
+bulk_create_employees.py
+bulk_register.py
