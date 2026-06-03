@@ -83,6 +83,14 @@ const KEYWORD_FOCUS_OPTIONS = [
   { value: "positive", label: "Positive" },
 ] as const;
 
+const KEYWORD_LENGTH_OPTIONS = [
+  { value: null, label: "Any" },
+  { value: 1, label: "1 word" },
+  { value: 2, label: "2 words" },
+  { value: 3, label: "3 words" },
+] as const;
+type KeywordLength = null | 1 | 2 | 3;
+
 const REPORT_LANGUAGE_OPTIONS = [
   { value: "en", label: "English" },
   { value: "it", label: "Italian" },
@@ -614,6 +622,7 @@ function EaluminatePageInner() {
   const [pagesCap, setPagesCap] = useState(2);
   const [keywordsCap, setKeywordsCap] = useState(5);
   const [keywordFocus, setKeywordFocus] = useState<KeywordFocus>("all");
+  const [keywordLength, setKeywordLength] = useState<KeywordLength>(null);
   const [reportLanguage, setReportLanguage] = useState<ReportLanguage>("en");
   const [useKeywords, setUseKeywords] = useState(true);
   const [scanFocus, setScanFocus] = useState<KeywordFocus>("all");
@@ -1308,6 +1317,8 @@ function EaluminatePageInner() {
                 setCountries([d.country as string]);
               if (d.scanTier === "standard" || d.scanTier === "advanced")
                 setScanTier(d.scanTier as "standard" | "advanced");
+              if (d.keywordLength === null || d.keywordLength === 1 || d.keywordLength === 2 || d.keywordLength === 3)
+                setKeywordLength(d.keywordLength as KeywordLength);
             }
             const scanEvents = clientDetail.events.filter(
               (e) =>
@@ -1512,6 +1523,7 @@ function EaluminatePageInner() {
           subjectType,
           keywordsCap,
           keywordFocus,
+          keywordLength: keywordLength ?? undefined,
           pagesCap,
           reportLanguage,
           countries,
@@ -1599,6 +1611,7 @@ function EaluminatePageInner() {
           description: description.trim(),
           keywordsCap,
           keywordFocus,
+          keywordLength: keywordLength ?? undefined,
           subjectType,
           reportLanguage,
           scanTier,
@@ -1653,6 +1666,7 @@ function EaluminatePageInner() {
             subjectType,
             keywordsCap,
             keywordFocus,
+            keywordLength: keywordLength ?? undefined,
             pagesCap,
             reportLanguage,
             countries,
@@ -1928,6 +1942,9 @@ function EaluminatePageInner() {
           labelStyle={labelStyle}
           keywordsCapOptions={KEYWORDS_CAP_OPTIONS}
           keywordFocusOptions={KEYWORD_FOCUS_OPTIONS}
+          keywordLength={keywordLength}
+          setKeywordLength={setKeywordLength}
+          keywordLengthOptions={KEYWORD_LENGTH_OPTIONS}
           pagesCapOptions={PAGES_CAP_OPTIONS}
           reportLanguage={reportLanguage}
           setReportLanguage={(v) => setReportLanguage(v as ReportLanguage)}
