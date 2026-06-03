@@ -13,6 +13,7 @@ Python FastAPI backend with PostgreSQL for the RepuTrust reputation management p
 | Auth | JWT (python-jose) + bcrypt (passlib) |
 | Validation | Pydantic v2 |
 | Server | Uvicorn |
+| AI | Anthropic Claude SDK |
 
 ---
 
@@ -28,6 +29,7 @@ Services:
 - **API** → http://localhost:8000
 - **Docs** → http://localhost:8000/docs
 - **PostgreSQL** → localhost:5432
+- **pgAdmin 4** → http://localhost:5050
 
 ---
 
@@ -77,6 +79,25 @@ The API will be available at http://localhost:8000 with interactive docs at http
 
 ---
 
+## Environment Variables
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `DATABASE_URL` | Async PostgreSQL connection string | `postgresql+asyncpg://reput_user:reput_pass@localhost:5432/reput_db` |
+| `JWT_SECRET` | Secret key for signing JWTs | — (required) |
+| `JWT_ALGORITHM` | JWT signing algorithm | `HS256` |
+| `ACCESS_TOKEN_EXPIRE_MINUTES` | Token lifetime in minutes | `1440` (24 h) |
+| `DEBUG` | Enable debug mode | `false` |
+| `ALLOWED_ORIGINS` | JSON array of allowed CORS origins | `["http://localhost:3000"]` |
+
+Generate a secure JWT secret:
+
+```bash
+python -c "import secrets; print(secrets.token_hex(32))"
+```
+
+---
+
 ## API Endpoints
 
 ### Auth — `/api/v1/auth`
@@ -108,21 +129,85 @@ The API will be available at http://localhost:8000 with interactive docs at http
 
 | Method | Path | Description |
 |--------|------|-------------|
-| POST | `` | Submit quote (guest or auth) |
+| POST | `` | Submit quote (guest or authenticated) |
 | POST | `/authenticated` | Submit quote linked to account |
 | GET | `/my` | List own quote requests |
+
+### Clients — `/api/v1/clients`
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `` | List all clients (filterable by stage) |
+| POST | `` | Create a new client |
+| GET | `/{id}` | Get single client with full history |
+| PATCH | `/{id}` | Update client fields |
+
+### Leads — `/api/v1/leads`
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `` | List leads |
+| POST | `` | Create lead |
+
+### Dashboard — `/api/v1/dashboard`
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/stats` | KPI counts (clients, scans, negative links, etc.) |
+| GET | `/activity` | Recent activity feed |
+| GET | `/charts` | Chart data for dashboard graphs |
+
+### Generate Lead — `/api/v1/generate-lead`
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `` | Run full AI lead scan — calls Serper + Firecrawl + Claude and returns classified links |
+
+### Pre-Analysis — `/api/v1/pre-analysis`
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `` | Research and disambiguate a target before full scan |
+
+### Web Analysts — `/api/v1/web-analysts`
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `` | List analyst profiles |
+| POST | `` | Create analyst profile |
+| GET | `/{id}` | Get single analyst |
+| PATCH | `/{id}` | Update analyst |
+
+### Contracts — `/api/v1/contracts`
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `` | List contracts |
+| POST | `` | Create contract |
+
+### Meetings — `/api/v1/meetings`
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `` | List meetings |
+| POST | `` | Schedule meeting |
+
+### Feedback — `/api/v1/feedback`
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `` | Submit feedback entry |
+| GET | `` | List feedback (admin) |
 
 ---
 
 ## Connecting the Next.js Frontend
 
-Add to `RepuTrust-Web/.env.local`:
+Add to `RepuTrust-Web/.env.local` or `GINA/.env.local`:
 
 ```
 NEXT_PUBLIC_API_URL=http://localhost:8000/api/v1
 ```
-
-Then replace `localStorage` mock calls with `fetch` calls to the above URL.
 
 ---
 
@@ -145,14 +230,8 @@ reputation_scans
 quote_requests
   id · user_id (FK, nullable) · name · email · phone
   plan_type · details (JSONB) · message · status · created_at
+
+client_events
+  id · user_id (FK) · client_id · event_type
+  status · result (JSONB) · created_at
 ```
-
----
-
-## Generating a Secure JWT Secret
-
-```bash
-python -c "import secrets; print(secrets.token_hex(32))"
-```
-
-Paste the output as `JWT_SECRET` in `.env`.
