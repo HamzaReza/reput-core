@@ -1740,7 +1740,6 @@ function EaluminatePageInner() {
           useKeywords,
           scanFocus: scanFocus !== "all" ? scanFocus : undefined,
           scanTier,
-          background: description.trim() || undefined,
         }),
       });
       if (res.status === 401) {
