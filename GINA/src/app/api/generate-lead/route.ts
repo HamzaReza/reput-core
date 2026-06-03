@@ -265,16 +265,6 @@ function parseSerperDate(dateStr: string): number {
   return NaN;
 }
 
-function toEnglishDate(raw: string | undefined): string | undefined {
-  if (!raw) return undefined;
-  const ts = parseSerperDate(raw);
-  if (isNaN(ts)) return undefined;
-  return new Intl.DateTimeFormat("en-GB", {
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-  }).format(new Date(ts * 1000));
-}
 
 function countryCodeFromName(country: string): string | null {
   const k = country.toLowerCase().trim();
@@ -414,6 +404,7 @@ async function classifyWithClaude(
   subjectType: "individual" | "company" = "individual",
   languageName = "English",
   scanFocus?: string,
+  model = "claude-haiku-4-5-20251001",
 ): Promise<WebLink[]> {
   if (articles.length === 0) return [];
 
@@ -528,7 +519,7 @@ Return a JSON array only — no explanation, no markdown code fences. Each eleme
 Return ONLY the JSON array. If no valid articles, return [].`;
 
   const stream = client.messages.stream({
-    model: "claude-sonnet-4-6",
+    model,
     max_tokens: 64000,
     messages: [{ role: "user", content: prompt }],
   });
@@ -596,6 +587,7 @@ async function generateMeetingSummary(
   score: number,
   links: WebLink[],
   languageName = "English",
+  model = "claude-haiku-4-5-20251001",
 ): Promise<{
   headline: string;
   issues: string[];
@@ -657,7 +649,7 @@ Return ONLY a JSON object with these 5 fields (no markdown, no explanation):
 Write all output in ${languageName}.`;
 
   const response = await client.messages.create({
-    model: "claude-sonnet-4-6",
+    model,
     max_tokens: 4096,
     messages: [{ role: "user", content: prompt }],
   });
@@ -704,6 +696,7 @@ export async function POST(req: NextRequest) {
     reportLanguage,
     useKeywords = true,
     scanFocus,
+    scanTier = "standard",
   } = (await req.json()) as {
     firstName?: string;
     lastName?: string;
@@ -716,7 +709,10 @@ export async function POST(req: NextRequest) {
     reportLanguage?: string;
     useKeywords?: boolean;
     scanFocus?: "negative" | "positive" | "neutral";
+    scanTier?: "standard" | "advanced";
   };
+
+  const tierModel = scanTier === "standard" ? "claude-haiku-4-5-20251001" : "claude-sonnet-4-6";
 
   // Normalize to array — accept both legacy `country` string and new `countries` array
   const countries: string[] =
@@ -875,22 +871,30 @@ export async function POST(req: NextRequest) {
 
     const urlsSentToClaude = articles.map((a) => a.url);
 
-    // ── Phase 3: Claude classification ───────────────────────────────────────
-    const classified = await classifyWithClaude(
-      client,
-      articles,
-      sanitizedSubject,
-      countries,
-      keywords,
-      subjectType,
-      outputLanguageName,
-      scanFocus,
-    );
+    // ── Phase 3: Claude classification (batched to stay under 200K token limit) ──
+    const CLASSIFY_BATCH_SIZE = 20;
+    const classifiedBatches: WebLink[][] = [];
+    for (let b = 0; b < articles.length; b += CLASSIFY_BATCH_SIZE) {
+      const batch = articles.slice(b, b + CLASSIFY_BATCH_SIZE);
+      const batchResult = await classifyWithClaude(
+        client,
+        batch,
+        sanitizedSubject,
+        countries,
+        keywords,
+        subjectType,
+        outputLanguageName,
+        scanFocus,
+        tierModel,
+      );
+      classifiedBatches.push(batchResult);
+    }
+    const classified = classifiedBatches.flat();
 
     const deduped = dedupeLinks(classified)
       .map((link) => ({
         ...link,
-        date: toEnglishDate(dateMap.get(link.url)),
+        date: dateMap.get(link.url),
         keyword: keywordMap.get(link.url),
         country: countryMap.get(link.url),
       }))
@@ -914,6 +918,7 @@ export async function POST(req: NextRequest) {
       deriveScoreServer(negative.length, positive.length),
       deduped,
       outputLanguageName,
+      tierModel,
     );
 
     return NextResponse.json({

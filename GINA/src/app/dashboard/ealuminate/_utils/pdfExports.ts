@@ -7,6 +7,7 @@ interface ExportSummaryPdfParams {
   webAnalystName: string;
   score: number;
   result: ScanResult | null;
+  selectedFields?: string[];
 }
 
 interface ExportReportMasterPdfParams {
@@ -17,6 +18,7 @@ interface ExportReportMasterPdfParams {
   preAnalysisProfile: PreAnalysisProfile | null;
   preAnalysisSummary: string;
   editableKeywords: string[];
+  selectedFields?: string[];
 }
 
 function esc(v: string | null | undefined): string {
@@ -170,7 +172,8 @@ async function downloadAsPdf(
 export async function exportSummaryPdf(
   params: ExportSummaryPdfParams,
 ): Promise<void> {
-  const { fullName, company, country, webAnalystName, score, result } = params;
+  const { fullName, company, country, webAnalystName, score, result, selectedFields } = params;
+  const has = (key: string) => !selectedFields || selectedFields.includes(key);
   const dateStr = getDateStr();
   const logoSrc = await fetchLogoBase64(
     `${window.location.origin}/images/Ealixir.png`,
@@ -189,15 +192,27 @@ export async function exportSummaryPdf(
     ? `
         <div class="brief-headline">${esc(result.summary.headline)}</div>
         ${
-          result.summary.issues.length > 0
+          has("key_points") && result.summary.issues.length > 0
             ? `<div class="sub-head">Key Points</div>
                <ul class="brief-list">${result.summary.issues.map((i) => `<li>${esc(i)}</li>`).join("")}</ul>`
             : ""
         }
         ${
-          result.summary.talkingPoints.length > 0
+          has("meeting_angles") && result.summary.talkingPoints.length > 0
             ? `<div class="sub-head">Meeting Angles</div>
                <ol class="brief-list">${result.summary.talkingPoints.map((p) => `<li>${esc(p)}</li>`).join("")}</ol>`
+            : ""
+        }
+        ${
+          has("risk_indicators") && result.summary.riskIndicators && result.summary.riskIndicators.length > 0
+            ? `<div class="sub-head">Risk Indicators</div>
+               <ul class="brief-list">${result.summary.riskIndicators.map((r) => `<li>${esc(r)}</li>`).join("")}</ul>`
+            : ""
+        }
+        ${
+          has("objection_handlers") && result.summary.objectionHandlers && result.summary.objectionHandlers.length > 0
+            ? `<div class="sub-head">Objection Handlers</div>
+               <ol class="brief-list">${result.summary.objectionHandlers.map((o) => `<li>${esc(o)}</li>`).join("")}</ol>`
             : ""
         }`
     : `<p style="color:#94a3b8;font-size:0.8125rem;">No meeting brief available.</p>`;
@@ -493,6 +508,7 @@ export async function exportReportMasterPdf(
     preAnalysisProfile,
     preAnalysisSummary,
     editableKeywords,
+    selectedFields,
   } = params;
   const dateStr = getDateStr();
   const logoSrc = await fetchLogoBase64(
@@ -501,17 +517,34 @@ export async function exportReportMasterPdf(
 
   const profileRows = preAnalysisProfile
     ? [
-        ["Identity", preAnalysisProfile.identity],
-        ["Background", preAnalysisProfile.background],
-        ["Negative Findings", preAnalysisProfile.negative_findings],
-        ["Positive Presence", preAnalysisProfile.positive_presence],
-        ["Reputation Notes", preAnalysisProfile.reputation_notes],
+        { key: "identity",          label: "Identity",          value: preAnalysisProfile.identity },
+        { key: "background",        label: "Background",        value: preAnalysisProfile.background },
+        { key: "associations",      label: "Associations",      value: preAnalysisProfile.associations },
+        { key: "recent_news",       label: "Recent News",       value: preAnalysisProfile.recent_news },
+        { key: "negative_findings", label: "Negative Findings", value: preAnalysisProfile.negative_findings },
+        { key: "positive_presence", label: "Positive Presence", value: preAnalysisProfile.positive_presence },
+        ...(preAnalysisProfile.estimated_negative_links
+          ? [{
+              key: "estimated_negative_links",
+              label: "Estimated Negative Links",
+              value: (() => {
+                const { low, high, reasoning, coverage_assessment, confidence } =
+                  preAnalysisProfile.estimated_negative_links!;
+                const badges = [coverage_assessment, confidence ? `${confidence} confidence` : null]
+                  .filter(Boolean)
+                  .join(" · ");
+                return `${low.toLocaleString()}–${high.toLocaleString()} estimated negative links across the web${badges ? ` (${badges})` : ""}. ${reasoning}`;
+              })(),
+            }]
+          : []),
+        { key: "reputation_notes",  label: "Reputation Notes",  value: preAnalysisProfile.reputation_notes },
       ]
+        .filter((f) => f.value && (!selectedFields || selectedFields.includes(f.key)))
         .map(
-          ([label, text]) => `
+          ({ label, value }) => `
           <div class="profile-field">
             <div class="field-label">${esc(label)}</div>
-            <div class="field-value">${esc(text)}</div>
+            <div class="field-value">${esc(value)}</div>
           </div>`,
         )
         .join("")

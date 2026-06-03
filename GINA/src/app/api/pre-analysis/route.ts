@@ -141,6 +141,7 @@ interface PreAnalysisProfile {
   negative_findings: string;
   positive_presence: string;
   reputation_notes: string;
+  estimated_negative_links?: { low: number; high: number; reasoning: string };
 }
 
 const FALLBACK_PROFILE: PreAnalysisProfile = {
@@ -184,6 +185,7 @@ export async function POST(req: NextRequest) {
       keywordFocus = "all",
       subjectType = "individual",
       reportLanguage,
+      scanTier = "standard",
     } = body as {
       firstName?: string;
       lastName?: string;
@@ -195,7 +197,11 @@ export async function POST(req: NextRequest) {
       keywordFocus?: string;
       subjectType?: "individual" | "company";
       reportLanguage?: string;
+      scanTier?: "standard" | "advanced";
     };
+
+    const model = scanTier === "standard" ? "claude-haiku-4-5-20251001" : "claude-sonnet-4-6";
+    const webSearchTool = scanTier === "standard" ? "web_search_20250305" : "web_search_20260209";
 
     // Normalize to array — accept both legacy `country` string and new `countries` array
     const countries: string[] = Array.isArray(countriesRaw) && countriesRaw.length > 0
@@ -288,11 +294,11 @@ export async function POST(req: NextRequest) {
     try {
       // Call 1: web search → prose research summary
       const searchMsg = await anthropic.messages.create({
-        model: "claude-sonnet-4-6",
+        model,
         max_tokens: 4096,
         system: searchSystem,
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        tools: [{ type: "web_search_20260209", name: "web_search" } as any],
+        tools: [{ type: webSearchTool, name: "web_search" } as any],
         messages: [{ role: "user", content: searchContent }],
       });
 
@@ -308,13 +314,13 @@ export async function POST(req: NextRequest) {
 
       // Call 2: format prose → structured JSON (no tools)
       const formatMsg = await anthropic.messages.create({
-        model: "claude-sonnet-4-6",
-        max_tokens: 2048,
+        model,
+        max_tokens: 3000,
         system: `You are a data formatter. Convert the research summary into the specified JSON shape. Write ALL field values and ALL keywords in ${languageName}. Output ONLY valid JSON — no markdown fences, no explanation, no extra keys.`,
         messages: [
           {
             role: "user",
-            content: `Research summary about ${subjectLabel}:\n${researchSummary}\n\nReturn ONLY this JSON (no explanation, no markdown):\n{\n  "profile": {\n    "identity": "${formatIdentityHint}",\n    "background": "${formatBackgroundHint}",\n    "associations": "${formatAssociationsHint}",\n    "recent_news": "<3-6 sentences: latest news, articles, announcements, incidents, or developments from the past 12 months — include dates where available; if none found write 'No recent news found in available sources'>",\n    "negative_findings": "<4-8 sentences: legal proceedings, regulatory sanctions, fraud allegations, controversies, scandals, complaints — include dates and specifics where available; if none write 'No negative findings in available sources'>",\n    "positive_presence": "<3-6 sentences: awards, recognitions, successful ventures, positive media coverage, industry leadership, philanthropic activities>",\n    "reputation_notes": "<2-4 sentences: overall reputational standing, key risk indicators, public perception summary, recommended scrutiny level>"\n  },\n  "keywords": ["<keyword1>", ...]\n}\nRules: every field fully populated with detail, based only on the summary above, ${keywordFocusRule}`,
+            content: `Research summary about ${subjectLabel}:\n${researchSummary}\n\nReturn ONLY this JSON (no explanation, no markdown):\n{\n  "profile": {\n    "identity": "${formatIdentityHint}",\n    "background": "${formatBackgroundHint}",\n    "associations": "${formatAssociationsHint}",\n    "recent_news": "<3-6 sentences: latest news, articles, announcements, incidents, or developments from the past 12 months — include dates where available; if none found write 'No recent news found in available sources'>",\n    "negative_findings": "<4-8 sentences: legal proceedings, regulatory sanctions, fraud allegations, controversies, scandals, complaints — include dates and specifics where available; if none write 'No negative findings in available sources'>",\n    "positive_presence": "<3-6 sentences: awards, recognitions, successful ventures, positive media coverage, industry leadership, philanthropic activities>",\n    "reputation_notes": "<2-4 sentences: overall reputational standing, key risk indicators, public perception summary, recommended scrutiny level>"\n  },\n  "keywords": ["<keyword1>", ...]\n}\nRules: every field fully populated with detail, based only on the summary above, ${keywordFocusRule}.`,
           },
         ],
       });
