@@ -191,6 +191,7 @@ class PreAnalysisRequest(BaseModel):
     description: str = ""
     keywordsCap: int = 5
     keywordFocus: Literal["all", "negative", "positive", "neutral"] = "all"
+    keywordLength: int | None = None  # 1, 2, or 3 words; None = no constraint
     subjectType: Literal["individual", "company"] = "individual"
     reportLanguage: str | None = None
     scanTier: Literal["standard", "advanced"] = "standard"
@@ -253,11 +254,20 @@ async def pre_analysis(
         else "Do NOT include the person's name."
     )
 
+    if body.keywordLength == 1:
+        word_count_instruction = "each keyword must be exactly 1 word (single-word only)."
+    elif body.keywordLength == 2:
+        word_count_instruction = "each keyword must be exactly 2 words."
+    elif body.keywordLength == 3:
+        word_count_instruction = "each keyword must be exactly 3 words."
+    else:
+        word_count_instruction = "1-3 words each."
+
     keyword_focus_rules = {
-        "negative": f"keywords: up to {cap} items (minimum 1) — ADVERSE terms only: legal disputes, fraud, misconduct, scandal, complaints, litigation. {no_name_instruction} All keywords in {language_name}.",
-        "positive": f"keywords: up to {cap} items (minimum 1) — POSITIVE terms only: achievements, awards, leadership, philanthropy, recognition. {no_name_instruction} All keywords in {language_name}.",
-        "neutral": f"keywords: up to {cap} items (minimum 1) — NEUTRAL factual terms only: role, organisation, sector, projects. {no_name_instruction} All keywords in {language_name}.",
-        "all": f"keywords: up to {cap} items (minimum 1), 1-2 words each, balanced mix across positive, negative and neutral reputation angles. {no_name_instruction} All keywords in {language_name}.",
+        "negative": f"keywords: up to {cap} items (minimum 1), {word_count_instruction} ADVERSE terms only: legal disputes, fraud, misconduct, scandal, complaints, litigation. {no_name_instruction} All keywords in {language_name}.",
+        "positive": f"keywords: up to {cap} items (minimum 1), {word_count_instruction} POSITIVE terms only: achievements, awards, leadership, philanthropy, recognition. {no_name_instruction} All keywords in {language_name}.",
+        "neutral": f"keywords: up to {cap} items (minimum 1), {word_count_instruction} NEUTRAL factual terms only: role, organisation, sector, projects. {no_name_instruction} All keywords in {language_name}.",
+        "all": f"keywords: up to {cap} items (minimum 1), {word_count_instruction} balanced mix across positive, negative and neutral reputation angles. {no_name_instruction} All keywords in {language_name}.",
     }
     keyword_focus_rule = keyword_focus_rules.get(
         body.keywordFocus, keyword_focus_rules["all"]

@@ -77,6 +77,9 @@ interface EaluminateFormPanelProps {
   pipeline: ReactNode;
   scanTier: "standard" | "advanced";
   setScanTier: (value: "standard" | "advanced") => void;
+  keywordLength: null | 1 | 2 | 3;
+  setKeywordLength: (value: null | 1 | 2 | 3) => void;
+  keywordLengthOptions: readonly { value: null | 1 | 2 | 3; label: string }[];
 }
 
 const PROFILE_FIELD_COLORS: Record<string, string> = {
@@ -328,6 +331,9 @@ export function EaluminateFormPanel(props: EaluminateFormPanelProps) {
     pipeline,
     scanTier,
     setScanTier,
+    keywordLength,
+    setKeywordLength,
+    keywordLengthOptions,
     handleSkipToScan,
   } = props;
 
@@ -796,6 +802,34 @@ export function EaluminateFormPanel(props: EaluminateFormPanelProps) {
                   }}
                 >
                   Recommended 5–10 for a balanced and comprehensive scan.
+                </p>
+              </div>
+
+              {/* Keyword Length */}
+              <div>
+                <label style={labelStyle}>Keyword Length</label>
+                <div
+                  style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}
+                >
+                  {keywordLengthOptions.map(({ value, label }) => (
+                    <button
+                      key={label}
+                      type="button"
+                      onClick={() => setKeywordLength(value)}
+                      style={pillBtn(keywordLength === value)}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                <p
+                  style={{
+                    margin: "0.375rem 0 0",
+                    fontSize: "0.75rem",
+                    color: "#94a3b8",
+                  }}
+                >
+                  Word count each generated keyword should contain.
                 </p>
               </div>
 
