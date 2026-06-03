@@ -1,36 +1,153 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# RepuTrust Web
 
-## Getting Started
+Public-facing customer portal for the RepuTrust reputation management platform. Users can register, view their reputation score, request a service quote, and manage their account settings.
 
-First, run the development server:
+---
+
+## Tech Stack
+
+| Layer | Technology |
+|-------|-----------|
+| Framework | Next.js 16.2.2 (App Router) |
+| Language | TypeScript 6.0.2 |
+| UI | React 19.2.4 |
+| Styling | Tailwind CSS 4 |
+| AI | Anthropic Claude SDK |
+| Auth | JWT (via repute-api) |
+| OAuth | LinkedIn (planned) |
+| Payments | Stripe |
+| Email | SMTP (nodemailer) |
+| Analytics | Vercel Speed Insights |
+
+### Brand Colors
+
+| Name | Hex |
+|------|-----|
+| Primary (Teal) | `#4ECDC4` |
+| Secondary (Dark Blue) | `#2D3E50` |
+| Success | `#27AE60` |
+| Warning | `#F39C12` |
+| Error | `#E74C3C` |
+
+---
+
+## Pages
+
+| Route | Name | Purpose |
+|-------|------|---------|
+| `/` | Home | Landing page — hero, features, pricing |
+| `/auth` | Sign Up / Sign In | User registration and login |
+| `/login` | Login | Alternative login entry point |
+| `/dashboard` | Dashboard | Reputation score, scan history, profile |
+| `/quote` | Get a Quote | Service request form |
+| `/quote/request` | Quote Status | Track submitted quote request |
+| `/settings` | Settings | Account preferences, notifications |
+| `/meeting` | Book a Meeting | Scheduling interface |
+| `/lead` | Lead Generation | AI-powered lead research form |
+| `/feedback-admin` | Admin Feedback | Internal feedback management |
+
+---
+
+## API Routes
+
+| Route | Method | Description |
+|-------|--------|-------------|
+| `/api/generate-lead` | POST | Runs AI lead scan (Serper + Firecrawl + Claude) |
+| `/api/negative-links` | POST | Fetches negative links for a given person |
+
+---
+
+## Environment Variables
+
+Copy `.env.example` to `.env.local` and fill in the values:
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+cp .env.example .env.local
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+| Variable | Description |
+|----------|-------------|
+| `NEXT_PUBLIC_API_URL` | Backend API base URL (e.g. `http://localhost:8000/api/v1`) |
+| `NEXT_PUBLIC_LINKEDIN_CLIENT_ID` | LinkedIn OAuth app client ID |
+| `LINKEDIN_CLIENT_SECRET` | LinkedIn OAuth app client secret |
+| `DATABASE_URL` | PostgreSQL connection string |
+| `SMTP_HOST` | Email server host |
+| `SMTP_PORT` | Email server port |
+| `SMTP_USER` | Email sender address |
+| `SMTP_PASSWORD` | Email sender password |
+| `STRIPE_PUBLIC_KEY` | Stripe publishable key |
+| `STRIPE_SECRET_KEY` | Stripe secret key |
+| `JWT_SECRET` | JWT signing secret |
+| `NODE_ENV` | `development` or `production` |
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+---
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Setup
 
-## Learn More
+```bash
+# Install dependencies
+npm install
 
-To learn more about Next.js, take a look at the following resources:
+# Configure environment
+cp .env.example .env.local
+# Edit .env.local with your values
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+# Start development server
+npm run dev
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Open [http://localhost:3000](http://localhost:3000) in your browser.
 
-## Deploy on Vercel
+### Scripts
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+| Command | Description |
+|---------|-------------|
+| `npm run dev` | Start development server with hot reload |
+| `npm run build` | Build for production |
+| `npm start` | Start production server |
+| `npm run lint` | Run ESLint |
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+---
+
+## Folder Structure
+
+```
+src/
+├── app/                   # Next.js App Router pages + API routes
+│   ├── page.tsx           # Home / landing page
+│   ├── auth/              # Sign-up / sign-in
+│   ├── dashboard/         # User dashboard
+│   ├── quote/             # Quote request + status
+│   ├── settings/          # User settings
+│   ├── lead/              # Lead generation form
+│   ├── meeting/           # Meeting scheduler
+│   └── api/               # Next.js API routes
+│       ├── generate-lead/ # AI lead scan
+│       └── negative-links/# Negative link lookup
+│
+├── components/            # Reusable React components
+│   ├── common/            # Header, Hero, Features
+│   ├── auth/              # Auth form components
+│   ├── dashboard/         # Dashboard widgets
+│   ├── quote/             # Quote form components
+│   └── settings/          # Settings panels
+│
+├── lib/                   # Utilities (API client, country data, etc.)
+├── hooks/                 # Custom React hooks
+└── types/                 # TypeScript type definitions
+
+public/
+└── logo.svg               # RepuTrust logo
+```
+
+---
+
+## Connecting to the Backend
+
+Set `NEXT_PUBLIC_API_URL` in `.env.local` to point at the running repute-api instance:
+
+```
+NEXT_PUBLIC_API_URL=http://localhost:8000/api/v1
+```
+
+See [repute-api README](../repute-api/README.md) for backend setup instructions.
