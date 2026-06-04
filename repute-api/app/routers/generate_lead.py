@@ -2,6 +2,7 @@ import asyncio
 import json
 import math
 import re
+import unicodedata
 import uuid
 from datetime import datetime, timezone
 from typing import Literal
@@ -445,6 +446,53 @@ def _dedupe_links(links: list[dict]) -> list[dict]:
     return list(seen.values())
 
 
+def _strip_diacritics(s: str) -> str:
+    return "".join(
+        c
+        for c in unicodedata.normalize("NFKD", s.lower())
+        if not unicodedata.combining(c)
+    )
+
+
+_NAME_PARTICLES = {
+    "the", "and", "del", "di", "de", "von", "van", "el", "da", "do", "das", "dos",
+    "la", "le", "les", "bin", "bint",
+}
+
+
+def _passes_name_filter(article: dict, first_name: str, last_name: str) -> bool:
+    raw = " ".join([
+        article.get("title", ""),
+        article.get("snippet", ""),
+        article.get("content", ""),
+    ])
+    text = _strip_diacritics(raw)
+    first = _strip_diacritics(first_name)
+    last = _strip_diacritics(last_name)
+
+    if f"{first} {last}" in text or f"{last} {first}" in text:
+        return True
+
+    # Check hyphenated compound surnames e.g. "GASPAR-BARRIOS" → finds "barrios"
+    for match in re.findall(rf"\b(\w+)-{re.escape(last)}\b|\b{re.escape(last)}-(\w+)\b", text):
+        found = (match[0] or match[1]).lower()
+        if len(found) > 2 and found not in _NAME_PARTICLES:
+            if found != first and found not in first and first not in found:
+                return False
+
+    # Check space-separated adjacent words
+    for match in re.findall(rf"\b(\w+)\s+{re.escape(last)}\b|\b{re.escape(last)}\s+(\w+)\b", text):
+        found = (match[0] or match[1]).lower()
+        if len(found) <= 2:
+            continue
+        if found in _NAME_PARTICLES:
+            continue
+        if found != first and found not in first and first not in found:
+            return False
+
+    return True
+
+
 def _derive_score(neg_count: int, pos_count: int) -> int:
     if neg_count == 0:
         if pos_count >= 10:
@@ -643,23 +691,7 @@ async def _classify_with_claude(
             else f"The subject is from {countries_label}. Only include results clearly relevant to this person and these regions."
         )
 
-    if subject_type == "company":
-        name_filter = (
-            f'MANDATORY NAME FILTER:\nBefore classifying, check whether the company "{name}" is clearly identifiable in the title, snippet, or content.\n\n'
-            f'INCLUDE the article if:\n• The company name "{name}" appears (case-insensitive)\n\n'
-            f"EXCLUDE the article if:\n• The article clearly refers to a different company with a similar name, OR\n• The company name does not appear at all\n\n"
-            f"If EXCLUDED → do not include this article in the output array at all."
-        )
-    else:
-        name_filter = (
-            f'MANDATORY NAME FILTER:\nBefore classifying, check whether the subject "{name}" is clearly identifiable in the title, snippet, or content.\n\n'
-            f'INCLUDE the article if:\n• The full name "{name}" appears (case-insensitive), OR\n'
-            f'• Both "{first_name}" AND "{last_name}" appear in close proximity (within the same sentence or paragraph)\n\n'
-            f"EXCLUDE the article if:\n• Only the first name appears without the last name, OR\n"
-            f"• Only the last name appears without the first name, OR\n"
-            f"• The article is clearly about a different person with a similar name OR\n• Neither appears at all\n\n"
-            f"If EXCLUDED → do not include this article in the output array at all."
-        )
+    name_filter = ""
 
     scan_focus_rules: dict[str, str] = {
         "negative": "\nSCAN FOCUS: Return ONLY articles with NEGATIVE sentiment or HIGH/MEDIUM risk. Exclude all positive and neutral articles from the output entirely.\n",
@@ -832,7 +864,9 @@ class GenerateLeadRequest(BaseModel):
 # ── Core logic (extracted so background runner can call it) ──────────────────
 
 
-async def _execute_generate_lead(body: GenerateLeadRequest, settings, job_id: uuid.UUID | None = None) -> dict:
+async def _execute_generate_lead(
+    body: GenerateLeadRequest, settings, job_id: uuid.UUID | None = None
+) -> dict:
     countries: list[str] = (
         body.countries
         if body.countries and len(body.countries) > 0
@@ -870,9 +904,10 @@ async def _execute_generate_lead(body: GenerateLeadRequest, settings, job_id: uu
         # ── Phase 1: Serper searches ──────────────────────────────────────────
         if job_id:
             await _set_step(job_id, "serper_search")
-        search_queries = [sanitized_subject]
+        quoted_subject = f'"{sanitized_subject}"' if body.subjectType != "company" else sanitized_subject
+        search_queries = [quoted_subject]
         if body.useKeywords:
-            search_queries += [f"{sanitized_subject} {kw}" for kw in body.keywords]
+            search_queries += [f"{quoted_subject} {kw}" for kw in body.keywords]
 
         country_configs = [
             {
@@ -952,6 +987,42 @@ async def _execute_generate_lead(body: GenerateLeadRequest, settings, job_id: uu
                 elif kw and kw not in keyword_map.get(url, []):
                     keyword_map.setdefault(url, []).append(kw)
 
+        _name_parts = sanitized_subject.split()
+        if body.subjectType == "company":
+            _company_words = [
+                w
+                for w in re.findall(r"[a-z0-9]+", _strip_diacritics(sanitized_subject))
+                if len(w) > 2
+            ]
+            if _company_words:
+                articles = [
+                    a
+                    for a in articles
+                    if all(
+                        w in _strip_diacritics(a["title"] + " " + a["snippet"])
+                        for w in _company_words
+                    )
+                ]
+        else:
+            _fn = _strip_diacritics(_name_parts[0]) if _name_parts else ""
+            _ln = (
+                _strip_diacritics(" ".join(_name_parts[1:]))
+                if len(_name_parts) > 1
+                else ""
+            )
+            if _fn and _ln:
+                articles = [
+                    a
+                    for a in articles
+                    if _fn in _strip_diacritics(a["title"] + " " + a["snippet"])
+                    and _ln in _strip_diacritics(a["title"] + " " + a["snippet"])
+                ]
+
+        articles = [
+            a for a in articles
+            if not a["url"].lower().split("?")[0].endswith(".pdf")
+        ]
+
         urls_sent_to_firecrawl = [a["url"] for a in articles]
 
         BATCH_SIZE = 15
@@ -984,6 +1055,18 @@ async def _execute_generate_lead(body: GenerateLeadRequest, settings, job_id: uu
             else:
                 firecrawl_failed.append(articles[i]["url"])
 
+        if body.subjectType != "company":
+            _nf_parts = sanitized_subject.split()
+            _nf_first = _nf_parts[0] if _nf_parts else ""
+            _nf_last = " ".join(_nf_parts[1:]) if len(_nf_parts) > 1 else ""
+            if _nf_first and _nf_last:
+                before = len(articles)
+                articles = [
+                    a for a in articles
+                    if _passes_name_filter(a, _nf_first, _nf_last)
+                ]
+                print(f"[name_filter] {before} → {len(articles)} articles after hard filter")
+
         urls_sent_to_claude = [a["url"] for a in articles]
 
     # ── Phase 3: Claude classification (batched to stay under 200K token limit) ──
@@ -1012,6 +1095,16 @@ async def _execute_generate_lead(body: GenerateLeadRequest, settings, job_id: uu
     ]
     batch_results = await asyncio.gather(*[_classify_batch(b) for b in batches])
     classified: list[dict] = [item for result in batch_results for item in result]
+
+    if body.scanFocus == "negative":
+        classified = [
+            a for a in classified
+            if a.get("sentiment") == "negative" or a.get("risk") in ("high", "medium")
+        ]
+    elif body.scanFocus == "positive":
+        classified = [a for a in classified if a.get("sentiment") == "positive"]
+    elif body.scanFocus == "neutral":
+        classified = [a for a in classified if a.get("sentiment") == "neutral"]
 
     def sort_key(link: dict) -> tuple:
         ts = _parse_serper_date(link.get("date") or "")
@@ -1208,4 +1301,9 @@ async def get_generate_lead_job(
     job = await db.get(GenerateLeadJob, job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
-    return {"status": job.status, "result": job.result, "error": job.error, "current_step": job.current_step}
+    return {
+        "status": job.status,
+        "result": job.result,
+        "error": job.error,
+        "current_step": job.current_step,
+    }
