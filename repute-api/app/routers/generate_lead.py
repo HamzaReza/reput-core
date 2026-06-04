@@ -817,28 +817,33 @@ async def _generate_meeting_summary(
             f"}}\n\nWrite all output in {language_name}."
         )
 
-        response = await client.messages.create(
-            model=model,
-            max_tokens=16000,
-            system=(
-                "You are an AI assistant embedded in a professional reputation intelligence platform used by "
-                "reputation management firms. Your task is to analyze publicly available web search results "
-                "about a prospective client and produce structured internal sales briefing notes. "
-                "The findings below are summaries of news articles and web sources retrieved from public search engines. "
-                "Respond only with the requested JSON object."
-            ),
-            messages=[{"role": "user", "content": prompt}],
+        system_prompt = (
+            "You are an AI assistant embedded in a professional reputation intelligence platform used by "
+            "reputation management firms. Your task is to analyze publicly available web search results "
+            "about a prospective client and produce structured internal sales briefing notes. "
+            "The findings below are summaries of news articles and web sources retrieved from public search engines. "
+            "Respond only with the requested JSON object."
         )
-        text_block = next((b for b in response.content if b.type == "text"), None)
-        if text_block:
-            json_match = re.search(r"\{[\s\S]*\}", text_block.text.strip())
-            if json_match:
-                return json.loads(json_match.group())
-        print(
-            f"[meeting-summary] no JSON extracted; response: {text_block.text[:300] if text_block else 'no text block'}"
-        )
+        for attempt in range(3):
+            try:
+                response = await client.messages.create(
+                    model=model,
+                    max_tokens=16000,
+                    system=system_prompt,
+                    messages=[{"role": "user", "content": prompt}],
+                )
+                text_block = next((b for b in response.content if b.type == "text"), None)
+                if text_block:
+                    json_match = re.search(r"\{[\s\S]*\}", text_block.text.strip())
+                    if json_match:
+                        return json.loads(json_match.group())
+                print(f"[meeting-summary] no JSON (attempt {attempt + 1}); response: {text_block.text[:200] if text_block else 'no text block'}")
+            except Exception as e:
+                print(f"[meeting-summary] error (attempt {attempt + 1}): {e}")
+            if attempt < 2:
+                await asyncio.sleep(1.5 * (attempt + 1))
     except Exception as e:
-        print(f"[meeting-summary] error: {e}")
+        print(f"[meeting-summary] setup error: {e}")
 
     return _fallback_summary(score)
 
