@@ -562,7 +562,7 @@ async def _is_pdf(url: str, http: httpx.AsyncClient) -> bool:
             return True
 
         # Check Content-Disposition header (for file downloads)
-        if ".pdf" in content_disp:
+        if "pdf" in content_disp:
             print(f"[_is_pdf] Filtered PDF by Content-Disposition header: {url}")
             return True
 
@@ -574,20 +574,14 @@ async def _is_pdf(url: str, http: httpx.AsyncClient) -> bool:
         return False
 
     except asyncio.TimeoutError:
-        print(
-            f"[_is_pdf] Timeout on HEAD request for {url}, allowing scraping (assuming not PDF)"
-        )
-        return False
+        print(f"[_is_pdf] Timeout on HEAD request for {url}, assuming PDF")
+        return True
     except httpx.RequestError as e:
-        print(
-            f"[_is_pdf] Network error checking {url}: {type(e).__name__}, allowing scraping"
-        )
-        return False
+        print(f"[_is_pdf] Network error checking {url}: {type(e).__name__}, assuming PDF")
+        return True
     except Exception as e:
-        print(
-            f"[_is_pdf] Unexpected error checking {url}: {type(e).__name__}, allowing scraping"
-        )
-        return False
+        print(f"[_is_pdf] Unexpected error checking {url}: {type(e).__name__}, assuming PDF")
+        return True
 
 
 async def _search_serper(
