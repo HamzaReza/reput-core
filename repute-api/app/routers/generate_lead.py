@@ -455,17 +455,34 @@ def _strip_diacritics(s: str) -> str:
 
 
 _NAME_PARTICLES = {
-    "the", "and", "del", "di", "de", "von", "van", "el", "da", "do", "das", "dos",
-    "la", "le", "les", "bin", "bint",
+    "the",
+    "and",
+    "del",
+    "di",
+    "de",
+    "von",
+    "van",
+    "el",
+    "da",
+    "do",
+    "das",
+    "dos",
+    "la",
+    "le",
+    "les",
+    "bin",
+    "bint",
 }
 
 
 def _passes_name_filter(article: dict, first_name: str, last_name: str) -> bool:
-    raw = " ".join([
-        article.get("title", ""),
-        article.get("snippet", ""),
-        article.get("content", ""),
-    ])
+    raw = " ".join(
+        [
+            article.get("title", ""),
+            article.get("snippet", ""),
+            article.get("content", ""),
+        ]
+    )
     text = _strip_diacritics(raw)
     first = _strip_diacritics(first_name)
     last = _strip_diacritics(last_name)
@@ -474,14 +491,18 @@ def _passes_name_filter(article: dict, first_name: str, last_name: str) -> bool:
         return True
 
     # Check hyphenated compound surnames e.g. "GASPAR-BARRIOS" → finds "barrios"
-    for match in re.findall(rf"\b(\w+)-{re.escape(last)}\b|\b{re.escape(last)}-(\w+)\b", text):
+    for match in re.findall(
+        rf"\b(\w+)-{re.escape(last)}\b|\b{re.escape(last)}-(\w+)\b", text
+    ):
         found = (match[0] or match[1]).lower()
         if len(found) > 2 and found not in _NAME_PARTICLES:
             if found != first and found not in first and first not in found:
                 return False
 
     # Check space-separated adjacent words
-    for match in re.findall(rf"\b(\w+)\s+{re.escape(last)}\b|\b{re.escape(last)}\s+(\w+)\b", text):
+    for match in re.findall(
+        rf"\b(\w+)\s+{re.escape(last)}\b|\b{re.escape(last)}\s+(\w+)\b", text
+    ):
         found = (match[0] or match[1]).lower()
         if len(found) <= 2:
             continue
@@ -577,10 +598,14 @@ async def _is_pdf(url: str, http: httpx.AsyncClient) -> bool:
         print(f"[_is_pdf] Timeout on HEAD request for {url}, assuming PDF")
         return True
     except httpx.RequestError as e:
-        print(f"[_is_pdf] Network error checking {url}: {type(e).__name__}, assuming PDF")
+        print(
+            f"[_is_pdf] Network error checking {url}: {type(e).__name__}, assuming PDF"
+        )
         return True
     except Exception as e:
-        print(f"[_is_pdf] Unexpected error checking {url}: {type(e).__name__}, assuming PDF")
+        print(
+            f"[_is_pdf] Unexpected error checking {url}: {type(e).__name__}, assuming PDF"
+        )
         return True
 
 
@@ -826,12 +851,16 @@ async def _generate_meeting_summary(
                     system=system_prompt,
                     messages=[{"role": "user", "content": prompt}],
                 )
-                text_block = next((b for b in response.content if b.type == "text"), None)
+                text_block = next(
+                    (b for b in response.content if b.type == "text"), None
+                )
                 if text_block:
                     json_match = re.search(r"\{[\s\S]*\}", text_block.text.strip())
                     if json_match:
                         return json.loads(json_match.group())
-                print(f"[meeting-summary] no JSON (attempt {attempt + 1}); response: {text_block.text[:200] if text_block else 'no text block'}")
+                print(
+                    f"[meeting-summary] no JSON (attempt {attempt + 1}); response: {text_block.text[:200] if text_block else 'no text block'}"
+                )
             except Exception as e:
                 print(f"[meeting-summary] error (attempt {attempt + 1}): {e}")
             if attempt < 2:
@@ -903,7 +932,17 @@ async def _execute_generate_lead(
         # ── Phase 1: Serper searches ──────────────────────────────────────────
         if job_id:
             await _set_step(job_id, "serper_search")
-        quoted_subject = f'"{sanitized_subject}"' if body.subjectType != "company" else sanitized_subject
+        _sname_parts = sanitized_subject.split()
+        _search_subject = sanitized_subject
+        if body.subjectType != "company" and len(_sname_parts) > 2:
+            _middle = _sname_parts[1:-1]
+            if all(len(p.rstrip(".")) == 1 for p in _middle):
+                _search_subject = f"{_sname_parts[0]} {_sname_parts[-1]}"
+        quoted_subject = (
+            f'"{_search_subject}"'
+            if body.subjectType != "company"
+            else sanitized_subject
+        )
         search_queries = [quoted_subject]
         if body.useKeywords:
             search_queries += [f"{quoted_subject} {kw}" for kw in body.keywords]
@@ -1004,21 +1043,17 @@ async def _execute_generate_lead(
                 ]
         else:
             _fn = _strip_diacritics(_name_parts[0]) if _name_parts else ""
-            _ln = (
-                _strip_diacritics(" ".join(_name_parts[1:]))
-                if len(_name_parts) > 1
-                else ""
-            )
-            if _fn and _ln:
+            _ln = _strip_diacritics(_name_parts[-1]) if len(_name_parts) > 1 else ""
+            if _ln:
                 articles = [
                     a
                     for a in articles
-                    if _fn in _strip_diacritics(a["title"] + " " + a["snippet"])
-                    and _ln in _strip_diacritics(a["title"] + " " + a["snippet"])
+                    if _ln in _strip_diacritics(a["title"] + " " + a["snippet"])
                 ]
 
         articles = [
-            a for a in articles
+            a
+            for a in articles
             if not a["url"].lower().split("?")[0].endswith(".pdf")
             and "youtube.com" not in a["url"].lower()
             and "youtu.be" not in a["url"].lower()
@@ -1059,14 +1094,15 @@ async def _execute_generate_lead(
         if body.subjectType != "company":
             _nf_parts = sanitized_subject.split()
             _nf_first = _nf_parts[0] if _nf_parts else ""
-            _nf_last = " ".join(_nf_parts[1:]) if len(_nf_parts) > 1 else ""
+            _nf_last = _nf_parts[-1] if len(_nf_parts) > 1 else ""
             if _nf_first and _nf_last:
                 before = len(articles)
                 articles = [
-                    a for a in articles
-                    if _passes_name_filter(a, _nf_first, _nf_last)
+                    a for a in articles if _passes_name_filter(a, _nf_first, _nf_last)
                 ]
-                print(f"[name_filter] {before} → {len(articles)} articles after hard filter")
+                print(
+                    f"[name_filter] {before} → {len(articles)} articles after hard filter"
+                )
 
         urls_sent_to_claude = [a["url"] for a in articles]
 
@@ -1099,7 +1135,8 @@ async def _execute_generate_lead(
 
     if body.scanFocus == "negative":
         classified = [
-            a for a in classified
+            a
+            for a in classified
             if a.get("sentiment") == "negative" or a.get("risk") in ("high", "medium")
         ]
     elif body.scanFocus == "positive":
