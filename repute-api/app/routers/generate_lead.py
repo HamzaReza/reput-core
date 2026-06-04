@@ -1020,6 +1020,8 @@ async def _execute_generate_lead(
         articles = [
             a for a in articles
             if not a["url"].lower().split("?")[0].endswith(".pdf")
+            and "youtube.com" not in a["url"].lower()
+            and "youtu.be" not in a["url"].lower()
         ]
 
         urls_sent_to_firecrawl = [a["url"] for a in articles]
