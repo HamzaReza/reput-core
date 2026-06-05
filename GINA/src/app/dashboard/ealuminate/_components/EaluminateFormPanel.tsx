@@ -8,19 +8,16 @@ import type {
   SetStateAction,
 } from "react";
 import { useState } from "react";
+import MultiSelectPicker, { SingleSelectPicker } from "./MultiSelectPicker";
 import type { KeywordFocus, PreAnalysisProfile } from "./types";
-
-interface CountryPickerProps {
-  value: string;
-  onChange: (value: string) => void;
-  required?: boolean;
-}
 
 interface KeywordsEditorProps {
   keywords: string[];
   setKeywords: Dispatch<SetStateAction<string[]>>;
   readOnly?: boolean;
 }
+
+const MAX_KEYWORD_LANGUAGES = 5;
 
 interface EaluminateFormPanelProps {
   scanComplete: boolean;
@@ -59,7 +56,7 @@ interface EaluminateFormPanelProps {
   setPagesCap: (value: number) => void;
   handleRunScan: () => void;
   loading: boolean;
-  CountryPicker: ComponentType<CountryPickerProps>;
+  countryOptions: readonly { value: string; label: string }[];
   KeywordsEditor: ComponentType<KeywordsEditorProps>;
   Spinner: ComponentType;
   inputStyle: CSSProperties;
@@ -70,6 +67,9 @@ interface EaluminateFormPanelProps {
   reportLanguage: string;
   setReportLanguage: (value: string) => void;
   reportLanguageOptions: readonly { value: string; label: string }[];
+  keywordLanguages: string[];
+  setKeywordLanguages: (value: string[]) => void;
+  keywordLanguageOptions: readonly { value: string; label: string }[];
   useKeywords: boolean;
   setUseKeywords: (value: boolean) => void;
   scanFocus: KeywordFocus;
@@ -178,102 +178,6 @@ function ProfileCollapse({
   );
 }
 
-function CountryMultiPicker({
-  countries,
-  setCountries,
-  CountryPicker,
-  labelStyle,
-}: {
-  countries: string[];
-  setCountries: (v: string[]) => void;
-  CountryPicker: ComponentType<{
-    value: string;
-    onChange: (v: string) => void;
-    required?: boolean;
-  }>;
-  labelStyle: CSSProperties;
-}) {
-  const [pickerValue, setPickerValue] = useState("");
-
-  const addCountry = (v: string) => {
-    if (!v || countries.includes(v)) return;
-    setCountries([...countries, v]);
-    setPickerValue("");
-  };
-
-  const removeCountry = (v: string) =>
-    setCountries(countries.filter((c) => c !== v));
-
-  return (
-    <div>
-      <label style={labelStyle}>Country *</label>
-      <CountryPicker
-        value={pickerValue}
-        onChange={(v) => {
-          setPickerValue(v);
-          addCountry(v);
-        }}
-      />
-      {countries.length > 0 && (
-        <div
-          style={{
-            display: "flex",
-            flexWrap: "wrap",
-            gap: "0.4rem",
-            marginTop: "0.5rem",
-          }}
-        >
-          {countries.map((c) => (
-            <span
-              key={c}
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: "0.3rem",
-                padding: "0.2rem 0.65rem",
-                borderRadius: "999px",
-                backgroundColor: "#4479DA",
-                color: "#fff",
-                fontSize: "0.8125rem",
-                fontWeight: 500,
-              }}
-            >
-              {c}
-              <button
-                type="button"
-                onClick={() => removeCountry(c)}
-                style={{
-                  background: "none",
-                  border: "none",
-                  cursor: "pointer",
-                  padding: 0,
-                  lineHeight: 1,
-                  color: "rgba(255,255,255,0.8)",
-                  fontSize: "1rem",
-                  display: "flex",
-                  alignItems: "center",
-                }}
-                aria-label={`Remove ${c}`}
-              >
-                ×
-              </button>
-            </span>
-          ))}
-        </div>
-      )}
-      {countries.length === 0 && (
-        <input
-          aria-hidden="true"
-          value=""
-          onChange={() => {}}
-          required
-          style={{ position: "absolute", opacity: 0, width: 0, height: 0 }}
-        />
-      )}
-    </div>
-  );
-}
-
 export function EaluminateFormPanel(props: EaluminateFormPanelProps) {
   const [openProfileFields, setOpenProfileFields] = useState<string[]>([]);
 
@@ -313,7 +217,7 @@ export function EaluminateFormPanel(props: EaluminateFormPanelProps) {
     setPagesCap,
     handleRunScan,
     loading,
-    CountryPicker,
+    countryOptions,
     KeywordsEditor,
     Spinner,
     inputStyle,
@@ -324,6 +228,9 @@ export function EaluminateFormPanel(props: EaluminateFormPanelProps) {
     reportLanguage,
     setReportLanguage,
     reportLanguageOptions,
+    keywordLanguages,
+    setKeywordLanguages,
+    keywordLanguageOptions,
     useKeywords,
     setUseKeywords,
     scanFocus,
@@ -665,12 +572,16 @@ export function EaluminateFormPanel(props: EaluminateFormPanelProps) {
               )}
 
               {/* Country */}
-              <CountryMultiPicker
-                countries={countries}
-                setCountries={setCountries}
-                CountryPicker={CountryPicker}
-                labelStyle={labelStyle}
-              />
+              <div>
+                <label style={labelStyle}>Country *</label>
+                <MultiSelectPicker
+                  options={countryOptions}
+                  selected={countries}
+                  onChange={setCountries}
+                  placeholder="Add a country"
+                  required
+                />
+              </div>
 
               {/* Email + Phone */}
               <div className="lead-name-grid">
@@ -833,6 +744,29 @@ export function EaluminateFormPanel(props: EaluminateFormPanelProps) {
                 </p>
               </div>
 
+              {/* Keywords Language — multi-select dropdown */}
+              <div>
+                <label style={labelStyle}>Keywords Language</label>
+                <MultiSelectPicker
+                  options={keywordLanguageOptions}
+                  selected={keywordLanguages}
+                  onChange={setKeywordLanguages}
+                  placeholder="Add a language"
+                  maxSelected={MAX_KEYWORD_LANGUAGES}
+                />
+                <p
+                  style={{
+                    margin: "0.375rem 0 0",
+                    fontSize: "0.75rem",
+                    color: "#94a3b8",
+                  }}
+                >
+                  Keywords are generated per selected language (e.g. 5 keywords
+                  × 3 languages = 15). Leave empty to auto-detect from report
+                  language / country.
+                </p>
+              </div>
+
               {/* Keyword Focus */}
               <div>
                 <label style={labelStyle}>Keyword Focus</label>
@@ -864,70 +798,12 @@ export function EaluminateFormPanel(props: EaluminateFormPanelProps) {
               {/* Report Language — dropdown */}
               <div>
                 <label style={labelStyle}>Report Language</label>
-                <div style={{ position: "relative" }}>
-                  <span
-                    style={{
-                      position: "absolute",
-                      left: "0.875rem",
-                      top: "50%",
-                      transform: "translateY(-50%)",
-                      pointerEvents: "none",
-                      color: "#94a3b8",
-                      display: "flex",
-                    }}
-                  >
-                    <svg
-                      width="14"
-                      height="14"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    >
-                      <circle cx="12" cy="12" r="10" />
-                      <line x1="2" y1="12" x2="22" y2="12" />
-                      <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
-                    </svg>
-                  </span>
-                  <select
-                    value={reportLanguage}
-                    onChange={(e) => setReportLanguage(e.target.value)}
-                    style={{
-                      ...inputStyle,
-                      cursor: "pointer",
-                      paddingLeft: "2.25rem",
-                      paddingRight: "2.5rem",
-                      appearance: "none",
-                    }}
-                  >
-                    {reportLanguageOptions.map((opt) => (
-                      <option key={opt.value} value={opt.value}>
-                        {opt.label}
-                      </option>
-                    ))}
-                  </select>
-                  <svg
-                    style={{
-                      position: "absolute",
-                      right: "0.875rem",
-                      top: "50%",
-                      transform: "translateY(-50%)",
-                      pointerEvents: "none",
-                    }}
-                    width="14"
-                    height="14"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="#94a3b8"
-                    strokeWidth="2.5"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <path d="M6 9l6 6 6-6" />
-                  </svg>
-                </div>
+                <SingleSelectPicker
+                  options={reportLanguageOptions}
+                  value={reportLanguage}
+                  onChange={setReportLanguage}
+                  placeholder="Select a language"
+                />
                 <p
                   style={{
                     margin: "0.375rem 0 0",

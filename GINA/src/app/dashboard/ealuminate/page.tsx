@@ -1,10 +1,8 @@
 "use client";
 
 import { clientsApi, getToken, leads, WebLink } from "@/lib/api";
-import { COUNTRY_NAME_TO_ISO } from "@/lib/countries";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useEffect, useMemo, useRef, useState } from "react";
-import Select from "react-select";
+import { Suspense, useEffect, useRef, useState } from "react";
 import countryList from "react-select-country-list";
 import { EaluminateFormPanel } from "./_components/EaluminateFormPanel";
 import { EaluminatePipelinePanel } from "./_components/EaluminatePipelinePanel";
@@ -97,6 +95,106 @@ const REPORT_LANGUAGE_OPTIONS = [
   { value: "es", label: "Spanish" },
 ] as const;
 type ReportLanguage = (typeof REPORT_LANGUAGE_OPTIONS)[number]["value"];
+
+// Languages selectable for keyword generation — mirrors repute-api LANGUAGE_CODE_TO_NAME
+// (derived from the scan pipeline's country→language coverage in generate_lead.py).
+// Sorted alphabetically by label.
+const KEYWORD_LANGUAGE_OPTIONS = [
+  { value: "af", label: "Afrikaans" },
+  { value: "sq", label: "Albanian" },
+  { value: "am", label: "Amharic" },
+  { value: "ar", label: "Arabic" },
+  { value: "hy", label: "Armenian" },
+  { value: "az", label: "Azerbaijani" },
+  { value: "be", label: "Belarusian" },
+  { value: "bn", label: "Bengali" },
+  { value: "bs", label: "Bosnian" },
+  { value: "bg", label: "Bulgarian" },
+  { value: "my", label: "Burmese" },
+  { value: "ca", label: "Catalan" },
+  { value: "ny", label: "Chichewa" },
+  { value: "zh-CN", label: "Chinese (Simplified)" },
+  { value: "zh-TW", label: "Chinese (Traditional)" },
+  { value: "hr", label: "Croatian" },
+  { value: "cs", label: "Czech" },
+  { value: "da", label: "Danish" },
+  { value: "dv", label: "Dhivehi" },
+  { value: "nl", label: "Dutch" },
+  { value: "dz", label: "Dzongkha" },
+  { value: "en", label: "English" },
+  { value: "et", label: "Estonian" },
+  { value: "tl", label: "Filipino" },
+  { value: "fi", label: "Finnish" },
+  { value: "fr", label: "French" },
+  { value: "ka", label: "Georgian" },
+  { value: "de", label: "German" },
+  { value: "el", label: "Greek" },
+  { value: "ht", label: "Haitian Creole" },
+  { value: "he", label: "Hebrew" },
+  { value: "hi", label: "Hindi" },
+  { value: "hu", label: "Hungarian" },
+  { value: "is", label: "Icelandic" },
+  { value: "id", label: "Indonesian" },
+  { value: "it", label: "Italian" },
+  { value: "ja", label: "Japanese" },
+  { value: "kk", label: "Kazakh" },
+  { value: "km", label: "Khmer" },
+  { value: "rw", label: "Kinyarwanda" },
+  { value: "ko", label: "Korean" },
+  { value: "ky", label: "Kyrgyz" },
+  { value: "lo", label: "Lao" },
+  { value: "lv", label: "Latvian" },
+  { value: "lt", label: "Lithuanian" },
+  { value: "mk", label: "Macedonian" },
+  { value: "mg", label: "Malagasy" },
+  { value: "ms", label: "Malay" },
+  { value: "mt", label: "Maltese" },
+  { value: "mn", label: "Mongolian" },
+  { value: "ne", label: "Nepali" },
+  { value: "no", label: "Norwegian" },
+  { value: "ps", label: "Pashto" },
+  { value: "fa", label: "Persian" },
+  { value: "pl", label: "Polish" },
+  { value: "pt", label: "Portuguese" },
+  { value: "pt-BR", label: "Portuguese (Brazil)" },
+  { value: "ro", label: "Romanian" },
+  { value: "ru", label: "Russian" },
+  { value: "sm", label: "Samoan" },
+  { value: "sr", label: "Serbian" },
+  { value: "st", label: "Sesotho" },
+  { value: "si", label: "Sinhala" },
+  { value: "sk", label: "Slovak" },
+  { value: "sl", label: "Slovenian" },
+  { value: "so", label: "Somali" },
+  { value: "es", label: "Spanish" },
+  { value: "sw", label: "Swahili" },
+  { value: "sv", label: "Swedish" },
+  { value: "tg", label: "Tajik" },
+  { value: "th", label: "Thai" },
+  { value: "ti", label: "Tigrinya" },
+  { value: "to", label: "Tongan" },
+  { value: "tr", label: "Turkish" },
+  { value: "tk", label: "Turkmen" },
+  { value: "uk", label: "Ukrainian" },
+  { value: "ur", label: "Urdu" },
+  { value: "uz", label: "Uzbek" },
+  { value: "vi", label: "Vietnamese" },
+] as const;
+
+// Country options for the multi-select picker — values are country names,
+// matching what the API expects in `countries`.
+const COUNTRY_OPTIONS = (() => {
+  const base = countryList().getData() as { value: string; label: string }[];
+  const hasKosovo = base.some(
+    (item) =>
+      item.value.toUpperCase() === "XK" ||
+      item.label.toLowerCase() === "kosovo",
+  );
+  const all = hasKosovo ? base : [...base, { value: "XK", label: "Kosovo" }];
+  return all
+    .map((item) => ({ value: item.label, label: item.label }))
+    .sort((a, b) => a.label.localeCompare(b.label));
+})();
 
 const PIPELINE_STEPS = [
   {
@@ -368,97 +466,6 @@ function RepuGauge({ score }: { score: number }) {
   );
 }
 
-// ── CountryPicker ──────────────────────────────────────────────────────────────
-function CountryPicker({
-  value,
-  onChange,
-  required,
-}: {
-  value: string;
-  onChange: (v: string) => void;
-  required?: boolean;
-}) {
-  type CountryOption = { value: string; label: string };
-  const normalizeCountryKey = (raw: string) => raw.trim().toLowerCase();
-
-  const options = useMemo<CountryOption[]>(() => {
-    const base = countryList().getData() as CountryOption[];
-    const hasKosovo = base.some(
-      (item) =>
-        item.value.toUpperCase() === "XK" ||
-        item.label.toLowerCase() === "kosovo",
-    );
-    return hasKosovo ? base : [...base, { value: "XK", label: "Kosovo" }];
-  }, []);
-
-  const normalizedValue = normalizeCountryKey(value);
-  const savedIso = COUNTRY_NAME_TO_ISO[normalizedValue]?.toUpperCase();
-  const selected =
-    options.find(
-      (option) =>
-        normalizeCountryKey(option.label) === normalizedValue ||
-        option.value.toUpperCase() === savedIso,
-    ) ?? null;
-
-  return (
-    <div style={{ position: "relative" }}>
-      <Select<CountryOption, false>
-        options={options}
-        value={selected}
-        onChange={(option) => onChange(option?.label ?? "")}
-        placeholder="Select a country"
-        isSearchable
-        isClearable={!required}
-        classNamePrefix="country-select"
-        styles={{
-          control: (base, state) => ({
-            ...base,
-            border: state.isFocused ? "1px solid #4479DA" : "1px solid #d1d9e0",
-            boxShadow: "none",
-            borderRadius: "0.875rem",
-            minHeight: "42px",
-            "&:hover": { borderColor: state.isFocused ? "#4479DA" : "#d1d9e0" },
-          }),
-          option: (base, state) => ({
-            ...base,
-            backgroundColor: state.isSelected
-              ? "#eef3ff"
-              : state.isFocused
-                ? "#f8fafc"
-                : "#ffffff",
-            color: "#1e293b",
-            cursor: "pointer",
-          }),
-          menu: (base) => ({
-            ...base,
-            zIndex: 200,
-          }),
-          placeholder: (base) => ({
-            ...base,
-            color: "#94a3b8",
-          }),
-        }}
-      />
-      {required && (
-        <input
-          aria-hidden="true"
-          value={value}
-          onChange={() => {}}
-          required
-          style={{
-            position: "absolute",
-            // width: "20%",
-            height: "100%",
-            opacity: 0,
-            left: "50%",
-            top: 0,
-          }}
-        />
-      )}
-    </div>
-  );
-}
-
 // ── Spinner ────────────────────────────────────────────────────────────────────
 function Spinner() {
   return (
@@ -624,6 +631,7 @@ function EaluminatePageInner() {
   const [keywordFocus, setKeywordFocus] = useState<KeywordFocus>("all");
   const [keywordLength, setKeywordLength] = useState<KeywordLength>(null);
   const [reportLanguage, setReportLanguage] = useState<ReportLanguage>("en");
+  const [keywordLanguages, setKeywordLanguages] = useState<string[]>([]);
   const [useKeywords, setUseKeywords] = useState(true);
   const [scanFocus, setScanFocus] = useState<KeywordFocus>("all");
   const [scanTier, setScanTier] = useState<"standard" | "advanced">("standard");
@@ -1319,6 +1327,11 @@ function EaluminatePageInner() {
                 setScanTier(d.scanTier as "standard" | "advanced");
               if (d.keywordLength === null || d.keywordLength === 1 || d.keywordLength === 2 || d.keywordLength === 3)
                 setKeywordLength(d.keywordLength as KeywordLength);
+              if (
+                Array.isArray(d.keywordLanguages) &&
+                (d.keywordLanguages as string[]).length > 0
+              )
+                setKeywordLanguages(d.keywordLanguages as string[]);
             }
             const scanEvents = clientDetail.events.filter(
               (e) =>
@@ -1524,6 +1537,8 @@ function EaluminatePageInner() {
           keywordsCap,
           keywordFocus,
           keywordLength: keywordLength ?? undefined,
+          keywordLanguages:
+            keywordLanguages.length > 0 ? keywordLanguages : undefined,
           pagesCap,
           reportLanguage,
           countries,
@@ -1612,6 +1627,8 @@ function EaluminatePageInner() {
           keywordsCap,
           keywordFocus,
           keywordLength: keywordLength ?? undefined,
+          keywordLanguages:
+            keywordLanguages.length > 0 ? keywordLanguages : undefined,
           subjectType,
           reportLanguage,
           scanTier,
@@ -1667,6 +1684,8 @@ function EaluminatePageInner() {
             keywordsCap,
             keywordFocus,
             keywordLength: keywordLength ?? undefined,
+            keywordLanguages:
+              keywordLanguages.length > 0 ? keywordLanguages : undefined,
             pagesCap,
             reportLanguage,
             countries,
@@ -1935,7 +1954,7 @@ function EaluminatePageInner() {
           setPagesCap={setPagesCap}
           handleRunScan={handleRunScan}
           loading={loading}
-          CountryPicker={CountryPicker}
+          countryOptions={COUNTRY_OPTIONS}
           KeywordsEditor={KeywordsEditor}
           Spinner={Spinner}
           inputStyle={inputStyle}
@@ -1949,6 +1968,9 @@ function EaluminatePageInner() {
           reportLanguage={reportLanguage}
           setReportLanguage={(v) => setReportLanguage(v as ReportLanguage)}
           reportLanguageOptions={REPORT_LANGUAGE_OPTIONS}
+          keywordLanguages={keywordLanguages}
+          setKeywordLanguages={setKeywordLanguages}
+          keywordLanguageOptions={KEYWORD_LANGUAGE_OPTIONS}
           useKeywords={useKeywords}
           setUseKeywords={setUseKeywords}
           scanFocus={scanFocus}
