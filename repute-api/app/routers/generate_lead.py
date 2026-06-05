@@ -6,7 +6,7 @@ import unicodedata
 import uuid
 from datetime import datetime, timezone
 from typing import Literal
-from urllib.parse import unquote
+from urllib.parse import unquote, urlparse
 
 import anthropic
 import httpx
@@ -559,8 +559,15 @@ def _is_youtube(url: str) -> bool:
     only, no transcript) and risks 5-credit stealth retries, so we skip Firecrawl
     and let Claude classify them from the Serper title + snippet instead.
     """
-    lowered = url.lower()
-    return "youtube.com" in lowered or "youtu.be" in lowered
+    try:
+        host = urlparse(unquote(url)).netloc.lower()
+    except ValueError:
+        return False
+    return (
+        host in ("youtube.com", "youtu.be")
+        or host.endswith(".youtube.com")
+        or host.endswith(".youtu.be")
+    )
 
 
 async def _is_pdf(url: str, http: httpx.AsyncClient) -> bool:
@@ -1119,11 +1126,16 @@ async def _execute_generate_lead(
             batch_to_scrape: list[dict] = []
             for article in batch:
                 article_url = article["url"]
+                is_youtube = _is_youtube(article_url)
                 if (
                     not settings.firecrawl_api_key
-                    or _is_youtube(article_url)
+                    or is_youtube
                     or await _is_pdf(article_url, http)
                 ):
+                    if is_youtube:
+                        print(
+                            f"[_is_youtube] Skipping Firecrawl, classifying from snippet: {article_url}"
+                        )
                     scrape_results_by_url[article_url] = None
                     continue
                 urls_sent_to_firecrawl.append(article_url)
