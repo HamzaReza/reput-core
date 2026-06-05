@@ -1,12 +1,13 @@
 import asyncio
 import json
 import math
+import pathlib
 import re
 import unicodedata
 import uuid
 from datetime import datetime, timezone
 from typing import Literal
-from urllib.parse import unquote
+from urllib.parse import unquote, urlparse
 
 import anthropic
 import httpx
@@ -25,101 +26,15 @@ _background_tasks: set[asyncio.Task] = set()
 
 _PDF_URL_PATTERN = re.compile(r"\.pdf(?:$|[?#/&])")
 
+_GL_COUNTRY_MAP: dict[str, str] = {
+    entry["name"].lower(): entry["code"]
+    for entry in json.loads(
+        (pathlib.Path(__file__).parent / "google_countries.json").read_text()
+    )
+}
+
 # ── Lookup tables ────────────────────────────────────────────────────────────
 
-NATIONALITY_ALIASES: dict[str, str] = {
-    "afghan": "AF",
-    "albanian": "AL",
-    "algerian": "DZ",
-    "american": "US",
-    "argentine": "AR",
-    "australian": "AU",
-    "austrian": "AT",
-    "belgian": "BE",
-    "brazilian": "BR",
-    "british": "GB",
-    "bulgarian": "BG",
-    "canadian": "CA",
-    "chilean": "CL",
-    "chinese": "CN",
-    "colombian": "CO",
-    "croatian": "HR",
-    "czech": "CZ",
-    "danish": "DK",
-    "dutch": "NL",
-    "egyptian": "EG",
-    "emirati": "AE",
-    "finnish": "FI",
-    "french": "FR",
-    "german": "DE",
-    "greek": "GR",
-    "hungarian": "HU",
-    "indian": "IN",
-    "indonesian": "ID",
-    "iranian": "IR",
-    "iraqi": "IQ",
-    "irish": "IE",
-    "israeli": "IL",
-    "italian": "IT",
-    "japanese": "JP",
-    "jordanian": "JO",
-    "kenyan": "KE",
-    "korean": "KR",
-    "lebanese": "LB",
-    "malaysian": "MY",
-    "mexican": "MX",
-    "moroccan": "MA",
-    "new zealander": "NZ",
-    "nigerian": "NG",
-    "norwegian": "NO",
-    "pakistani": "PK",
-    "peruvian": "PE",
-    "philippine": "PH",
-    "polish": "PL",
-    "portuguese": "PT",
-    "romanian": "RO",
-    "russian": "RU",
-    "saudi": "SA",
-    "serbian": "RS",
-    "singaporean": "SG",
-    "south african": "ZA",
-    "spanish": "ES",
-    "swedish": "SE",
-    "swiss": "CH",
-    "thai": "TH",
-    "turkish": "TR",
-    "ukranian": "UA",
-    "ukrainian": "UA",
-    "venezuelan": "VE",
-    "vietnamese": "VN",
-    "netherlands": "NL",
-    "czech republic": "CZ",
-    "uae": "AE",
-    "uk": "GB",
-    "united kingdom": "GB",
-    "usa": "US",
-    "united states": "US",
-    "south korea": "KR",
-    "turkiye": "TR",
-    "turkey": "TR",
-    "taiwan": "TW",
-    "vietnam": "VN",
-    "philippines": "PH",
-    "iran": "IR",
-    "russia": "RU",
-    "syria": "SY",
-    "venezuela": "VE",
-    "bolivia": "BO",
-    "moldova": "MD",
-    "tanzania": "TZ",
-    "laos": "LA",
-    "north korea": "KP",
-    "micronesia": "FM",
-    "palestine": "PS",
-    "ethiopia": "ET",
-    "ghana": "GH",
-    "senegal": "SN",
-}
 
 _COUNTRY_TO_LANGUAGE: dict[str, str] = {
     # Europe
@@ -399,7 +314,7 @@ MONTH_MAP: dict[str, int] = {
 
 def _country_code(country: str) -> str | None:
     k = country.lower().strip()
-    return NATIONALITY_ALIASES.get(k)
+    return _GL_COUNTRY_MAP.get(k) or (k if len(k) == 2 else None)
 
 
 def _parse_serper_date(date_str: str) -> float:
@@ -493,9 +408,12 @@ def _passes_name_filter(article: dict, first_name: str, last_name: str) -> bool:
     if f"{first} {last}" in text or f"{last} {first}" in text:
         return True
 
+    # For multi-word last names use the final word as the regex anchor
+    last_word = last.split()[-1] if last.split() else last
+
     # Check hyphenated compound surnames e.g. "GASPAR-BARRIOS" → finds "barrios"
     for match in re.findall(
-        rf"\b(\w+)-{re.escape(last)}\b|\b{re.escape(last)}-(\w+)\b", text
+        rf"\b(\w+)-{re.escape(last_word)}\b|\b{re.escape(last_word)}-(\w+)\b", text
     ):
         found = (match[0] or match[1]).lower()
         if len(found) > 2 and found not in _NAME_PARTICLES:
@@ -504,7 +422,7 @@ def _passes_name_filter(article: dict, first_name: str, last_name: str) -> bool:
 
     # Check space-separated adjacent words
     for match in re.findall(
-        rf"\b(\w+)\s+{re.escape(last)}\b|\b{re.escape(last)}\s+(\w+)\b", text
+        rf"\b(\w+)\s+{re.escape(last_word)}\b|\b{re.escape(last_word)}\s+(\w+)\b", text
     ):
         found = (match[0] or match[1]).lower()
         if len(found) <= 2:
@@ -551,6 +469,23 @@ def _fallback_summary(score: int) -> dict:
         "riskIndicators": [],
         "objectionHandlers": [],
     }
+
+
+def _is_youtube(url: str) -> bool:
+    """
+    Detect YouTube URLs. Scraping them returns no useful content (player chrome
+    only, no transcript) and risks 5-credit stealth retries, so we skip Firecrawl
+    and let Claude classify them from the Serper title + snippet instead.
+    """
+    try:
+        host = urlparse(unquote(url)).netloc.lower()
+    except ValueError:
+        return False
+    return (
+        host in ("youtube.com", "youtu.be")
+        or host.endswith(".youtube.com")
+        or host.endswith(".youtu.be")
+    )
 
 
 async def _is_pdf(url: str, http: httpx.AsyncClient) -> bool:
@@ -1096,8 +1031,6 @@ async def _execute_generate_lead(
             a
             for a in articles
             if not _PDF_URL_PATTERN.search(unquote(a["url"]).lower())
-            and "youtube.com" not in a["url"].lower()
-            and "youtu.be" not in a["url"].lower()
         ]
 
         urls_sent_to_firecrawl: list[str] = []
@@ -1111,7 +1044,16 @@ async def _execute_generate_lead(
             batch_to_scrape: list[dict] = []
             for article in batch:
                 article_url = article["url"]
-                if not settings.firecrawl_api_key or await _is_pdf(article_url, http):
+                is_youtube = _is_youtube(article_url)
+                if (
+                    not settings.firecrawl_api_key
+                    or is_youtube
+                    or await _is_pdf(article_url, http)
+                ):
+                    if is_youtube:
+                        print(
+                            f"[_is_youtube] Skipping Firecrawl, classifying from snippet: {article_url}"
+                        )
                     scrape_results_by_url[article_url] = None
                     continue
                 urls_sent_to_firecrawl.append(article_url)
@@ -1143,15 +1085,24 @@ async def _execute_generate_lead(
             elif article["url"] in urls_sent_to_firecrawl_set:
                 firecrawl_failed.append(article["url"])
 
+        _nf_first = ""
+        _nf_last = ""
+        name_filter_dropped: list[dict] = []
         if body.subjectType != "company":
             _nf_parts = sanitized_subject.split()
             _nf_first = _nf_parts[0] if _nf_parts else ""
-            _nf_last = _nf_parts[-1] if len(_nf_parts) > 1 else ""
+            _nf_last = " ".join(
+                p for p in _nf_parts[1:] if not (len(p.rstrip(".")) == 1 and p.rstrip(".").isalpha())
+            )
             if _nf_first and _nf_last:
                 before = len(articles)
-                articles = [
-                    a for a in articles if _passes_name_filter(a, _nf_first, _nf_last)
-                ]
+                kept = []
+                for a in articles:
+                    if _passes_name_filter(a, _nf_first, _nf_last):
+                        kept.append(a)
+                    else:
+                        name_filter_dropped.append(a)
+                articles = kept
                 print(
                     f"[name_filter] {before} → {len(articles)} articles after hard filter"
                 )
@@ -1302,6 +1253,16 @@ async def _execute_generate_lead(
             if body.useKeywords
             else [{"keyword": None, "sent": urls_sent_to_claude}]
         ),
+        "_name_filter": {
+            "applied": body.subjectType != "company" and bool(_nf_first and _nf_last),
+            "firstName": _nf_first,
+            "lastName": _nf_last,
+            "kept": [{"url": a["url"], "title": a.get("title", "")} for a in articles],
+            "dropped": [
+                {"url": a["url"], "title": a.get("title", "")}
+                for a in name_filter_dropped
+            ],
+        },
     }
 
 
