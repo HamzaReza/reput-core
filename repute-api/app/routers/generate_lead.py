@@ -408,9 +408,12 @@ def _passes_name_filter(article: dict, first_name: str, last_name: str) -> bool:
     if f"{first} {last}" in text or f"{last} {first}" in text:
         return True
 
+    # For multi-word last names use the final word as the regex anchor
+    last_word = last.split()[-1] if last.split() else last
+
     # Check hyphenated compound surnames e.g. "GASPAR-BARRIOS" → finds "barrios"
     for match in re.findall(
-        rf"\b(\w+)-{re.escape(last)}\b|\b{re.escape(last)}-(\w+)\b", text
+        rf"\b(\w+)-{re.escape(last_word)}\b|\b{re.escape(last_word)}-(\w+)\b", text
     ):
         found = (match[0] or match[1]).lower()
         if len(found) > 2 and found not in _NAME_PARTICLES:
@@ -419,7 +422,7 @@ def _passes_name_filter(article: dict, first_name: str, last_name: str) -> bool:
 
     # Check space-separated adjacent words
     for match in re.findall(
-        rf"\b(\w+)\s+{re.escape(last)}\b|\b{re.escape(last)}\s+(\w+)\b", text
+        rf"\b(\w+)\s+{re.escape(last_word)}\b|\b{re.escape(last_word)}\s+(\w+)\b", text
     ):
         found = (match[0] or match[1]).lower()
         if len(found) <= 2:
@@ -1082,15 +1085,24 @@ async def _execute_generate_lead(
             elif article["url"] in urls_sent_to_firecrawl_set:
                 firecrawl_failed.append(article["url"])
 
+        _nf_first = ""
+        _nf_last = ""
+        name_filter_dropped: list[dict] = []
         if body.subjectType != "company":
             _nf_parts = sanitized_subject.split()
             _nf_first = _nf_parts[0] if _nf_parts else ""
-            _nf_last = _nf_parts[-1] if len(_nf_parts) > 1 else ""
+            _nf_last = " ".join(
+                p for p in _nf_parts[1:] if not (len(p.rstrip(".")) == 1 and p.rstrip(".").isalpha())
+            )
             if _nf_first and _nf_last:
                 before = len(articles)
-                articles = [
-                    a for a in articles if _passes_name_filter(a, _nf_first, _nf_last)
-                ]
+                kept = []
+                for a in articles:
+                    if _passes_name_filter(a, _nf_first, _nf_last):
+                        kept.append(a)
+                    else:
+                        name_filter_dropped.append(a)
+                articles = kept
                 print(
                     f"[name_filter] {before} → {len(articles)} articles after hard filter"
                 )
@@ -1241,6 +1253,16 @@ async def _execute_generate_lead(
             if body.useKeywords
             else [{"keyword": None, "sent": urls_sent_to_claude}]
         ),
+        "_name_filter": {
+            "applied": body.subjectType != "company" and bool(_nf_first and _nf_last),
+            "firstName": _nf_first,
+            "lastName": _nf_last,
+            "kept": [{"url": a["url"], "title": a.get("title", "")} for a in articles],
+            "dropped": [
+                {"url": a["url"], "title": a.get("title", "")}
+                for a in name_filter_dropped
+            ],
+        },
     }
 
 
