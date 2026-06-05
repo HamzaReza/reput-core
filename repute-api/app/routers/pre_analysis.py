@@ -123,7 +123,7 @@ LANGUAGE_CODE_TO_NAME: dict[str, str] = {
     "tr": "Turkish",
     "ja": "Japanese",
     "ko": "Korean",
-    "zh-CN": "Chinese",
+    "zh-CN": "Chinese (Simplified)",
     "ar": "Arabic",
     "hi": "Hindi",
     "th": "Thai",
@@ -135,6 +135,59 @@ LANGUAGE_CODE_TO_NAME: dict[str, str] = {
     "no": "Norwegian",
     "fi": "Finnish",
     "da": "Danish",
+    # Extended set — distinct languages of generate_lead._COUNTRY_TO_LANGUAGE
+    # (the languages the scan pipeline can search in).
+    "af": "Afrikaans",
+    "am": "Amharic",
+    "az": "Azerbaijani",
+    "be": "Belarusian",
+    "bg": "Bulgarian",
+    "bn": "Bengali",
+    "bs": "Bosnian",
+    "ca": "Catalan",
+    "dv": "Dhivehi",
+    "dz": "Dzongkha",
+    "et": "Estonian",
+    "fa": "Persian",
+    "he": "Hebrew",
+    "hr": "Croatian",
+    "ht": "Haitian Creole",
+    "hy": "Armenian",
+    "is": "Icelandic",
+    "ka": "Georgian",
+    "kk": "Kazakh",
+    "km": "Khmer",
+    "ky": "Kyrgyz",
+    "lo": "Lao",
+    "lt": "Lithuanian",
+    "lv": "Latvian",
+    "mg": "Malagasy",
+    "mk": "Macedonian",
+    "mn": "Mongolian",
+    "mt": "Maltese",
+    "my": "Burmese",
+    "ne": "Nepali",
+    "ny": "Chichewa",
+    "ps": "Pashto",
+    "pt-BR": "Portuguese (Brazil)",
+    "rw": "Kinyarwanda",
+    "si": "Sinhala",
+    "sk": "Slovak",
+    "sl": "Slovenian",
+    "sm": "Samoan",
+    "so": "Somali",
+    "sq": "Albanian",
+    "sr": "Serbian",
+    "st": "Sesotho",
+    "sw": "Swahili",
+    "tg": "Tajik",
+    "ti": "Tigrinya",
+    "tk": "Turkmen",
+    "tl": "Filipino",
+    "to": "Tongan",
+    "ur": "Urdu",
+    "uz": "Uzbek",
+    "zh-TW": "Chinese (Traditional)",
 }
 
 REPORT_LANG_MAP: dict[str, str] = {"en": "English", "it": "Italian", "es": "Spanish"}
@@ -194,6 +247,7 @@ class PreAnalysisRequest(BaseModel):
     keywordLength: int | None = None  # 1, 2, or 3 words; None = no constraint
     subjectType: Literal["individual", "company"] = "individual"
     reportLanguage: str | None = None
+    keywordLanguages: list[str] | None = None  # ISO codes; keywords generated per language
     scanTier: Literal["standard", "advanced"] = "standard"
 
 
@@ -241,6 +295,16 @@ async def pre_analysis(
         else LANGUAGE_CODE_TO_NAME.get(lang or "", "English")
     )
 
+    # Explicit keyword languages (max 5); empty list = single-language behavior
+    # driven by language_name above.
+    kw_lang_names: list[str] = []
+    if body.keywordLanguages:
+        for code in body.keywordLanguages:
+            name = LANGUAGE_CODE_TO_NAME.get(code)
+            if name and name not in kw_lang_names:
+                kw_lang_names.append(name)
+        kw_lang_names = kw_lang_names[:5]
+
     full_name = (
         f"{(body.firstName or '').strip()} {(body.lastName or '').strip()}".strip()
     )
@@ -263,11 +327,24 @@ async def pre_analysis(
     else:
         word_count_instruction = "1-3 words each."
 
+    if kw_lang_names:
+        keyword_count_clause = (
+            f"up to {cap} items PER LANGUAGE (minimum 1 per language)"
+        )
+        keyword_language_clause = (
+            f"Generate keywords for EACH of these languages: {', '.join(kw_lang_names)}. "
+            f"Keywords must be native-quality search terms in each language — express the "
+            f"underlying concepts idiomatically, not as literal word-for-word translations."
+        )
+    else:
+        keyword_count_clause = f"up to {cap} items (minimum 1)"
+        keyword_language_clause = f"All keywords in {language_name}."
+
     keyword_focus_rules = {
-        "negative": f"keywords: up to {cap} items (minimum 1), {word_count_instruction} ADVERSE terms only: legal disputes, fraud, misconduct, scandal, complaints, litigation. {no_name_instruction} All keywords in {language_name}.",
-        "positive": f"keywords: up to {cap} items (minimum 1), {word_count_instruction} POSITIVE terms only: achievements, awards, leadership, philanthropy, recognition. {no_name_instruction} All keywords in {language_name}.",
-        "neutral": f"keywords: up to {cap} items (minimum 1), {word_count_instruction} NEUTRAL factual terms only: role, organisation, sector, projects. {no_name_instruction} All keywords in {language_name}.",
-        "all": f"keywords: up to {cap} items (minimum 1), {word_count_instruction} balanced mix across positive, negative and neutral reputation angles. {no_name_instruction} All keywords in {language_name}.",
+        "negative": f"keywords: {keyword_count_clause}, {word_count_instruction} ADVERSE terms only: legal disputes, fraud, misconduct, scandal, complaints, litigation. {no_name_instruction} {keyword_language_clause}",
+        "positive": f"keywords: {keyword_count_clause}, {word_count_instruction} POSITIVE terms only: achievements, awards, leadership, philanthropy, recognition. {no_name_instruction} {keyword_language_clause}",
+        "neutral": f"keywords: {keyword_count_clause}, {word_count_instruction} NEUTRAL factual terms only: role, organisation, sector, projects. {no_name_instruction} {keyword_language_clause}",
+        "all": f"keywords: {keyword_count_clause}, {word_count_instruction} balanced mix across positive, negative and neutral reputation angles. {no_name_instruction} {keyword_language_clause}",
     }
     keyword_focus_rule = keyword_focus_rules.get(
         body.keywordFocus, keyword_focus_rules["all"]
@@ -474,21 +551,44 @@ async def pre_analysis(
             if search_queries_used
             else ""
         )
-        keywords_instruction = (
-            f"{keyword_focus_rule} "
-            f"Derive keywords strictly from the search queries listed above — "
-            f"use the actual terms that were searched, not words extracted from the summary prose. "
-            f"Do NOT invent keywords that were not part of the actual research."
-            if search_queries_used
-            else keyword_focus_rule
-        )
+        if search_queries_used and kw_lang_names:
+            keywords_instruction = (
+                f"{keyword_focus_rule} "
+                f"Derive the keyword concepts strictly from the search queries listed above, "
+                f"then express each concept natively in every requested language. "
+                f"Do NOT invent keywords that were not part of the actual research."
+            )
+        elif search_queries_used:
+            keywords_instruction = (
+                f"{keyword_focus_rule} "
+                f"Derive keywords strictly from the search queries listed above — "
+                f"use the actual terms that were searched, not words extracted from the summary prose. "
+                f"Do NOT invent keywords that were not part of the actual research."
+            )
+        else:
+            keywords_instruction = keyword_focus_rule
+
+        if kw_lang_names:
+            format_language_instruction = (
+                f"Write ALL profile field values in {language_name}. "
+                f"Write each keyword group in its own language as specified."
+            )
+            kw_groups = ", ".join(
+                f'"{lang_name}": ["<keyword1>", ...]' for lang_name in kw_lang_names
+            )
+            keywords_shape = f'  "keywords": {{{kw_groups}}}\n}}\n'
+        else:
+            format_language_instruction = (
+                f"Write ALL field values and ALL keywords in {language_name}."
+            )
+            keywords_shape = '  "keywords": ["<keyword1>", ...]\n}\n'
 
         format_msg = await client.messages.create(
             model=model,
             max_tokens=16000,
             system=(
                 f"You are a data formatter. Convert the research summary into the specified JSON shape. "
-                f"Write ALL field values and ALL keywords in {language_name}. "
+                f"{format_language_instruction} "
                 f"Output ONLY valid JSON — no markdown fences, no explanation, no extra keys."
             ),
             messages=[
@@ -506,8 +606,8 @@ async def pre_analysis(
                         f'    "positive_presence": "<3-6 sentences: awards, recognitions, successful ventures, positive media coverage, industry leadership, philanthropic activities>",\n'
                         f'    "reputation_notes": "<2-4 sentences: overall reputational standing, key risk indicators, public perception summary, recommended scrutiny level>"\n'
                         f"  }},\n"
-                        f'  "keywords": ["<keyword1>", ...]\n}}\n'
-                        f"Rules: every field fully populated with detail, based only on the summary above, {keywords_instruction}."
+                        + keywords_shape
+                        + f"Rules: every field fully populated with detail, based only on the summary above, {keywords_instruction}."
                     ),
                 }
             ],
@@ -520,7 +620,25 @@ async def pre_analysis(
                 parsed = json.loads(json_match.group())
                 profile = parsed.get("profile", profile)
                 raw_kw = parsed.get("keywords", [])
-                keywords = raw_kw[:cap] if isinstance(raw_kw, list) else []
+                if kw_lang_names and isinstance(raw_kw, dict):
+                    flat: list[str] = []
+                    for lang_name in kw_lang_names:  # preserve selection order
+                        group = raw_kw.get(lang_name)
+                        if isinstance(group, list):
+                            flat.extend(str(k) for k in group[:cap])
+                    if not flat:  # model used unexpected group keys
+                        for group in raw_kw.values():
+                            if isinstance(group, list):
+                                flat.extend(str(k) for k in group[:cap])
+                    seen_kw: set[str] = set()
+                    keywords = [
+                        k for k in flat if not (k in seen_kw or seen_kw.add(k))
+                    ][: cap * len(kw_lang_names)]
+                elif isinstance(raw_kw, list):
+                    # single-language request, or the model ignored grouping
+                    keywords = raw_kw[: cap * max(1, len(kw_lang_names))]
+                else:
+                    keywords = []
 
     except Exception as e:
         import traceback
