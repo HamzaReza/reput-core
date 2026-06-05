@@ -553,6 +553,16 @@ def _fallback_summary(score: int) -> dict:
     }
 
 
+def _is_youtube(url: str) -> bool:
+    """
+    Detect YouTube URLs. Scraping them returns no useful content (player chrome
+    only, no transcript) and risks 5-credit stealth retries, so we skip Firecrawl
+    and let Claude classify them from the Serper title + snippet instead.
+    """
+    lowered = url.lower()
+    return "youtube.com" in lowered or "youtu.be" in lowered
+
+
 async def _is_pdf(url: str, http: httpx.AsyncClient) -> bool:
     """
     Detect if a URL points to a PDF file.
@@ -1096,8 +1106,6 @@ async def _execute_generate_lead(
             a
             for a in articles
             if not _PDF_URL_PATTERN.search(unquote(a["url"]).lower())
-            and "youtube.com" not in a["url"].lower()
-            and "youtu.be" not in a["url"].lower()
         ]
 
         urls_sent_to_firecrawl: list[str] = []
@@ -1111,7 +1119,11 @@ async def _execute_generate_lead(
             batch_to_scrape: list[dict] = []
             for article in batch:
                 article_url = article["url"]
-                if not settings.firecrawl_api_key or await _is_pdf(article_url, http):
+                if (
+                    not settings.firecrawl_api_key
+                    or _is_youtube(article_url)
+                    or await _is_pdf(article_url, http)
+                ):
                     scrape_results_by_url[article_url] = None
                     continue
                 urls_sent_to_firecrawl.append(article_url)
