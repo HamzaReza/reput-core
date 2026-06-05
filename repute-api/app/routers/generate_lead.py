@@ -6,6 +6,7 @@ import unicodedata
 import uuid
 from datetime import datetime, timezone
 from typing import Literal
+from urllib.parse import unquote
 
 import anthropic
 import httpx
@@ -21,6 +22,8 @@ from app.utils.auth import get_current_web_analyst
 router = APIRouter(prefix="/generate-lead", tags=["generate-lead"])
 
 _background_tasks: set[asyncio.Task] = set()
+
+_PDF_URL_PATTERN = re.compile(r"\.pdf(?:$|[?#/&])")
 
 # ── Lookup tables ────────────────────────────────────────────────────────────
 
@@ -555,56 +558,94 @@ async def _is_pdf(url: str, http: httpx.AsyncClient) -> bool:
     Detect if a URL points to a PDF file.
 
     Strategy:
-    1. Check URL for .pdf extension (fastest, no network)
-    2. Make HEAD request to check Content-Type headers
-    3. Return False on error (assume it's not a PDF, allow scraping)
+    1. Check the URL for common PDF patterns (fastest, no network)
+    2. Make a HEAD request to inspect redirect targets and response headers
+    3. Fall back to a tiny ranged GET when HEAD is inconclusive
+    4. On network errors, assume PDF so we do not spend Firecrawl credits
     """
-    url_lower = url.lower()
 
-    # Quick check: .pdf in URL path (before query string)
-    if ".pdf" in url_lower.split("?")[0]:
+    def _looks_like_pdf_url(candidate: str) -> bool:
+        return bool(_PDF_URL_PATTERN.search(unquote(candidate).lower()))
+
+    def _pdf_header_reason(response: httpx.Response) -> str | None:
+        final_url = str(response.url)
+        content_type = response.headers.get("content-type", "").lower()
+        content_disp = response.headers.get("content-disposition", "").lower()
+
+        if _looks_like_pdf_url(final_url):
+            if final_url != url:
+                return "redirected URL pattern"
+            return "URL pattern"
+        if "application/pdf" in content_type:
+            return "Content-Type header"
+        if "pdf" in content_disp:
+            return "Content-Disposition header"
+        if "pdf" in content_type:
+            return "non-standard Content-Type header"
+        return None
+
+    if _looks_like_pdf_url(url):
         print(f"[_is_pdf] Filtered PDF by URL pattern: {url}")
         return True
 
     try:
-        # Use HEAD request (lightweight) instead of GET
-        response = await http.head(
+        head_response = await http.head(
             url,
             timeout=3.0,
             follow_redirects=True,
         )
-
-        content_type = response.headers.get("content-type", "").lower()
-        content_disp = response.headers.get("content-disposition", "").lower()
-
-        # Check Content-Type header
-        if "application/pdf" in content_type:
-            print(f"[_is_pdf] Filtered PDF by Content-Type header: {url}")
+        head_reason = _pdf_header_reason(head_response)
+        if head_reason:
+            print(f"[_is_pdf] Filtered PDF by {head_reason}: {url}")
             return True
 
-        # Check Content-Disposition header (for file downloads)
-        if "pdf" in content_disp:
-            print(f"[_is_pdf] Filtered PDF by Content-Disposition header: {url}")
-            return True
+        head_content_type = head_response.headers.get("content-type", "").lower()
+        head_inconclusive = (
+            not head_response.is_success
+            or not head_content_type
+            or head_content_type == "application/octet-stream"
+        )
 
-        # Some servers use non-standard MIME types
-        if "pdf" in content_type:
-            print(f"[_is_pdf] Filtered PDF by 'pdf' in Content-Type: {url}")
-            return True
+        if not head_inconclusive:
+            return False
+
+        print(
+            f"[_is_pdf] HEAD inconclusive for {url} "
+            f"(status={head_response.status_code}, content-type={head_content_type or 'missing'}), "
+            "falling back to GET"
+        )
+
+        async with http.stream(
+            "GET",
+            url,
+            headers={"Range": "bytes=0-1023"},
+            timeout=5.0,
+            follow_redirects=True,
+        ) as get_response:
+            get_reason = _pdf_header_reason(get_response)
+            if get_reason:
+                print(f"[_is_pdf] Filtered PDF by {get_reason}: {url}")
+                return True
+
+            async for chunk in get_response.aiter_bytes():
+                if chunk.lstrip().startswith(b"%PDF-"):
+                    print(f"[_is_pdf] Filtered PDF by file signature: {url}")
+                    return True
+                break
 
         return False
 
     except asyncio.TimeoutError:
-        print(f"[_is_pdf] Timeout on HEAD request for {url}, assuming PDF")
+        print(f"[_is_pdf] Timeout while probing {url}, assuming PDF")
         return True
     except httpx.RequestError as e:
         print(
-            f"[_is_pdf] Network error checking {url}: {type(e).__name__}, assuming PDF"
+            f"[_is_pdf] Network error probing {url}: {type(e).__name__}, assuming PDF"
         )
         return True
     except Exception as e:
         print(
-            f"[_is_pdf] Unexpected error checking {url}: {type(e).__name__}, assuming PDF"
+            f"[_is_pdf] Unexpected error probing {url}: {type(e).__name__}, assuming PDF"
         )
         return True
 
@@ -1054,42 +1095,53 @@ async def _execute_generate_lead(
         articles = [
             a
             for a in articles
-            if not a["url"].lower().split("?")[0].endswith(".pdf")
+            if not _PDF_URL_PATTERN.search(unquote(a["url"]).lower())
             and "youtube.com" not in a["url"].lower()
             and "youtu.be" not in a["url"].lower()
         ]
 
-        urls_sent_to_firecrawl = [a["url"] for a in articles]
+        urls_sent_to_firecrawl: list[str] = []
 
         BATCH_SIZE = 15
-        scrape_results: list[str | None] = []
+        scrape_results_by_url: dict[str, str | None] = {}
         for b_start in range(0, len(articles), BATCH_SIZE):
             if b_start > 0:
                 await asyncio.sleep(0.5)
             batch = articles[b_start : b_start + BATCH_SIZE]
+            batch_to_scrape: list[dict] = []
+            for article in batch:
+                article_url = article["url"]
+                if not settings.firecrawl_api_key or await _is_pdf(article_url, http):
+                    scrape_results_by_url[article_url] = None
+                    continue
+                urls_sent_to_firecrawl.append(article_url)
+                batch_to_scrape.append(article)
+
+            if not batch_to_scrape:
+                continue
+
             batch_results = await asyncio.gather(
                 *[
-                    (
-                        _scrape_firecrawl(a["url"], settings.firecrawl_api_key, http)
-                        if not await _is_pdf(a["url"], http)
-                        and settings.firecrawl_api_key
-                        else asyncio.sleep(0)
-                    )
-                    for a in batch
+                    _scrape_firecrawl(a["url"], settings.firecrawl_api_key, http)
+                    for a in batch_to_scrape
                 ],
                 return_exceptions=True,
             )
-            for item in batch_results:
-                scrape_results.append(item if isinstance(item, str) else None)
+            for article, item in zip(batch_to_scrape, batch_results):
+                scrape_results_by_url[article["url"]] = (
+                    item if isinstance(item, str) else None
+                )
 
         firecrawl_success: list[str] = []
         firecrawl_failed: list[str] = []
-        for i, content in enumerate(scrape_results):
+        urls_sent_to_firecrawl_set = set(urls_sent_to_firecrawl)
+        for article in articles:
+            content = scrape_results_by_url.get(article["url"])
             if content:
-                articles[i]["content"] = content
-                firecrawl_success.append(articles[i]["url"])
-            else:
-                firecrawl_failed.append(articles[i]["url"])
+                article["content"] = content
+                firecrawl_success.append(article["url"])
+            elif article["url"] in urls_sent_to_firecrawl_set:
+                firecrawl_failed.append(article["url"])
 
         if body.subjectType != "company":
             _nf_parts = sanitized_subject.split()
