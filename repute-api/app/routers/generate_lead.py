@@ -1,6 +1,7 @@
 import asyncio
 import json
 import math
+import pathlib
 import re
 import unicodedata
 import uuid
@@ -25,101 +26,15 @@ _background_tasks: set[asyncio.Task] = set()
 
 _PDF_URL_PATTERN = re.compile(r"\.pdf(?:$|[?#/&])")
 
+_GL_COUNTRY_MAP: dict[str, str] = {
+    entry["name"].lower(): entry["code"]
+    for entry in json.loads(
+        (pathlib.Path(__file__).parent / "google_countries.json").read_text()
+    )
+}
+
 # ── Lookup tables ────────────────────────────────────────────────────────────
 
-NATIONALITY_ALIASES: dict[str, str] = {
-    "afghan": "AF",
-    "albanian": "AL",
-    "algerian": "DZ",
-    "american": "US",
-    "argentine": "AR",
-    "australian": "AU",
-    "austrian": "AT",
-    "belgian": "BE",
-    "brazilian": "BR",
-    "british": "GB",
-    "bulgarian": "BG",
-    "canadian": "CA",
-    "chilean": "CL",
-    "chinese": "CN",
-    "colombian": "CO",
-    "croatian": "HR",
-    "czech": "CZ",
-    "danish": "DK",
-    "dutch": "NL",
-    "egyptian": "EG",
-    "emirati": "AE",
-    "finnish": "FI",
-    "french": "FR",
-    "german": "DE",
-    "greek": "GR",
-    "hungarian": "HU",
-    "indian": "IN",
-    "indonesian": "ID",
-    "iranian": "IR",
-    "iraqi": "IQ",
-    "irish": "IE",
-    "israeli": "IL",
-    "italian": "IT",
-    "japanese": "JP",
-    "jordanian": "JO",
-    "kenyan": "KE",
-    "korean": "KR",
-    "lebanese": "LB",
-    "malaysian": "MY",
-    "mexican": "MX",
-    "moroccan": "MA",
-    "new zealander": "NZ",
-    "nigerian": "NG",
-    "norwegian": "NO",
-    "pakistani": "PK",
-    "peruvian": "PE",
-    "philippine": "PH",
-    "polish": "PL",
-    "portuguese": "PT",
-    "romanian": "RO",
-    "russian": "RU",
-    "saudi": "SA",
-    "serbian": "RS",
-    "singaporean": "SG",
-    "south african": "ZA",
-    "spanish": "ES",
-    "swedish": "SE",
-    "swiss": "CH",
-    "thai": "TH",
-    "turkish": "TR",
-    "ukranian": "UA",
-    "ukrainian": "UA",
-    "venezuelan": "VE",
-    "vietnamese": "VN",
-    "netherlands": "NL",
-    "czech republic": "CZ",
-    "uae": "AE",
-    "uk": "GB",
-    "united kingdom": "GB",
-    "usa": "US",
-    "united states": "US",
-    "south korea": "KR",
-    "turkiye": "TR",
-    "turkey": "TR",
-    "taiwan": "TW",
-    "vietnam": "VN",
-    "philippines": "PH",
-    "iran": "IR",
-    "russia": "RU",
-    "syria": "SY",
-    "venezuela": "VE",
-    "bolivia": "BO",
-    "moldova": "MD",
-    "tanzania": "TZ",
-    "laos": "LA",
-    "north korea": "KP",
-    "micronesia": "FM",
-    "palestine": "PS",
-    "ethiopia": "ET",
-    "ghana": "GH",
-    "senegal": "SN",
-}
 
 _COUNTRY_TO_LANGUAGE: dict[str, str] = {
     # Europe
@@ -399,7 +314,7 @@ MONTH_MAP: dict[str, int] = {
 
 def _country_code(country: str) -> str | None:
     k = country.lower().strip()
-    return NATIONALITY_ALIASES.get(k)
+    return _GL_COUNTRY_MAP.get(k) or (k if len(k) == 2 else None)
 
 
 def _parse_serper_date(date_str: str) -> float:
