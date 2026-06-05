@@ -38,6 +38,71 @@ interface ArticleForClassification {
   content: string;
 }
 
+const PDF_URL_PATTERN = /\.pdf(?:$|[?#/&])/i;
+const PDF_SIGNATURE = [0x25, 0x50, 0x44, 0x46, 0x2d] as const;
+
+function decodeUrlForInspection(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
+function looksLikePdfUrl(candidate: string): boolean {
+  return PDF_URL_PATTERN.test(decodeUrlForInspection(candidate).toLowerCase());
+}
+
+function getPdfHeaderReason(res: Response, originalUrl: string): string | null {
+  const finalUrl = res.url || originalUrl;
+  const contentType = (res.headers.get("content-type") ?? "").toLowerCase();
+  const contentDisposition = (
+    res.headers.get("content-disposition") ?? ""
+  ).toLowerCase();
+
+  if (looksLikePdfUrl(finalUrl)) {
+    return finalUrl !== originalUrl ? "redirected URL pattern" : "URL pattern";
+  }
+  if (contentType.includes("application/pdf")) return "Content-Type header";
+  if (contentDisposition.includes("pdf")) return "Content-Disposition header";
+  if (contentType.includes("pdf")) return "non-standard Content-Type header";
+  return null;
+}
+
+function isPdfProbeInconclusive(res: Response): boolean {
+  const contentType = (res.headers.get("content-type") ?? "").toLowerCase();
+  return !res.ok || !contentType || contentType === "application/octet-stream";
+}
+
+async function fetchWithTimeout(
+  url: string,
+  init: RequestInit,
+  timeoutMs: number,
+): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function hasPdfSignature(bytes: Uint8Array): boolean {
+  let offset = 0;
+  while (
+    offset < bytes.length &&
+    (bytes[offset] === 0x20 ||
+      bytes[offset] === 0x09 ||
+      bytes[offset] === 0x0a ||
+      bytes[offset] === 0x0d)
+  ) {
+    offset += 1;
+  }
+
+  return PDF_SIGNATURE.every((byte, index) => bytes[offset + index] === byte);
+}
+
 const LANGUAGE_NAME_TO_CODE: Record<string, string> = {
   English: "en",
   Arabic: "ar",
@@ -263,22 +328,61 @@ async function searchSerper(
 }
 
 async function isPdf(url: string): Promise<boolean> {
-  const path = url.toLowerCase().split("?")[0];
-  if (path.includes(".pdf")) return true;
+  if (looksLikePdfUrl(url)) {
+    console.info(`[isPdf] Filtered PDF by URL pattern: ${url}`);
+    return true;
+  }
+
   try {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 3000);
-    const res = await fetch(url, { method: "GET", signal: controller.signal });
-    clearTimeout(timer);
-    const contentType = res.headers.get("content-type") ?? "";
-    const contentDisposition = res.headers.get("content-disposition") ?? "";
-    controller.abort();
-    return (
-      contentType.includes("application/pdf") ||
-      contentDisposition.toLowerCase().includes(".pdf")
+    const headRes = await fetchWithTimeout(url, { method: "HEAD" }, 3000);
+    const headReason = getPdfHeaderReason(headRes, url);
+    if (headReason) {
+      console.info(`[isPdf] Filtered PDF by ${headReason}: ${url}`);
+      return true;
+    }
+
+    if (!isPdfProbeInconclusive(headRes)) {
+      return false;
+    }
+
+    const headContentType = headRes.headers.get("content-type") ?? "";
+    console.info(
+      `[isPdf] HEAD inconclusive for ${url} (status=${headRes.status}, content-type=${headContentType || "missing"}), falling back to GET`,
     );
-  } catch {
+
+    const getRes = await fetchWithTimeout(
+      url,
+      { method: "GET", headers: { Range: "bytes=0-1023" } },
+      5000,
+    );
+    const getReason = getPdfHeaderReason(getRes, url);
+    if (getReason) {
+      console.info(`[isPdf] Filtered PDF by ${getReason}: ${url}`);
+      return true;
+    }
+
+    const reader = getRes.body?.getReader();
+    if (!reader) {
+      return false;
+    }
+
+    try {
+      const { value } = await reader.read();
+      if (value && hasPdfSignature(value)) {
+        console.info(`[isPdf] Filtered PDF by file signature: ${url}`);
+        return true;
+      }
+    } finally {
+      await reader.cancel().catch(() => undefined);
+    }
+
     return false;
+  } catch (err) {
+    console.warn(
+      `[isPdf] Failed to probe ${url}, assuming PDF to avoid Firecrawl spend:`,
+      err instanceof Error ? err.message : err,
+    );
+    return true;
   }
 }
 
