@@ -1035,6 +1035,10 @@ async def _execute_generate_lead(
             "links": [a["url"] for a in articles],
         }
 
+        # Track everything removed between dedupe and the scrape phase so
+        # scanLog's deduped count reconciles with the firecrawl totals.
+        _prefilter_dropped: list[dict] = []
+
         _name_parts = sanitized_subject.split()
         if body.subjectType == "company":
             _company_words = [
@@ -1043,29 +1047,44 @@ async def _execute_generate_lead(
                 if len(w) > 2
             ]
             if _company_words:
-                articles = [
-                    a
-                    for a in articles
+                _pf_kept: list[dict] = []
+                for a in articles:
                     if all(
                         w in _strip_diacritics(a["title"] + " " + a["snippet"])
                         for w in _company_words
-                    )
-                ]
+                    ):
+                        _pf_kept.append(a)
+                    else:
+                        _prefilter_dropped.append(
+                            {"url": a["url"], "reason": "company_words_missing"}
+                        )
+                articles = _pf_kept
         else:
             _fn = _strip_diacritics(_name_parts[0]) if _name_parts else ""
             _ln = _strip_diacritics(_name_parts[-1]) if len(_name_parts) > 1 else ""
             if _ln:
-                articles = [
-                    a
-                    for a in articles
-                    if _ln in _strip_diacritics(a["title"] + " " + a["snippet"])
-                ]
+                _pf_kept = []
+                for a in articles:
+                    if _ln in _strip_diacritics(a["title"] + " " + a["snippet"]):
+                        _pf_kept.append(a)
+                    else:
+                        _prefilter_dropped.append(
+                            {"url": a["url"], "reason": "surname_not_in_snippet"}
+                        )
+                articles = _pf_kept
 
-        articles = [
-            a
-            for a in articles
-            if not _PDF_URL_PATTERN.search(unquote(a["url"]).lower())
-        ]
+        _pf_kept = []
+        for a in articles:
+            if _PDF_URL_PATTERN.search(unquote(a["url"]).lower()):
+                _prefilter_dropped.append({"url": a["url"], "reason": "pdf_url"})
+            else:
+                _pf_kept.append(a)
+        articles = _pf_kept
+
+        scan_log["prefilter"] = {
+            "count": len(_prefilter_dropped),
+            "dropped": _prefilter_dropped,
+        }
 
         urls_sent_to_firecrawl: list[str] = []
         firecrawl_skipped: dict[str, str] = {}
@@ -1175,23 +1194,27 @@ async def _execute_generate_lead(
                     f"[name_filter] {before} → {len(articles)} articles after hard filter"
                 )
 
-        scan_log["nameFilter"] = {
-            "firstName": _nf_first,
-            "lastName": _nf_last,
-            "keptCount": len(articles),
-            "dropped": {
-                "count": len(name_filter_dropped),
-                "articles": [
-                    {
-                        "url": a["url"],
-                        "title": a.get("title", ""),
-                        "snippet": a.get("snippet", ""),
-                        "content": a.get("content", ""),
-                    }
-                    for a in name_filter_dropped
-                ],
-            },
-        }
+        # Only emitted when the individual-name filter actually ran — company
+        # scans use the company-word prefilter instead (logged in prefilter),
+        # and emitting empty names here renders a broken-looking card.
+        if _nf_first and _nf_last:
+            scan_log["nameFilter"] = {
+                "firstName": _nf_first,
+                "lastName": _nf_last,
+                "keptCount": len(articles),
+                "dropped": {
+                    "count": len(name_filter_dropped),
+                    "articles": [
+                        {
+                            "url": a["url"],
+                            "title": a.get("title", ""),
+                            "snippet": a.get("snippet", ""),
+                            "content": a.get("content", ""),
+                        }
+                        for a in name_filter_dropped
+                    ],
+                },
+            }
 
         urls_sent_to_claude = [a["url"] for a in articles]
 

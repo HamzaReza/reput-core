@@ -19,6 +19,45 @@ interface KeywordsEditorProps {
 
 const MAX_KEYWORD_LANGUAGES = 5;
 
+function CopyKeywordsButton({ keywords }: { keywords: string[] }) {
+  const [copied, setCopied] = useState(false);
+  if (keywords.length === 0) return null;
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        navigator.clipboard
+          .writeText(keywords.join(", "))
+          .then(() => {
+            setCopied(true);
+            setTimeout(() => setCopied(false), 1500);
+          })
+          .catch(() => {});
+      }}
+      title="Copy all keywords, comma-separated"
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: "0.3rem",
+        border: "1px solid",
+        borderColor: copied ? "#48D4B8" : "#e2e8f0",
+        background: copied ? "#48D4B814" : "#fff",
+        color: copied ? "#48D4B8" : "#64748b",
+        borderRadius: "0.5rem",
+        padding: "0.2rem 0.6rem",
+        fontSize: "0.72rem",
+        fontWeight: 600,
+        cursor: "pointer",
+        whiteSpace: "nowrap",
+        flexShrink: 0,
+        transition: "all 0.15s ease",
+      }}
+    >
+      {copied ? "✓ Copied" : "⧉ Copy"}
+    </button>
+  );
+}
+
 interface EaluminateFormPanelProps {
   scanComplete: boolean;
   preAnalysisDone: boolean;
@@ -1329,9 +1368,19 @@ export function EaluminateFormPanel(props: EaluminateFormPanelProps) {
                         transition: "opacity 0.15s",
                       }}
                     >
-                      <label style={labelStyle}>
-                        Keywords — Add or edit keywords to guide the scan
-                      </label>
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          gap: "0.5rem",
+                        }}
+                      >
+                        <label style={labelStyle}>
+                          Keywords — Add or edit keywords to guide the scan
+                        </label>
+                        <CopyKeywordsButton keywords={editableKeywords} />
+                      </div>
                       <KeywordsEditor
                         keywords={editableKeywords}
                         setKeywords={setEditableKeywords}

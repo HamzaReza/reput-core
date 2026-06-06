@@ -42,6 +42,10 @@ export interface ScanLog {
     totalRaw: number;
     deduped?: { count: number; links: string[] };
   };
+  prefilter?: {
+    count: number;
+    dropped: { url: string; reason: string }[];
+  };
   firecrawl?: {
     skipped: {
       count: number;

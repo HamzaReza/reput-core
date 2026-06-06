@@ -1255,6 +1255,9 @@ function EaluminatePageInner() {
     const id = searchParams.get("lead");
     if (!id) return;
     const eventId = searchParams.get("event");
+    // Cancels the in-flight scanLog fetch if the lead/event params change,
+    // so a slow response can't merge a stale log onto a different lead.
+    const scanLogAbort = new AbortController();
     // Reset scan state so stale results from a previous lead don't bleed through
     setResult(null);
     setScore(0);
@@ -1459,7 +1462,10 @@ function EaluminatePageInner() {
             try {
               const res = await fetch(
                 `${scanApiUrl}/generate-lead/${scanJobId}`,
-                { headers: { Authorization: `Bearer ${getToken()}` } },
+                {
+                  headers: { Authorization: `Bearer ${getToken()}` },
+                  signal: scanLogAbort.signal,
+                },
               );
               if (res.ok) {
                 const jd = await res.json();
@@ -1481,6 +1487,7 @@ function EaluminatePageInner() {
         }
       })
       .catch(() => {});
+    return () => scanLogAbort.abort();
   }, [searchParams]);
 
   const fullName = `${firstName.trim()} ${lastName.trim()}`.trim();

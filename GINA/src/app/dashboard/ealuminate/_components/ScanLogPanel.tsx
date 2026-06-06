@@ -22,9 +22,13 @@ function CopyButton({ text }: { text: string }) {
     <button
       onClick={(e) => {
         e.stopPropagation();
-        navigator.clipboard.writeText(text);
-        setCopied(true);
-        setTimeout(() => setCopied(false), 1200);
+        navigator.clipboard
+          .writeText(text)
+          .then(() => {
+            setCopied(true);
+            setTimeout(() => setCopied(false), 1200);
+          })
+          .catch(() => {});
       }}
       title="Copy URL"
       style={{
@@ -252,7 +256,7 @@ function EmptyNote({ text }: { text: string }) {
 }
 
 export function ScanLogPanel({ scanLog }: { scanLog: ScanLog }) {
-  const { serper, firecrawl, nameFilter, claude } = scanLog;
+  const { serper, prefilter, firecrawl, nameFilter, claude } = scanLog;
   const sentTotal = claude?.batches.reduce((n, b) => n + b.sentCount, 0) ?? 0;
   const returnedTotal = claude?.batches.reduce((n, b) => n + b.returnedCount, 0) ?? 0;
 
@@ -283,6 +287,17 @@ export function ScanLogPanel({ scanLog }: { scanLog: ScanLog }) {
             <Collapse label="Deduped unique links" count={serper.deduped.count} color="#4479DA">
               {serper.deduped.links.map((u, i) => (
                 <UrlRow key={i} url={u} />
+              ))}
+            </Collapse>
+          )}
+          {prefilter && prefilter.count > 0 && (
+            <Collapse
+              label="Dropped before scraping"
+              count={prefilter.count}
+              color="#ef4444"
+            >
+              {prefilter.dropped.map((d, i) => (
+                <UrlRow key={i} url={d.url} chip={d.reason} chipColor="#ef4444" />
               ))}
             </Collapse>
           )}
