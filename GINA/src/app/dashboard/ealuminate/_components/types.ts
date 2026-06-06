@@ -27,12 +27,68 @@ export interface MeetingSummary {
   objectionHandlers?: string[];
 }
 
+export interface ScanLogSerperQuery {
+  keyword: string | null;
+  query: string;
+  country: string | null;
+  pages: number;
+  count: number;
+  links: string[];
+}
+
+export interface ScanLog {
+  serper?: {
+    queries: ScanLogSerperQuery[];
+    totalRaw: number;
+    deduped?: { count: number; links: string[] };
+  };
+  firecrawl?: {
+    skipped: {
+      count: number;
+      youtube: number;
+      pdf: number;
+      noApiKey: number;
+      links: { url: string; reason: string }[];
+    };
+    success: { count: number; links: string[] };
+    failed: { count: number; links: string[] };
+    notAttempted: { count: number; links: string[] };
+    error: string | null;
+  };
+  nameFilter?: {
+    firstName: string;
+    lastName: string;
+    keptCount: number;
+    dropped: {
+      count: number;
+      articles: { url: string; title: string; snippet: string; content: string }[];
+    };
+  };
+  claude?: {
+    model: string;
+    scanFocus: string | null;
+    batches: {
+      batch: number;
+      sentCount: number;
+      sent: string[];
+      returnedCount: number;
+      returned: {
+        url: string | null;
+        sentiment: string | null;
+        risk: string | null;
+      }[];
+    }[];
+    dropped: { count: number; links: string[] };
+  };
+}
+
 export interface ScanResult {
   links: WebLink[];
   negative: WebLink[];
   positive: WebLink[];
   neutral: WebLink[];
   summary?: MeetingSummary;
+  scanLog?: ScanLog;
 }
 
 export type RiskLevel = "Negative" | "Poor" | "Mediocre" | "Good";

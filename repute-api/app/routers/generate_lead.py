@@ -904,6 +904,10 @@ async def _execute_generate_lead(
 
     client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
 
+    # Structured per-stage pipeline trace returned as result["scanLog"].
+    # Schema: docs/plans/2026-06-07-scan-log-design.md
+    scan_log: dict = {}
+
     async with httpx.AsyncClient() as http:
         # ── Phase 1: Serper searches ──────────────────────────────────────────
         if job_id:
@@ -959,6 +963,31 @@ async def _execute_generate_lead(
         all_raw = [r[1] for r in serper_results]
         all_pages_fetched = [r[2] for r in serper_results]
 
+        _num_countries = len(country_configs) or 1
+        scan_log["serper"] = {
+            "queries": [
+                {
+                    "keyword": (
+                        body.keywords[(i // _num_countries) - 1]
+                        if body.useKeywords
+                        and 1 <= (i // _num_countries) <= len(body.keywords)
+                        else None
+                    ),
+                    "query": all_searches[i]["q"],
+                    "country": (
+                        countries[i % _num_countries]
+                        if i % _num_countries < len(countries)
+                        else None
+                    ),
+                    "pages": all_pages_fetched[i],
+                    "count": len(all_organic[i]),
+                    "links": [r.get("link") for r in all_organic[i] if r.get("link")],
+                }
+                for i in range(len(all_searches))
+            ],
+            "totalRaw": sum(len(o) for o in all_organic),
+        }
+
         # ── Phase 2: Deduplicate & scrape ─────────────────────────────────────
         if job_id:
             await _set_step(job_id, "firecrawl_scrape")
@@ -1001,6 +1030,11 @@ async def _execute_generate_lead(
                 elif kw and kw not in keyword_map.get(url, []):
                     keyword_map.setdefault(url, []).append(kw)
 
+        scan_log["serper"]["deduped"] = {
+            "count": len(articles),
+            "links": [a["url"] for a in articles],
+        }
+
         _name_parts = sanitized_subject.split()
         if body.subjectType == "company":
             _company_words = [
@@ -1034,6 +1068,7 @@ async def _execute_generate_lead(
         ]
 
         urls_sent_to_firecrawl: list[str] = []
+        firecrawl_skipped: dict[str, str] = {}
 
         BATCH_SIZE = 15
         scrape_results_by_url: dict[str, str | None] = {}
@@ -1044,16 +1079,19 @@ async def _execute_generate_lead(
             batch_to_scrape: list[dict] = []
             for article in batch:
                 article_url = article["url"]
-                is_youtube = _is_youtube(article_url)
-                if (
-                    not settings.firecrawl_api_key
-                    or is_youtube
-                    or await _is_pdf(article_url, http)
-                ):
-                    if is_youtube:
-                        print(
-                            f"[_is_youtube] Skipping Firecrawl, classifying from snippet: {article_url}"
-                        )
+                if not settings.firecrawl_api_key:
+                    skip_reason = "no_api_key"
+                elif _is_youtube(article_url):
+                    print(
+                        f"[_is_youtube] Skipping Firecrawl, classifying from snippet: {article_url}"
+                    )
+                    skip_reason = "youtube"
+                elif await _is_pdf(article_url, http):
+                    skip_reason = "pdf"
+                else:
+                    skip_reason = None
+                if skip_reason:
+                    firecrawl_skipped[article_url] = skip_reason
                     scrape_results_by_url[article_url] = None
                     continue
                 urls_sent_to_firecrawl.append(article_url)
@@ -1085,6 +1123,36 @@ async def _execute_generate_lead(
             elif article["url"] in urls_sent_to_firecrawl_set:
                 firecrawl_failed.append(article["url"])
 
+        _skip_reasons = list(firecrawl_skipped.values())
+        scan_log["firecrawl"] = {
+            "skipped": {
+                "count": len(firecrawl_skipped),
+                "youtube": _skip_reasons.count("youtube"),
+                "pdf": _skip_reasons.count("pdf"),
+                "noApiKey": _skip_reasons.count("no_api_key"),
+                "links": [
+                    {"url": u, "reason": r} for u, r in firecrawl_skipped.items()
+                ],
+            },
+            "success": {"count": len(firecrawl_success), "links": firecrawl_success},
+            "failed": {"count": len(firecrawl_failed), "links": firecrawl_failed},
+            # Articles never attempted (e.g. scraping aborted mid-run). Always
+            # empty on this code path today; populated once batch short-circuit
+            # behaviour lands.
+            "notAttempted": {
+                "count": len(articles)
+                - len(urls_sent_to_firecrawl)
+                - len(firecrawl_skipped),
+                "links": [
+                    a["url"]
+                    for a in articles
+                    if a["url"] not in urls_sent_to_firecrawl_set
+                    and a["url"] not in firecrawl_skipped
+                ],
+            },
+            "error": None,
+        }
+
         _nf_first = ""
         _nf_last = ""
         name_filter_dropped: list[dict] = []
@@ -1106,6 +1174,24 @@ async def _execute_generate_lead(
                 print(
                     f"[name_filter] {before} → {len(articles)} articles after hard filter"
                 )
+
+        scan_log["nameFilter"] = {
+            "firstName": _nf_first,
+            "lastName": _nf_last,
+            "keptCount": len(articles),
+            "dropped": {
+                "count": len(name_filter_dropped),
+                "articles": [
+                    {
+                        "url": a["url"],
+                        "title": a.get("title", ""),
+                        "snippet": a.get("snippet", ""),
+                        "content": a.get("content", ""),
+                    }
+                    for a in name_filter_dropped
+                ],
+            },
+        }
 
         urls_sent_to_claude = [a["url"] for a in articles]
 
@@ -1135,6 +1221,31 @@ async def _execute_generate_lead(
     ]
     batch_results = await asyncio.gather(*[_classify_batch(b) for b in batches])
     classified: list[dict] = [item for result in batch_results for item in result]
+
+    _all_returned_urls = {item.get("url") for item in classified}
+    _claude_dropped = [u for u in urls_sent_to_claude if u not in _all_returned_urls]
+    scan_log["claude"] = {
+        "model": tier_model,
+        "scanFocus": body.scanFocus,
+        "batches": [
+            {
+                "batch": bi + 1,
+                "sentCount": len(batch),
+                "sent": [a["url"] for a in batch],
+                "returnedCount": len(batch_results[bi]),
+                "returned": [
+                    {
+                        "url": item.get("url"),
+                        "sentiment": item.get("sentiment"),
+                        "risk": item.get("risk"),
+                    }
+                    for item in batch_results[bi]
+                ],
+            }
+            for bi, batch in enumerate(batches)
+        ],
+        "dropped": {"count": len(_claude_dropped), "links": _claude_dropped},
+    }
 
     if body.scanFocus == "negative":
         classified = [
@@ -1183,6 +1294,7 @@ async def _execute_generate_lead(
         "summary": summary,
         "score": score,
         "scanTier": body.scanTier,
+        "scanLog": scan_log,
         "_serper": [
             {
                 "keyword": (

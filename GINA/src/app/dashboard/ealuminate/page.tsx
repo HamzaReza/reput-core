@@ -7,12 +7,14 @@ import countryList from "react-select-country-list";
 import { EaluminateFormPanel } from "./_components/EaluminateFormPanel";
 import { EaluminatePipelinePanel } from "./_components/EaluminatePipelinePanel";
 import { EaluminateResultsPanel } from "./_components/EaluminateResultsPanel";
+import { ScanLogPanel } from "./_components/ScanLogPanel";
 import ExportFieldsModal from "./_components/ExportFieldsModal";
 import type {
   KeywordFocus,
   MeetingSummary,
   PreAnalysisProfile,
   RiskLevel,
+  ScanLog,
   ScanResult,
 } from "./_components/types";
 import { exportReportMasterPdf, exportSummaryPdf } from "./_utils/pdfExports";
@@ -508,6 +510,17 @@ function KeywordsEditor({
       setKeywords([...keywords, trimmed]);
     setInput("");
   };
+  // Pasted lists: split on commas/newlines, trim each, drop empties and dupes
+  const addMany = (vals: string[]) => {
+    if (readOnly) return;
+    const next = [...keywords];
+    for (const v of vals) {
+      const trimmed = v.trim();
+      if (trimmed && !next.includes(trimmed)) next.push(trimmed);
+    }
+    setKeywords(next);
+    setInput("");
+  };
   const remove = (kw: string) => setKeywords(keywords.filter((k) => k !== kw));
 
   return (
@@ -589,6 +602,12 @@ function KeywordsEditor({
             } else if (e.key === "Backspace" && !input && keywords.length)
               setKeywords(keywords.slice(0, -1));
           }}
+          onPaste={(e) => {
+            const text = e.clipboardData.getData("text");
+            if (!/[,\n]/.test(text)) return; // single keyword — default paste
+            e.preventDefault();
+            addMany(`${input} ${text}`.split(/[,\n]/));
+          }}
           onBlur={() => {
             if (input.trim()) add(input);
           }}
@@ -661,6 +680,7 @@ function EaluminatePageInner() {
   const [tipIdx, setTipIdx] = useState(0);
   const [tipVisible, setTipVisible] = useState(true);
   const [result, setResult] = useState<ScanResult | null>(null);
+  const [resultsTab, setResultsTab] = useState<"results" | "scanlog">("results");
   const [score, setScore] = useState(0);
   const [error, setError] = useState("");
   const [expandedLinkIndex, setExpandedLinkIndex] = useState<string | null>(
@@ -779,6 +799,7 @@ function EaluminatePageInner() {
                 );
           setScore(finalScore);
           setResult(scanResult);
+          setResultsTab("results");
           setScanComplete(true);
           setIsResuming(false);
           if (scanStartRef.current !== null) {
@@ -840,6 +861,7 @@ function EaluminatePageInner() {
                     negative_count: scanResult.negative.length,
                     keywords: ctx.editableKeywords,
                     lead_id: currentLeadId ?? undefined,
+                    job_id,
                     links: scanResult.links,
                     useKeywords: ctx.useKeywords,
                     scanFocus:
@@ -1260,6 +1282,7 @@ function EaluminatePageInner() {
         let scanLinks: WebLink[] | undefined;
         let scanScore: number | undefined;
         let scanSummary: MeetingSummary | undefined;
+        let scanJobId: string | undefined;
         try {
           const clients = await clientsApi.list(200);
           const inferredType = (lead.name ?? "").trim()
@@ -1350,6 +1373,8 @@ function EaluminatePageInner() {
               scanEvent?.id ?? null,
             );
             if (scanEvent?.data) {
+              if (typeof scanEvent.data.job_id === "string")
+                scanJobId = scanEvent.data.job_id;
               scanLinks = scanEvent.data.links as WebLink[] | undefined;
               scanScore = scanEvent.data.score as number | undefined;
               scanSummary = scanEvent.data.summary as
@@ -1426,6 +1451,28 @@ function EaluminatePageInner() {
             summary: summaryToUse,
           });
           setUsedKeywords(lead.keywords_suggested);
+
+          // Re-attach the persistent scan log from the original job — the
+          // event copy stores links/score only; the full log lives forever
+          // on the generate_lead_jobs row.
+          if (scanJobId) {
+            try {
+              const res = await fetch(
+                `${scanApiUrl}/generate-lead/${scanJobId}`,
+                { headers: { Authorization: `Bearer ${getToken()}` } },
+              );
+              if (res.ok) {
+                const jd = await res.json();
+                const slog = jd?.result?.scanLog as ScanLog | undefined;
+                if (slog)
+                  setResult((prev) =>
+                    prev ? { ...prev, scanLog: slog } : prev,
+                  );
+              }
+            } catch {
+              /* non-fatal */
+            }
+          }
         }
 
         if (scoreToUse !== undefined && scoreToUse !== null) {
@@ -1985,6 +2032,37 @@ function EaluminatePageInner() {
           }
         />
 
+        {result?.scanLog && !loading && (
+          <div style={{ display: "flex", gap: "0.375rem" }}>
+            {(
+              [
+                ["results", "Results"],
+                ["scanlog", "Scan Log"],
+              ] as const
+            ).map(([key, label]) => (
+              <button
+                key={key}
+                onClick={() => setResultsTab(key)}
+                style={{
+                  padding: "0.4rem 0.9rem",
+                  fontSize: "0.8rem",
+                  fontWeight: 600,
+                  borderRadius: "0.625rem 0.625rem 0 0",
+                  border: "1px solid #e2e8f0",
+                  borderBottom: "none",
+                  cursor: "pointer",
+                  background: resultsTab === key ? "#fff" : "#f1f5f9",
+                  color: resultsTab === key ? "#4479DA" : "#64748b",
+                }}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
+        {resultsTab === "scanlog" && result?.scanLog && !loading ? (
+          <ScanLogPanel scanLog={result.scanLog} />
+        ) : (
         <EaluminateResultsPanel
           loading={loading}
           result={result}
@@ -2008,6 +2086,7 @@ function EaluminatePageInner() {
           currentStep={currentStep}
           jobId={jobId}
         />
+        )}
       </div>
       {exportSummaryModalOpen && (
         <ExportFieldsModal
