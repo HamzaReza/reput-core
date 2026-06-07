@@ -231,7 +231,7 @@ const SCAN_LOADING_STEPS = [
   "building_queries",
   "serper_search",
   "firecrawl_scrape",
-  "claude_classification",
+  "llm_classification",
   "generating_brief",
 ] as const;
 

@@ -242,7 +242,7 @@ export function EaluminateResultsPanel({
             "building_queries",
             "serper_search",
             "firecrawl_scrape",
-            "claude_classification",
+            "llm_classification",
             "generating_brief",
           ] as const;
           const activeIdx = currentStep

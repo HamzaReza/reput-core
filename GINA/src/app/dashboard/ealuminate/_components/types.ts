@@ -68,8 +68,10 @@ export interface ScanLog {
       articles: { url: string; title: string; snippet: string; content: string }[];
     };
   };
-  claude?: {
+  llm?: {
+    provider?: string | null;
     model: string;
+    reasoningEffort?: string | null;
     scanFocus: string | null;
     batches: {
       batch: number;

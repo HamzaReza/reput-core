@@ -7,7 +7,7 @@ const STAGE_COLORS = {
   serper: "#4479DA",
   firecrawl: "#f59e0b",
   nameFilter: "#6366f1",
-  claude: "#48D4B8",
+  llm: "#48D4B8",
 };
 
 const SENTIMENT_COLORS: Record<string, string> = {
@@ -256,9 +256,9 @@ function EmptyNote({ text }: { text: string }) {
 }
 
 export function ScanLogPanel({ scanLog }: { scanLog: ScanLog }) {
-  const { serper, prefilter, firecrawl, nameFilter, claude } = scanLog;
-  const sentTotal = claude?.batches.reduce((n, b) => n + b.sentCount, 0) ?? 0;
-  const returnedTotal = claude?.batches.reduce((n, b) => n + b.returnedCount, 0) ?? 0;
+  const { serper, prefilter, firecrawl, nameFilter, llm } = scanLog;
+  const sentTotal = llm?.batches.reduce((n, b) => n + b.sentCount, 0) ?? 0;
+  const returnedTotal = llm?.batches.reduce((n, b) => n + b.returnedCount, 0) ?? 0;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
@@ -407,14 +407,14 @@ export function ScanLogPanel({ scanLog }: { scanLog: ScanLog }) {
         </StageCard>
       )}
 
-      {claude && (
+      {llm && (
         <StageCard
-          color={STAGE_COLORS.claude}
-          title="4 · Claude Classification"
-          summary={`${claude.model}${claude.scanFocus ? ` · focus: ${claude.scanFocus}` : ""} · ${claude.batches.length} batch${claude.batches.length === 1 ? "" : "es"} · ${sentTotal} sent → ${returnedTotal} returned`}
-          badges={<Badge label={`${claude.dropped.count} dropped`} color={claude.dropped.count ? "#ef4444" : "#48D4B8"} />}
+          color={STAGE_COLORS.llm}
+          title="4 · LLM Classification"
+          summary={`${llm.provider ? `${llm.provider} · ` : ""}${llm.model}${llm.reasoningEffort ? ` · reasoning: ${llm.reasoningEffort}` : ""}${llm.scanFocus ? ` · focus: ${llm.scanFocus}` : ""} · ${llm.batches.length} batch${llm.batches.length === 1 ? "" : "es"} · ${sentTotal} sent → ${returnedTotal} returned`}
+          badges={<Badge label={`${llm.dropped.count} dropped`} color={llm.dropped.count ? "#ef4444" : "#48D4B8"} />}
         >
-          {claude.batches.map((b) => (
+          {llm.batches.map((b) => (
             <Collapse
               key={b.batch}
               label={`Batch ${b.batch}`}
@@ -441,13 +441,13 @@ export function ScanLogPanel({ scanLog }: { scanLog: ScanLog }) {
           ))}
           <Collapse
             label="Dropped by classifier"
-            count={claude.dropped.count}
-            color={claude.dropped.count ? "#ef4444" : "#48D4B8"}
+            count={llm.dropped.count}
+            color={llm.dropped.count ? "#ef4444" : "#48D4B8"}
           >
-            {claude.dropped.links.length === 0 ? (
+            {llm.dropped.links.length === 0 ? (
               <EmptyNote text="nothing dropped" />
             ) : (
-              claude.dropped.links.map((u, i) => <UrlRow key={i} url={u} />)
+              llm.dropped.links.map((u, i) => <UrlRow key={i} url={u} />)
             )}
           </Collapse>
         </StageCard>
