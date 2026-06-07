@@ -318,14 +318,28 @@ async def pre_analysis(
         else "Do NOT include the person's name."
     )
 
+    no_underscore_instruction = (
+        " Separate words with normal spaces — NEVER join words with underscores or hyphens; "
+        "if a concept does not fit the preferred length in a language, use a natural phrase "
+        "of up to 3 words instead of compressing it."
+    )
     if body.keywordLength == 1:
-        word_count_instruction = "each keyword must be exactly 1 word (single-word only)."
+        word_count_instruction = (
+            "each keyword should be 1 word where possible."
+            + no_underscore_instruction
+        )
     elif body.keywordLength == 2:
-        word_count_instruction = "each keyword must be exactly 2 words."
+        word_count_instruction = (
+            "each keyword should be 2 words where possible."
+            + no_underscore_instruction
+        )
     elif body.keywordLength == 3:
-        word_count_instruction = "each keyword must be exactly 3 words."
+        word_count_instruction = (
+            "each keyword should be 3 words where possible."
+            + no_underscore_instruction
+        )
     else:
-        word_count_instruction = "1-3 words each."
+        word_count_instruction = "1-3 words each." + no_underscore_instruction
 
     if kw_lang_names:
         keyword_count_clause = (
@@ -620,23 +634,31 @@ async def pre_analysis(
                 parsed = json.loads(json_match.group())
                 profile = parsed.get("profile", profile)
                 raw_kw = parsed.get("keywords", [])
+                def _clean_kw(k: object) -> str:
+                    # Models sometimes snake_case multi-word terms to satisfy
+                    # word-count constraints — normalise back to spaces.
+                    return str(k).replace("_", " ").strip()
+
                 if kw_lang_names and isinstance(raw_kw, dict):
                     flat: list[str] = []
                     for lang_name in kw_lang_names:  # preserve selection order
                         group = raw_kw.get(lang_name)
                         if isinstance(group, list):
-                            flat.extend(str(k) for k in group[:cap])
+                            flat.extend(_clean_kw(k) for k in group[:cap])
                     if not flat:  # model used unexpected group keys
                         for group in raw_kw.values():
                             if isinstance(group, list):
-                                flat.extend(str(k) for k in group[:cap])
+                                flat.extend(_clean_kw(k) for k in group[:cap])
                     seen_kw: set[str] = set()
                     keywords = [
                         k for k in flat if not (k in seen_kw or seen_kw.add(k))
                     ][: cap * len(kw_lang_names)]
                 elif isinstance(raw_kw, list):
                     # single-language request, or the model ignored grouping
-                    keywords = raw_kw[: cap * max(1, len(kw_lang_names))]
+                    keywords = [
+                        _clean_kw(k)
+                        for k in raw_kw[: cap * max(1, len(kw_lang_names))]
+                    ]
                 else:
                     keywords = []
 
