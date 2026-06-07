@@ -13,7 +13,7 @@ Python FastAPI backend with PostgreSQL for the RepuTrust reputation management p
 | Auth | JWT (python-jose) + bcrypt (passlib) |
 | Validation | Pydantic v2 |
 | Server | Uvicorn |
-| AI | Anthropic Claude SDK |
+| AI | OpenAI SDK + Anthropic Claude SDK |
 
 ---
 
@@ -89,6 +89,10 @@ The API will be available at http://localhost:8000 with interactive docs at http
 | `ACCESS_TOKEN_EXPIRE_MINUTES` | Token lifetime in minutes | `1440` (24 h) |
 | `DEBUG` | Enable debug mode | `false` |
 | `ALLOWED_ORIGINS` | JSON array of allowed CORS origins | `["http://localhost:3000"]` |
+| `OPENAI_API_KEY` | Required for `standard` scan tier using `gpt-5-mini` high reasoning | — |
+| `ANTHROPIC_API_KEY` | Required for non-standard tiers using Claude | — |
+| `SERPER_API_KEY` | Required for generate-lead search | — |
+| `FIRECRAWL_API_KEY` | Required for generate-lead page scraping | — |
 
 Generate a secure JWT secret:
 
@@ -161,13 +165,13 @@ python -c "import secrets; print(secrets.token_hex(32))"
 
 | Method | Path | Description |
 |--------|------|-------------|
-| POST | `` | Run full AI lead scan — calls Serper + Firecrawl + Claude and returns classified links |
+| POST | `` | Run full AI lead scan — calls Serper + Firecrawl, then OpenAI for `standard` tier or Claude for other tiers |
 
 ### Pre-Analysis — `/api/v1/pre-analysis`
 
 | Method | Path | Description |
 |--------|------|-------------|
-| POST | `` | Research and disambiguate a target before full scan |
+| POST | `` | Research and disambiguate a target before full scan; `standard` tier uses OpenAI web search |
 
 ### Web Analysts — `/api/v1/web-analysts`
 

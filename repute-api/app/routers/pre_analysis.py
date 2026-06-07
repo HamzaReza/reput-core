@@ -1,10 +1,12 @@
 import asyncio
 import json
 import re
+from types import SimpleNamespace
 from typing import Literal
 
 import anthropic
 from fastapi import APIRouter, Depends, HTTPException
+from openai import AsyncOpenAI
 from pydantic import BaseModel
 
 from app.config import get_settings
@@ -12,6 +14,63 @@ from app.models.lead import WebAnalyst
 from app.utils.auth import get_current_web_analyst
 
 router = APIRouter(prefix="/pre-analysis", tags=["pre-analysis"])
+
+OPENAI_STANDARD_MODEL = "gpt-5-mini"
+OPENAI_STANDARD_REASONING = {"effort": "high"}
+
+
+def _extract_openai_text(response) -> str:
+    output_text = getattr(response, "output_text", None)
+    if isinstance(output_text, str) and output_text.strip():
+        return output_text
+
+    chunks: list[str] = []
+    for item in getattr(response, "output", []) or []:
+        for block in getattr(item, "content", []) or []:
+            text = getattr(block, "text", None)
+            if isinstance(text, str):
+                chunks.append(text)
+    return "\n".join(chunks).strip()
+
+
+def _as_text_message(response):
+    return SimpleNamespace(
+        content=[SimpleNamespace(type="text", text=_extract_openai_text(response))],
+        stop_reason=getattr(response, "status", None),
+    )
+
+
+async def _create_llm_message(
+    client,
+    use_openai: bool,
+    model: str,
+    max_tokens: int,
+    system: str,
+    messages: list[dict],
+    tools: list[dict] | None = None,
+):
+    if not use_openai:
+        kwargs = {
+            "model": model,
+            "max_tokens": max_tokens,
+            "system": system,
+            "messages": messages,
+        }
+        if tools is not None:
+            kwargs["tools"] = tools
+        return await client.messages.create(**kwargs)
+
+    content = str(messages[0].get("content", "")) if messages else ""
+    return _as_text_message(
+        await client.responses.create(
+            model=OPENAI_STANDARD_MODEL,
+            reasoning=OPENAI_STANDARD_REASONING,
+            max_output_tokens=max_tokens,
+            instructions=system,
+            input=content,
+            tools=[{"type": "web_search"}] if tools else None,
+        )
+    )
 
 NATIONALITY_ALIASES: dict[str, str] = {
     "american": "US",
@@ -248,7 +307,7 @@ class PreAnalysisRequest(BaseModel):
     subjectType: Literal["individual", "company"] = "individual"
     reportLanguage: str | None = None
     keywordLanguages: list[str] | None = None  # ISO codes; keywords generated per language
-    scanTier: Literal["standard", "advanced"] = "standard"
+    scanTier: Literal["basic", "standard", "advanced"] = "standard"
 
 
 @router.post("")
@@ -257,7 +316,11 @@ async def pre_analysis(
     _analyst: WebAnalyst = Depends(get_current_web_analyst),
 ) -> dict:
     settings = get_settings()
-    if not settings.anthropic_api_key:
+    use_openai = body.scanTier == "standard"
+    if use_openai:
+        if not settings.openai_api_key:
+            raise HTTPException(status_code=500, detail="OPENAI_API_KEY not configured")
+    elif not settings.anthropic_api_key:
         raise HTTPException(status_code=500, detail="ANTHROPIC_API_KEY not configured")
 
     countries: list[str] = (
@@ -278,9 +341,9 @@ async def pre_analysis(
         )
 
     model = (
-        "claude-haiku-4-5-20251001"
-        if body.scanTier == "standard"
-        else "claude-sonnet-4-6"
+        "claude-sonnet-4-6"
+        if body.scanTier == "advanced"
+        else "claude-haiku-4-5-20251001"
     )
     # web_search_tool = "web_search_20250305" if body.scanTier == "standard" else "web_search_20260209"
     web_search_tool = "web_search_20250305"
@@ -318,28 +381,14 @@ async def pre_analysis(
         else "Do NOT include the person's name."
     )
 
-    no_underscore_instruction = (
-        " Separate words with normal spaces — NEVER join words with underscores or hyphens; "
-        "if a concept does not fit the preferred length in a language, use a natural phrase "
-        "of up to 3 words instead of compressing it."
-    )
     if body.keywordLength == 1:
-        word_count_instruction = (
-            "each keyword should be 1 word where possible."
-            + no_underscore_instruction
-        )
+        word_count_instruction = "each keyword must be exactly 1 word (single-word only)."
     elif body.keywordLength == 2:
-        word_count_instruction = (
-            "each keyword should be 2 words where possible."
-            + no_underscore_instruction
-        )
+        word_count_instruction = "each keyword must be exactly 2 words."
     elif body.keywordLength == 3:
-        word_count_instruction = (
-            "each keyword should be 3 words where possible."
-            + no_underscore_instruction
-        )
+        word_count_instruction = "each keyword must be exactly 3 words."
     else:
-        word_count_instruction = "1-3 words each." + no_underscore_instruction
+        word_count_instruction = "1-3 words each."
 
     if kw_lang_names:
         keyword_count_clause = (
@@ -461,7 +510,11 @@ async def pre_analysis(
     )
 
     # ── Parallel execution: research summary + negative estimation ────────────
-    client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
+    client = (
+        AsyncOpenAI(api_key=settings.openai_api_key)
+        if use_openai
+        else anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
+    )
     profile = dict(FALLBACK_PROFILE)
     keywords: list[str] = []
     neg_links: dict | None = None
@@ -471,23 +524,48 @@ async def pre_analysis(
             f"[pre-analysis] starting parallel calls for: {subject_label!r} | countries={countries}"
         )
 
-        search_result, neg_result = await asyncio.gather(
-            client.messages.create(
-                model=model,
-                max_tokens=16000,
-                system=search_system,
-                tools=[{"type": web_search_tool, "name": "web_search", "max_uses": 12}],  # type: ignore[list-item]
-                messages=[{"role": "user", "content": search_content}],
-            ),
-            client.messages.create(
-                model=model,
-                max_tokens=8096,
-                system=neg_system,
-                tools=[{"type": web_search_tool, "name": "web_search", "max_uses": 10}],  # type: ignore[list-item]
-                messages=[{"role": "user", "content": neg_content}],
-            ),
-            return_exceptions=True,
-        )
+        if use_openai:
+            search_result, neg_result = await asyncio.gather(
+                client.responses.create(
+                    model=OPENAI_STANDARD_MODEL,
+                    reasoning=OPENAI_STANDARD_REASONING,
+                    max_output_tokens=16000,
+                    instructions=search_system,
+                    input=search_content,
+                    tools=[{"type": "web_search"}],
+                ),
+                client.responses.create(
+                    model=OPENAI_STANDARD_MODEL,
+                    reasoning=OPENAI_STANDARD_REASONING,
+                    max_output_tokens=8096,
+                    instructions=neg_system,
+                    input=neg_content,
+                    tools=[{"type": "web_search"}],
+                ),
+                return_exceptions=True,
+            )
+            if not isinstance(search_result, Exception):
+                search_result = _as_text_message(search_result)
+            if not isinstance(neg_result, Exception):
+                neg_result = _as_text_message(neg_result)
+        else:
+            search_result, neg_result = await asyncio.gather(
+                client.messages.create(
+                    model=model,
+                    max_tokens=16000,
+                    system=search_system,
+                    tools=[{"type": web_search_tool, "name": "web_search", "max_uses": 12}],  # type: ignore[list-item]
+                    messages=[{"role": "user", "content": search_content}],
+                ),
+                client.messages.create(
+                    model=model,
+                    max_tokens=8096,
+                    system=neg_system,
+                    tools=[{"type": web_search_tool, "name": "web_search", "max_uses": 10}],  # type: ignore[list-item]
+                    messages=[{"role": "user", "content": neg_content}],
+                ),
+                return_exceptions=True,
+            )
 
         # ── Handle search result ──────────────────────────────────────────────
         if isinstance(search_result, Exception):
@@ -597,7 +675,9 @@ async def pre_analysis(
             )
             keywords_shape = '  "keywords": ["<keyword1>", ...]\n}\n'
 
-        format_msg = await client.messages.create(
+        format_msg = await _create_llm_message(
+            client,
+            use_openai,
             model=model,
             max_tokens=16000,
             system=(
@@ -634,31 +714,23 @@ async def pre_analysis(
                 parsed = json.loads(json_match.group())
                 profile = parsed.get("profile", profile)
                 raw_kw = parsed.get("keywords", [])
-                def _clean_kw(k: object) -> str:
-                    # Models sometimes snake_case multi-word terms to satisfy
-                    # word-count constraints — normalise back to spaces.
-                    return str(k).replace("_", " ").strip()
-
                 if kw_lang_names and isinstance(raw_kw, dict):
                     flat: list[str] = []
                     for lang_name in kw_lang_names:  # preserve selection order
                         group = raw_kw.get(lang_name)
                         if isinstance(group, list):
-                            flat.extend(_clean_kw(k) for k in group[:cap])
+                            flat.extend(str(k) for k in group[:cap])
                     if not flat:  # model used unexpected group keys
                         for group in raw_kw.values():
                             if isinstance(group, list):
-                                flat.extend(_clean_kw(k) for k in group[:cap])
+                                flat.extend(str(k) for k in group[:cap])
                     seen_kw: set[str] = set()
                     keywords = [
                         k for k in flat if not (k in seen_kw or seen_kw.add(k))
                     ][: cap * len(kw_lang_names)]
                 elif isinstance(raw_kw, list):
                     # single-language request, or the model ignored grouping
-                    keywords = [
-                        _clean_kw(k)
-                        for k in raw_kw[: cap * max(1, len(kw_lang_names))]
-                    ]
+                    keywords = raw_kw[: cap * max(1, len(kw_lang_names))]
                 else:
                     keywords = []
 
