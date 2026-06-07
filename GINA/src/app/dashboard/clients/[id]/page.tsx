@@ -1092,6 +1092,7 @@ export default function ClientDetailPage() {
                   links_count: (r.links ?? []).length,
                   negative_count: (r.negative ?? []).length,
                   lead_id: jobLeadId ?? undefined,
+                  job_id,
                   links: r.links ?? [],
                   useKeywords: jobUseKeywords,
                   pagesCap: jobPagesCap,
