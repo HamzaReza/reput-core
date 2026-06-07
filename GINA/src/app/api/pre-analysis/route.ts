@@ -197,11 +197,11 @@ export async function POST(req: NextRequest) {
       keywordFocus?: string;
       subjectType?: "individual" | "company";
       reportLanguage?: string;
-      scanTier?: "standard" | "advanced";
+      scanTier?: "basic" | "standard" | "advanced";
     };
 
-    const model = scanTier === "standard" ? "claude-haiku-4-5-20251001" : "claude-sonnet-4-6";
-    const webSearchTool = scanTier === "standard" ? "web_search_20250305" : "web_search_20260209";
+    const model = scanTier === "advanced" ? "claude-sonnet-4-6" : "claude-haiku-4-5-20251001";
+    const webSearchTool = scanTier === "advanced" ? "web_search_20260209" : "web_search_20250305";
 
     // Normalize to array — accept both legacy `country` string and new `countries` array
     const countries: string[] = Array.isArray(countriesRaw) && countriesRaw.length > 0

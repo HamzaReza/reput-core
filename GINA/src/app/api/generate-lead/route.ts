@@ -813,10 +813,10 @@ export async function POST(req: NextRequest) {
     reportLanguage?: string;
     useKeywords?: boolean;
     scanFocus?: "negative" | "positive" | "neutral";
-    scanTier?: "standard" | "advanced";
+    scanTier?: "basic" | "standard" | "advanced";
   };
 
-  const tierModel = scanTier === "standard" ? "claude-haiku-4-5-20251001" : "claude-sonnet-4-6";
+  const tierModel = scanTier === "advanced" ? "claude-sonnet-4-6" : "claude-haiku-4-5-20251001";
 
   // Normalize to array — accept both legacy `country` string and new `countries` array
   const countries: string[] =

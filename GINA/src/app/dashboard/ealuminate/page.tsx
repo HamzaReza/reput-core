@@ -14,6 +14,7 @@ import type {
   MeetingSummary,
   PreAnalysisProfile,
   RiskLevel,
+  ScanTier,
   ScanLog,
   ScanResult,
 } from "./_components/types";
@@ -75,6 +76,11 @@ declare global {
 const PAGES_CAP_OPTIONS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 50];
 const JOB_STORAGE_KEY = "ealuminate_job_id";
 const KEYWORDS_CAP_OPTIONS = [3, 4, 5, 6, 7, 8, 9, 10];
+const SCAN_TIER_VALUES: readonly ScanTier[] = [
+  "basic",
+  "standard",
+  "advanced",
+];
 
 const KEYWORD_FOCUS_OPTIONS = [
   { value: "all", label: "All Coverage" },
@@ -261,6 +267,13 @@ const STATUS_MESSAGES = [
   "Assessing reputation signals across sources…",
   "Compiling the prospect report for your review…",
 ];
+
+function isScanTier(value: unknown): value is ScanTier {
+  return (
+    typeof value === "string" &&
+    SCAN_TIER_VALUES.includes(value as ScanTier)
+  );
+}
 
 const DID_YOU_KNOW = [
   "Ealuminate is mapping public signals across the digital landscape.",
@@ -653,7 +666,7 @@ function EaluminatePageInner() {
   const [keywordLanguages, setKeywordLanguages] = useState<string[]>([]);
   const [useKeywords, setUseKeywords] = useState(true);
   const [scanFocus, setScanFocus] = useState<KeywordFocus>("all");
-  const [scanTier, setScanTier] = useState<"standard" | "advanced">("standard");
+  const [scanTier, setScanTier] = useState<ScanTier>("standard");
 
   const [editableKeywords, setEditableKeywords] = useState<string[]>([]);
   const [keywordsReady, setKeywordsReady] = useState(false);
@@ -957,7 +970,7 @@ function EaluminatePageInner() {
       useKeywords?: boolean;
       pagesCap?: number;
       scanFocus?: string;
-      scanTier?: "standard" | "advanced";
+      scanTier?: ScanTier;
       keywords?: string[];
       keywordsReady?: boolean;
       preAnalysisDone?: boolean;
@@ -1349,8 +1362,7 @@ function EaluminatePageInner() {
                 setCountries(d.countries as string[]);
               else if (typeof d.country === "string" && d.country)
                 setCountries([d.country as string]);
-              if (d.scanTier === "standard" || d.scanTier === "advanced")
-                setScanTier(d.scanTier as "standard" | "advanced");
+              if (isScanTier(d.scanTier)) setScanTier(d.scanTier);
               if (d.keywordLength === null || d.keywordLength === 1 || d.keywordLength === 2 || d.keywordLength === 3)
                 setKeywordLength(d.keywordLength as KeywordLength);
               if (
@@ -1402,11 +1414,8 @@ function EaluminatePageInner() {
               setKeywordsCap(scanEvent.data.keywordsCap as number);
             if (!hasActiveJob && typeof scanEvent?.data?.pagesCap === "number")
               setPagesCap(scanEvent.data.pagesCap as number);
-            if (
-              scanEvent?.data?.scanTier === "standard" ||
-              scanEvent?.data?.scanTier === "advanced"
-            )
-              setScanTier(scanEvent.data.scanTier as "standard" | "advanced");
+            if (isScanTier(scanEvent?.data?.scanTier))
+              setScanTier(scanEvent.data.scanTier);
           }
         } catch {
           /* non-fatal */

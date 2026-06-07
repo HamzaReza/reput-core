@@ -97,3 +97,4 @@ export interface ScanResult {
 
 export type RiskLevel = "Negative" | "Poor" | "Mediocre" | "Good";
 export type KeywordFocus = "all" | "negative" | "neutral" | "positive";
+export type ScanTier = "basic" | "standard" | "advanced";
