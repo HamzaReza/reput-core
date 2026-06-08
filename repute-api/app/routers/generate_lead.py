@@ -985,10 +985,16 @@ async def _execute_generate_lead(
             _middle = _sname_parts[1:-1]
             if all(len(p.rstrip(".")) == 1 for p in _middle):
                 _search_subject = f"{_sname_parts[0]} {_sname_parts[-1]}"
+        elif body.subjectType == "company":
+            _COMPANY_SUFFIXES = re.compile(
+                r",?\s*\b(LLC|Inc|Corp|Ltd|Co|LLP|LP|PLC|GmbH|S\.A\.?|S\.L\.?|BV|AG|NV)\.?\s*$",
+                re.IGNORECASE,
+            )
+            _search_subject = _COMPANY_SUFFIXES.sub("", _search_subject).strip()
         quoted_subject = (
             f'"{_search_subject}"'
             if body.subjectType != "company"
-            else sanitized_subject
+            else _search_subject
         )
         search_queries = [quoted_subject]
         if body.useKeywords:
@@ -1110,7 +1116,7 @@ async def _execute_generate_lead(
         if body.subjectType == "company":
             _company_words = [
                 w
-                for w in re.findall(r"[a-z0-9]+", _strip_diacritics(sanitized_subject))
+                for w in re.findall(r"[a-z0-9]+", _strip_diacritics(_search_subject))
                 if len(w) > 2
             ]
             if _company_words:
