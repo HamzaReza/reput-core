@@ -558,6 +558,7 @@ export const dashboard = {
 
 export interface LeadCreatePayload {
   name?: string;
+  middle_name?: string;
   company?: string;
   country?: string;
   background?: string;
@@ -590,6 +591,7 @@ export interface WebLink {
 export interface FullLead {
   id: string;
   name: string | null;
+  middle_name: string | null;
   company: string | null;
   country: string | null;
   background: string | null;
@@ -611,6 +613,7 @@ export interface FullLead {
 export interface RecentLead {
   id: string;
   name: string | null;
+  middle_name: string | null;
   company: string | null;
   country: string | null;
   background: string | null;

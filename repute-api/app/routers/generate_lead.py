@@ -23,6 +23,7 @@ from app.utils.auth import get_current_web_analyst
 router = APIRouter(prefix="/generate-lead", tags=["generate-lead"])
 
 _background_tasks: set[asyncio.Task] = set()
+_job_tasks: dict[uuid.UUID, asyncio.Task] = {}
 
 _PDF_URL_PATTERN = re.compile(r"\.pdf(?:$|[?#/&])")
 
@@ -32,6 +33,29 @@ _GL_COUNTRY_MAP: dict[str, str] = {
         (pathlib.Path(__file__).parent / "google_countries.json").read_text()
     )
 }
+# Modern/ISO names that differ from the legacy names in google_countries.json
+_GL_COUNTRY_MAP.update({
+    "bolivia, plurinational state of": "bo",
+    "cabo verde": "cv",
+    "congo, democratic republic of the": "cd",
+    "côte d'ivoire": "ci",
+    "czechia": "cz",
+    "eswatini": "sz",
+    "holy see": "va",
+    "libya": "ly",
+    "netherlands, kingdom of the": "nl",
+    "north macedonia": "mk",
+    "palestine, state of": "ps",
+    "réunion": "re",
+    "saint helena, ascension and tristan da cunha": "sh",
+    "serbia": "rs",
+    "türkiye": "tr",
+    "united kingdom of great britain and northern ireland": "gb",
+    "united states of america": "us",
+    "venezuela, bolivarian republic of": "ve",
+    "virgin islands (british)": "vg",
+    "virgin islands (u.s.)": "vi",
+})
 
 # ── Lookup tables ────────────────────────────────────────────────────────────
 
@@ -417,25 +441,6 @@ _NAME_PARTICLES = {
 }
 
 
-def _build_name_filter_parts(
-    body, fallback_subject: str | None = None
-) -> tuple[str, str]:
-    if getattr(body, "subjectType", "individual") == "company":
-        return "", ""
-
-    first = (getattr(body, "firstName", "") or "").strip()
-    last = (getattr(body, "lastName", "") or "").strip()
-    if first and last:
-        return first, last
-
-    fallback = (fallback_subject or "").strip()
-    parts = fallback.split()
-    if len(parts) > 1:
-        return parts[0], " ".join(parts[1:])
-
-    return "", ""
-
-
 def _passes_name_filter_legacy(article: dict, first_name: str, last_name: str) -> bool:
     raw = " ".join(
         [
@@ -745,6 +750,8 @@ async def _classify_with_claude(
     language_name: str,
     scan_focus: str | None,
     model: str = "claude-haiku-4-5-20251001",
+    background: str | None = None,
+    pre_analysis_profile: dict | None = None,
 ) -> list[dict]:
     if not articles:
         return []
@@ -768,6 +775,40 @@ async def _classify_with_claude(
             else f"The subject is from {countries_label}. Only include results clearly relevant to this person and these regions."
         )
 
+    # Build subject context block from pre-analysis profile and/or analyst-provided background
+    _ctx_parts: list[str] = []
+    if pre_analysis_profile and isinstance(pre_analysis_profile, dict):
+        _identity = (pre_analysis_profile.get("identity") or "").strip()
+        _bg = (pre_analysis_profile.get("background") or "").strip()
+        _neg = (pre_analysis_profile.get("negative_findings") or "").strip()
+        if _identity:
+            _ctx_parts.append(f"Identity: {_identity}")
+        if _bg:
+            _ctx_parts.append(f"Background: {_bg}")
+        _neg_fallbacks = {
+            "no negative findings in available sources.",
+            "no negative findings in available sources",
+        }
+        if _neg and _neg.lower().rstrip(".") not in _neg_fallbacks:
+            _ctx_parts.append(f"Known negative findings: {_neg}")
+    if background:
+        _ctx_parts.append(f"Analyst context: {background.strip()}")
+
+    subject_context_block = (
+        "SUBJECT CONTEXT — use to verify article relevance and improve classification accuracy:\n"
+        + "\n".join(_ctx_parts)
+        + "\n\n"
+        if _ctx_parts
+        else ""
+    )
+    homonym_rule = (
+        "HOMONYM RULE: If an article is clearly about a different person who shares the same name "
+        "but has a completely different profession, country, or background from the subject context "
+        "above — omit that article from your output entirely.\n\n"
+        if _ctx_parts and subject_type != "company"
+        else ""
+    )
+
     name_filter = ""
 
     scan_focus_rules: dict[str, str] = {
@@ -783,7 +824,7 @@ async def _classify_with_claude(
 
     prompt = (
         f'You are a reputation intelligence analyst. Classify the following {len(articles)} articles about "{name}".\n\n'
-        f"{country_line}\nSearch context keywords used: {keyword_list}\n{scan_focus_rule}\n"
+        f"{country_line}\n{subject_context_block}{homonym_rule}Search context keywords used: {keyword_list}\n{scan_focus_rule}\n"
         f"CLASSIFICATION RULES:\n\nNEGATIVE sentiment — classify if the article contains ANY of:\n"
         f"- Criminal investigations, police involvement, charges, arrests\n"
         f"- Lawsuits, legal disputes, court cases, regulatory sanctions\n"
@@ -934,6 +975,7 @@ async def _generate_meeting_summary(
 
 class GenerateLeadRequest(BaseModel):
     firstName: str | None = None
+    middleName: str | None = None
     lastName: str | None = None
     company: str | None = None
     country: str | None = None
@@ -945,6 +987,8 @@ class GenerateLeadRequest(BaseModel):
     useKeywords: bool = True
     scanFocus: str | None = None
     scanTier: Literal["standard", "advanced"] = "standard"
+    background: str | None = None
+    preAnalysisProfile: dict | None = None
 
 
 # ── Core logic (extracted so background runner can call it) ──────────────────
@@ -970,7 +1014,11 @@ async def _execute_generate_lead(
     search_subject = (
         (body.company or "").strip()
         if body.subjectType == "company" and body.company
-        else f"{(body.firstName or '').strip()} {(body.lastName or '').strip()}".strip()
+        else " ".join(filter(None, [
+            (body.firstName or "").strip(),
+            (body.middleName or "").strip(),
+            (body.lastName or "").strip(),
+        ]))
     )
     sanitized_subject = search_subject[:200].replace("\r", " ").replace("\n", " ")
 
@@ -986,6 +1034,10 @@ async def _execute_generate_lead(
 
     client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
 
+    # Structured per-stage pipeline trace returned as result["scanLog"].
+    # Schema: docs/plans/2026-06-07-scan-log-design.md
+    scan_log: dict = {}
+
     async with httpx.AsyncClient() as http:
         # ── Phase 1: Serper searches ──────────────────────────────────────────
         if job_id:
@@ -996,10 +1048,16 @@ async def _execute_generate_lead(
             _middle = _sname_parts[1:-1]
             if all(len(p.rstrip(".")) == 1 for p in _middle):
                 _search_subject = f"{_sname_parts[0]} {_sname_parts[-1]}"
+        elif body.subjectType == "company":
+            _COMPANY_SUFFIXES = re.compile(
+                r",?\s*\b(LLC|Inc|Corp|Ltd|Co|LLP|LP|PLC|GmbH|S\.A\.?|S\.L\.?|BV|AG|NV)\.?\s*$",
+                re.IGNORECASE,
+            )
+            _search_subject = _COMPANY_SUFFIXES.sub("", _search_subject).strip()
         quoted_subject = (
             f'"{_search_subject}"'
             if body.subjectType != "company"
-            else sanitized_subject
+            else _search_subject
         )
         search_queries = [quoted_subject]
         if body.useKeywords:
@@ -1040,6 +1098,31 @@ async def _execute_generate_lead(
         all_organic = [r[0] for r in serper_results]
         all_raw = [r[1] for r in serper_results]
         all_pages_fetched = [r[2] for r in serper_results]
+
+        _num_countries = len(country_configs) or 1
+        scan_log["serper"] = {
+            "queries": [
+                {
+                    "keyword": (
+                        body.keywords[(i // _num_countries) - 1]
+                        if body.useKeywords
+                        and 1 <= (i // _num_countries) <= len(body.keywords)
+                        else None
+                    ),
+                    "query": all_searches[i]["q"],
+                    "country": (
+                        countries[i % _num_countries]
+                        if i % _num_countries < len(countries)
+                        else None
+                    ),
+                    "pages": all_pages_fetched[i],
+                    "count": len(all_organic[i]),
+                    "links": [r.get("link") for r in all_organic[i] if r.get("link")],
+                }
+                for i in range(len(all_searches))
+            ],
+            "totalRaw": sum(len(o) for o in all_organic),
+        }
 
         # ── Phase 2: Deduplicate & scrape ─────────────────────────────────────
         if job_id:
@@ -1083,39 +1166,64 @@ async def _execute_generate_lead(
                 elif kw and kw not in keyword_map.get(url, []):
                     keyword_map.setdefault(url, []).append(kw)
 
+        scan_log["serper"]["deduped"] = {
+            "count": len(articles),
+            "links": [a["url"] for a in articles],
+        }
+
+        # Track everything removed between dedupe and the scrape phase so
+        # scanLog's deduped count reconciles with the firecrawl totals.
+        _prefilter_dropped: list[dict] = []
+
         _name_parts = sanitized_subject.split()
         if body.subjectType == "company":
             _company_words = [
                 w
-                for w in re.findall(r"[a-z0-9]+", _strip_diacritics(sanitized_subject))
+                for w in re.findall(r"[a-z0-9]+", _strip_diacritics(_search_subject))
                 if len(w) > 2
             ]
             if _company_words:
-                articles = [
-                    a
-                    for a in articles
+                _pf_kept: list[dict] = []
+                for a in articles:
                     if all(
                         w in _strip_diacritics(a["title"] + " " + a["snippet"])
                         for w in _company_words
-                    )
-                ]
+                    ):
+                        _pf_kept.append(a)
+                    else:
+                        _prefilter_dropped.append(
+                            {"url": a["url"], "reason": "company_words_missing"}
+                        )
+                articles = _pf_kept
         else:
             _fn = _strip_diacritics(_name_parts[0]) if _name_parts else ""
             _ln = _strip_diacritics(_name_parts[-1]) if len(_name_parts) > 1 else ""
             if _ln:
-                articles = [
-                    a
-                    for a in articles
-                    if _ln in _strip_diacritics(a["title"] + " " + a["snippet"])
-                ]
+                _pf_kept = []
+                for a in articles:
+                    if _ln in _strip_diacritics(a["title"] + " " + a["snippet"]):
+                        _pf_kept.append(a)
+                    else:
+                        _prefilter_dropped.append(
+                            {"url": a["url"], "reason": "surname_not_in_snippet"}
+                        )
+                articles = _pf_kept
 
-        articles = [
-            a
-            for a in articles
-            if not _PDF_URL_PATTERN.search(unquote(a["url"]).lower())
-        ]
+        _pf_kept = []
+        for a in articles:
+            if _PDF_URL_PATTERN.search(unquote(a["url"]).lower()):
+                _prefilter_dropped.append({"url": a["url"], "reason": "pdf_url"})
+            else:
+                _pf_kept.append(a)
+        articles = _pf_kept
+
+        scan_log["prefilter"] = {
+            "count": len(_prefilter_dropped),
+            "dropped": _prefilter_dropped,
+        }
 
         urls_sent_to_firecrawl: list[str] = []
+        firecrawl_skipped: dict[str, str] = {}
 
         BATCH_SIZE = 15
         scrape_results_by_url: dict[str, str | None] = {}
@@ -1126,16 +1234,19 @@ async def _execute_generate_lead(
             batch_to_scrape: list[dict] = []
             for article in batch:
                 article_url = article["url"]
-                is_youtube = _is_youtube(article_url)
-                if (
-                    not settings.firecrawl_api_key
-                    or is_youtube
-                    or await _is_pdf(article_url, http)
-                ):
-                    if is_youtube:
-                        print(
-                            f"[_is_youtube] Skipping Firecrawl, classifying from snippet: {article_url}"
-                        )
+                if not settings.firecrawl_api_key:
+                    skip_reason = "no_api_key"
+                elif _is_youtube(article_url):
+                    print(
+                        f"[_is_youtube] Skipping Firecrawl, classifying from snippet: {article_url}"
+                    )
+                    skip_reason = "youtube"
+                elif await _is_pdf(article_url, http):
+                    skip_reason = "pdf"
+                else:
+                    skip_reason = None
+                if skip_reason:
+                    firecrawl_skipped[article_url] = skip_reason
                     scrape_results_by_url[article_url] = None
                     continue
                 urls_sent_to_firecrawl.append(article_url)
@@ -1167,16 +1278,65 @@ async def _execute_generate_lead(
             elif article["url"] in urls_sent_to_firecrawl_set:
                 firecrawl_failed.append(article["url"])
 
+        _skip_reasons = list(firecrawl_skipped.values())
+        scan_log["firecrawl"] = {
+            "skipped": {
+                "count": len(firecrawl_skipped),
+                "youtube": _skip_reasons.count("youtube"),
+                "pdf": _skip_reasons.count("pdf"),
+                "noApiKey": _skip_reasons.count("no_api_key"),
+                "links": [
+                    {"url": u, "reason": r} for u, r in firecrawl_skipped.items()
+                ],
+            },
+            "success": {"count": len(firecrawl_success), "links": firecrawl_success},
+            "failed": {"count": len(firecrawl_failed), "links": firecrawl_failed},
+            # Articles never attempted (e.g. scraping aborted mid-run). Always
+            # empty on this code path today; populated once batch short-circuit
+            # behaviour lands.
+            "notAttempted": {
+                "count": len(articles)
+                - len(urls_sent_to_firecrawl)
+                - len(firecrawl_skipped),
+                "links": [
+                    a["url"]
+                    for a in articles
+                    if a["url"] not in urls_sent_to_firecrawl_set
+                    and a["url"] not in firecrawl_skipped
+                ],
+            },
+            "error": None,
+        }
+
         _nf_first = ""
         _nf_last = ""
         name_filter_dropped: list[dict] = []
         if body.subjectType != "company":
-            _nf_first, _nf_last = _build_name_filter_parts(body, sanitized_subject)
-            if _nf_first and _nf_last:
+            _nf_first = (body.firstName or "").strip()
+            _middle = (body.middleName or "").strip()
+            _last_only = (body.lastName or "").strip()
+            # Fallback: derive names from the subject string when the structured
+            # firstName/lastName fields are not provided by the caller.
+            if not (_nf_first and _last_only):
+                _parts = sanitized_subject.split()
+                if len(_parts) > 1:
+                    _nf_first = _parts[0]
+                    _last_only = " ".join(_parts[1:])
+                    _middle = ""
+            _nf_last_full = f"{_middle} {_last_only}".strip() if _middle else _last_only
+            _nf_last = _nf_last_full
+            if _nf_first and _last_only:
                 before = len(articles)
                 kept = []
                 for a in articles:
-                    if _passes_name_filter(a, _nf_first, _nf_last):
+                    if _middle:
+                        passes = (
+                            _passes_name_filter(a, _nf_first, _nf_last_full)
+                            or _passes_name_filter(a, _nf_first, _last_only)
+                        )
+                    else:
+                        passes = _passes_name_filter(a, _nf_first, _last_only)
+                    if passes:
                         kept.append(a)
                     else:
                         name_filter_dropped.append(a)
@@ -1184,6 +1344,28 @@ async def _execute_generate_lead(
                 print(
                     f"[name_filter] {before} → {len(articles)} articles after hard filter"
                 )
+
+        # Only emitted when the individual-name filter actually ran — company
+        # scans use the company-word prefilter instead (logged in prefilter),
+        # and emitting empty names here renders a broken-looking card.
+        if _nf_first and _nf_last:
+            scan_log["nameFilter"] = {
+                "firstName": _nf_first,
+                "lastName": _nf_last,
+                "keptCount": len(articles),
+                "dropped": {
+                    "count": len(name_filter_dropped),
+                    "articles": [
+                        {
+                            "url": a["url"],
+                            "title": a.get("title", ""),
+                            "snippet": a.get("snippet", ""),
+                            "content": a.get("content", ""),
+                        }
+                        for a in name_filter_dropped
+                    ],
+                },
+            }
 
         urls_sent_to_claude = [a["url"] for a in articles]
 
@@ -1205,6 +1387,8 @@ async def _execute_generate_lead(
                 output_language_name,
                 body.scanFocus,
                 tier_model,
+                background=body.background,
+                pre_analysis_profile=body.preAnalysisProfile,
             )
 
     batches = [
@@ -1213,6 +1397,31 @@ async def _execute_generate_lead(
     ]
     batch_results = await asyncio.gather(*[_classify_batch(b) for b in batches])
     classified: list[dict] = [item for result in batch_results for item in result]
+
+    _all_returned_urls = {item.get("url") for item in classified}
+    _claude_dropped = [u for u in urls_sent_to_claude if u not in _all_returned_urls]
+    scan_log["claude"] = {
+        "model": tier_model,
+        "scanFocus": body.scanFocus,
+        "batches": [
+            {
+                "batch": bi + 1,
+                "sentCount": len(batch),
+                "sent": [a["url"] for a in batch],
+                "returnedCount": len(batch_results[bi]),
+                "returned": [
+                    {
+                        "url": item.get("url"),
+                        "sentiment": item.get("sentiment"),
+                        "risk": item.get("risk"),
+                    }
+                    for item in batch_results[bi]
+                ],
+            }
+            for bi, batch in enumerate(batches)
+        ],
+        "dropped": {"count": len(_claude_dropped), "links": _claude_dropped},
+    }
 
     if body.scanFocus == "negative":
         classified = [
@@ -1261,6 +1470,7 @@ async def _execute_generate_lead(
         "summary": summary,
         "score": score,
         "scanTier": body.scanTier,
+        "scanLog": scan_log,
         "_serper": [
             {
                 "keyword": (
@@ -1381,6 +1591,8 @@ async def _run_job(job_id: uuid.UUID, body: GenerateLeadRequest) -> None:
         settings = get_settings()
         result = await _execute_generate_lead(body, settings, job_id=job_id)
         await _update_job_status(job_id, "done", result=result)
+    except asyncio.CancelledError:
+        raise  # DB already updated to "cancelled" by DELETE route
     except BaseException as e:
         await _update_job_status(job_id, "failed", error=f"{type(e).__name__}: {e}")
         raise
@@ -1417,7 +1629,9 @@ async def generate_lead(
 
     task = asyncio.create_task(_run_job(job_id, body))
     _background_tasks.add(task)
+    _job_tasks[job_id] = task
     task.add_done_callback(_background_tasks.discard)
+    task.add_done_callback(lambda _: _job_tasks.pop(job_id, None))
     return {"job_id": str(job_id)}
 
 
@@ -1436,3 +1650,25 @@ async def get_generate_lead_job(
         "error": job.error,
         "current_step": job.current_step,
     }
+
+
+@router.delete("/{job_id}")
+async def cancel_generate_lead_job(
+    job_id: uuid.UUID,
+    analyst: WebAnalyst = Depends(get_current_web_analyst),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    job = await db.get(GenerateLeadJob, job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if job.created_by_id != analyst.id:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    if job.status in ("done", "failed", "cancelled"):
+        return {"status": job.status}
+    task = _job_tasks.get(job_id)
+    if task and not task.done():
+        task.cancel()
+    job.status = "cancelled"
+    job.completed_at = datetime.now(timezone.utc)
+    await db.commit()
+    return {"status": "cancelled"}

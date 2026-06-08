@@ -176,6 +176,7 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const {
       firstName,
+      middleName,
       lastName,
       company,
       country: countrySingle,
@@ -188,6 +189,7 @@ export async function POST(req: NextRequest) {
       scanTier = "standard",
     } = body as {
       firstName?: string;
+      middleName?: string;
       lastName?: string;
       company?: string;
       country?: string;
@@ -243,8 +245,10 @@ export async function POST(req: NextRequest) {
     const languageName = reportLanguage
       ? (REPORT_LANG_MAP[reportLanguage] ?? "English")
       : ((lang ? LANGUAGE_CODE_TO_NAME[lang] : null) ?? "English");
-    const fullName =
-      `${(firstName ?? "").trim()} ${(lastName ?? "").trim()}`.trim();
+    const fullName = [firstName, middleName, lastName]
+      .map((s) => (s ?? "").trim())
+      .filter(Boolean)
+      .join(" ");
     const subjectLabel =
       subjectType === "company" ? (company ?? fullName) : fullName;
 

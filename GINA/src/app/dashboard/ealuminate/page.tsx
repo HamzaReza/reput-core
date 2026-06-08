@@ -7,12 +7,14 @@ import countryList from "react-select-country-list";
 import { EaluminateFormPanel } from "./_components/EaluminateFormPanel";
 import { EaluminatePipelinePanel } from "./_components/EaluminatePipelinePanel";
 import { EaluminateResultsPanel } from "./_components/EaluminateResultsPanel";
+import { ScanLogPanel } from "./_components/ScanLogPanel";
 import ExportFieldsModal from "./_components/ExportFieldsModal";
 import type {
   KeywordFocus,
   MeetingSummary,
   PreAnalysisProfile,
   RiskLevel,
+  ScanLog,
   ScanResult,
 } from "./_components/types";
 import { exportReportMasterPdf, exportSummaryPdf } from "./_utils/pdfExports";
@@ -508,6 +510,17 @@ function KeywordsEditor({
       setKeywords([...keywords, trimmed]);
     setInput("");
   };
+  // Pasted lists: split on commas/newlines, trim each, drop empties and dupes
+  const addMany = (vals: string[]) => {
+    if (readOnly) return;
+    const next = [...keywords];
+    for (const v of vals) {
+      const trimmed = v.trim();
+      if (trimmed && !next.includes(trimmed)) next.push(trimmed);
+    }
+    setKeywords(next);
+    setInput("");
+  };
   const remove = (kw: string) => setKeywords(keywords.filter((k) => k !== kw));
 
   return (
@@ -589,6 +602,12 @@ function KeywordsEditor({
             } else if (e.key === "Backspace" && !input && keywords.length)
               setKeywords(keywords.slice(0, -1));
           }}
+          onPaste={(e) => {
+            const text = e.clipboardData.getData("text");
+            if (!/[,\n]/.test(text)) return; // single keyword — default paste
+            e.preventDefault();
+            addMany(`${input} ${text}`.split(/[,\n]/));
+          }}
           onBlur={() => {
             if (input.trim()) add(input);
           }}
@@ -620,6 +639,7 @@ function EaluminatePageInner() {
     "individual",
   );
   const [firstName, setFirstName] = useState("");
+  const [middleName, setMiddleName] = useState("");
   const [lastName, setLastName] = useState("");
   const [company, setCompany] = useState("");
   const [countries, setCountries] = useState<string[]>([]);
@@ -661,6 +681,7 @@ function EaluminatePageInner() {
   const [tipIdx, setTipIdx] = useState(0);
   const [tipVisible, setTipVisible] = useState(true);
   const [result, setResult] = useState<ScanResult | null>(null);
+  const [resultsTab, setResultsTab] = useState<"results" | "scanlog">("results");
   const [score, setScore] = useState(0);
   const [error, setError] = useState("");
   const [expandedLinkIndex, setExpandedLinkIndex] = useState<string | null>(
@@ -681,7 +702,7 @@ function EaluminatePageInner() {
   const persistContextRef = useRef({
     leadId,
     clientId,
-    fullName: `${firstName.trim()} ${lastName.trim()}`.trim(),
+    fullName: [firstName.trim(), middleName.trim(), lastName.trim()].filter(Boolean).join(" "),
     company,
     country: countries[0] ?? "",
     description,
@@ -779,6 +800,7 @@ function EaluminatePageInner() {
                 );
           setScore(finalScore);
           setResult(scanResult);
+          setResultsTab("results");
           setScanComplete(true);
           setIsResuming(false);
           if (scanStartRef.current !== null) {
@@ -840,6 +862,7 @@ function EaluminatePageInner() {
                     negative_count: scanResult.negative.length,
                     keywords: ctx.editableKeywords,
                     lead_id: currentLeadId ?? undefined,
+                    job_id,
                     links: scanResult.links,
                     useKeywords: ctx.useKeywords,
                     scanFocus:
@@ -866,6 +889,14 @@ function EaluminatePageInner() {
           setError(pollData.error ?? "Scan failed. Please try again.");
           setIsResuming(false);
           setLoading(false);
+        } else if (pollData.status === "cancelled") {
+          clearInterval(pollIntervalRef.current!);
+          localStorage.removeItem(JOB_STORAGE_KEY);
+          stopCycles();
+          setCurrentStep(null);
+          setLoading(false);
+          setIsResuming(false);
+          setError("Scan was cancelled.");
         }
         // "pending" | "running" → keep polling
       } catch {
@@ -890,7 +921,7 @@ function EaluminatePageInner() {
     persistContextRef.current = {
       leadId,
       clientId,
-      fullName: `${firstName.trim()} ${lastName.trim()}`.trim(),
+      fullName: [firstName.trim(), middleName.trim(), lastName.trim()].filter(Boolean).join(" "),
       company,
       country: countries[0] ?? "",
       description,
@@ -907,6 +938,7 @@ function EaluminatePageInner() {
     leadId,
     clientId,
     firstName,
+    middleName,
     lastName,
     company,
     countries,
@@ -1233,6 +1265,9 @@ function EaluminatePageInner() {
     const id = searchParams.get("lead");
     if (!id) return;
     const eventId = searchParams.get("event");
+    // Cancels the in-flight scanLog fetch if the lead/event params change,
+    // so a slow response can't merge a stale log onto a different lead.
+    const scanLogAbort = new AbortController();
     // Reset scan state so stale results from a previous lead don't bleed through
     setResult(null);
     setScore(0);
@@ -1249,7 +1284,8 @@ function EaluminatePageInner() {
       .then(async (lead) => {
         const parts = (lead.name ?? "").trim().split(/\s+/);
         setFirstName(parts[0] ?? "");
-        setLastName(parts.slice(1).join(" "));
+        setMiddleName(lead.middle_name ?? "");
+        setLastName(parts.length > 1 ? parts[parts.length - 1] : "");
         setCompany(lead.company ?? "");
         if (lead.country) setCountries([lead.country]);
         setDescription(lead.background ?? "");
@@ -1260,6 +1296,7 @@ function EaluminatePageInner() {
         let scanLinks: WebLink[] | undefined;
         let scanScore: number | undefined;
         let scanSummary: MeetingSummary | undefined;
+        let scanJobId: string | undefined;
         try {
           const clients = await clientsApi.list(200);
           const inferredType = (lead.name ?? "").trim()
@@ -1350,6 +1387,8 @@ function EaluminatePageInner() {
               scanEvent?.id ?? null,
             );
             if (scanEvent?.data) {
+              if (typeof scanEvent.data.job_id === "string")
+                scanJobId = scanEvent.data.job_id;
               scanLinks = scanEvent.data.links as WebLink[] | undefined;
               scanScore = scanEvent.data.score as number | undefined;
               scanSummary = scanEvent.data.summary as
@@ -1426,6 +1465,31 @@ function EaluminatePageInner() {
             summary: summaryToUse,
           });
           setUsedKeywords(lead.keywords_suggested);
+
+          // Re-attach the persistent scan log from the original job — the
+          // event copy stores links/score only; the full log lives forever
+          // on the generate_lead_jobs row.
+          if (scanJobId) {
+            try {
+              const res = await fetch(
+                `${scanApiUrl}/generate-lead/${scanJobId}`,
+                {
+                  headers: { Authorization: `Bearer ${getToken()}` },
+                  signal: scanLogAbort.signal,
+                },
+              );
+              if (res.ok) {
+                const jd = await res.json();
+                const slog = jd?.result?.scanLog as ScanLog | undefined;
+                if (slog)
+                  setResult((prev) =>
+                    prev ? { ...prev, scanLog: slog } : prev,
+                  );
+              }
+            } catch {
+              /* non-fatal */
+            }
+          }
         }
 
         if (scoreToUse !== undefined && scoreToUse !== null) {
@@ -1434,9 +1498,10 @@ function EaluminatePageInner() {
         }
       })
       .catch(() => {});
+    return () => scanLogAbort.abort();
   }, [searchParams]);
 
-  const fullName = `${firstName.trim()} ${lastName.trim()}`.trim();
+  const fullName = [firstName.trim(), middleName.trim(), lastName.trim()].filter(Boolean).join(" ");
 
   const country = countries[0] ?? "";
 
@@ -1620,6 +1685,8 @@ function EaluminatePageInner() {
         body: JSON.stringify({
           firstName:
             subjectType === "individual" ? firstName.trim() : undefined,
+          middleName:
+            subjectType === "individual" ? middleName.trim() || undefined : undefined,
           lastName: subjectType === "individual" ? lastName.trim() : undefined,
           company: company.trim() || undefined,
           countries,
@@ -1654,6 +1721,7 @@ function EaluminatePageInner() {
       try {
         const ld = await leads.create({
           name: fullName || undefined,
+          middle_name: middleName.trim() || undefined,
           company: company.trim() || undefined,
           country,
           background: description.trim(),
@@ -1701,6 +1769,25 @@ function EaluminatePageInner() {
     } finally {
       setPreAnalysisLoading(false);
     }
+  };
+
+  const handleAbort = async () => {
+    if (!jobId) return;
+    clearInterval(pollIntervalRef.current!);
+    localStorage.removeItem(JOB_STORAGE_KEY);
+    stopCycles();
+    try {
+      await fetch(`${scanApiUrl}/generate-lead/${jobId}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${getToken()}` },
+      });
+    } catch { /* non-fatal */ }
+    setJobId(null);
+    setCurrentStep(null);
+    setLoading(false);
+    setIsResuming(false);
+    setScanDuration(null);
+    setError("Scan aborted.");
   };
 
   const handleRunScan = async () => {
@@ -1763,6 +1850,8 @@ function EaluminatePageInner() {
         body: JSON.stringify({
           firstName:
             subjectType === "individual" ? firstName.trim() : undefined,
+          middleName:
+            subjectType === "individual" ? middleName.trim() || undefined : undefined,
           lastName: subjectType === "individual" ? lastName.trim() : undefined,
           company: company.trim() || undefined,
           countries,
@@ -1773,6 +1862,8 @@ function EaluminatePageInner() {
           useKeywords,
           scanFocus: scanFocus !== "all" ? scanFocus : undefined,
           scanTier,
+          background: description.trim() || undefined,
+          preAnalysisProfile: preAnalysisProfile || undefined,
         }),
       });
       if (res.status === 401) {
@@ -1920,12 +2011,15 @@ function EaluminatePageInner() {
             setSubjectType(t);
             if (t === "company") {
               setFirstName("");
+              setMiddleName("");
               setLastName("");
             }
             if (t === "individual") setCompany("");
           }}
           firstName={firstName}
           setFirstName={setFirstName}
+          middleName={middleName}
+          setMiddleName={setMiddleName}
           lastName={lastName}
           setLastName={setLastName}
           company={company}
@@ -1985,6 +2079,37 @@ function EaluminatePageInner() {
           }
         />
 
+        {result?.scanLog && !loading && (
+          <div style={{ display: "flex", gap: "0.375rem" }}>
+            {(
+              [
+                ["results", "Results"],
+                ["scanlog", "Scan Log"],
+              ] as const
+            ).map(([key, label]) => (
+              <button
+                key={key}
+                onClick={() => setResultsTab(key)}
+                style={{
+                  padding: "0.4rem 0.9rem",
+                  fontSize: "0.8rem",
+                  fontWeight: 600,
+                  borderRadius: "0.625rem 0.625rem 0 0",
+                  border: "1px solid #e2e8f0",
+                  borderBottom: "none",
+                  cursor: "pointer",
+                  background: resultsTab === key ? "#fff" : "#f1f5f9",
+                  color: resultsTab === key ? "#4479DA" : "#64748b",
+                }}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
+        {resultsTab === "scanlog" && result?.scanLog && !loading ? (
+          <ScanLogPanel scanLog={result.scanLog} />
+        ) : (
         <EaluminateResultsPanel
           loading={loading}
           result={result}
@@ -2007,7 +2132,9 @@ function EaluminatePageInner() {
           scanDuration={scanDuration}
           currentStep={currentStep}
           jobId={jobId}
+          onAbort={handleAbort}
         />
+        )}
       </div>
       {exportSummaryModalOpen && (
         <ExportFieldsModal
