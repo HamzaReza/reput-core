@@ -20,28 +20,20 @@ from app.config import get_settings
 from app.database import AsyncSessionLocal, get_db
 from app.models.lead import GenerateLeadJob, WebAnalyst
 from app.utils.auth import get_current_web_analyst
+from app.utils.llm import (
+    OPENAI_STANDARD_MODEL,
+    OPENAI_STANDARD_REASONING,
+    extract_openai_text,
+    is_transient_openai_error,
+    resolve_provider,
+    safe_error_message,
+)
 
 router = APIRouter(prefix="/generate-lead", tags=["generate-lead"])
 
 _background_tasks: set[asyncio.Task] = set()
 
 _PDF_URL_PATTERN = re.compile(r"\.pdf(?:$|[?#/&])")
-OPENAI_STANDARD_MODEL = "gpt-5-mini"
-OPENAI_STANDARD_REASONING = {"effort": "high"}
-
-
-def _extract_openai_text(response) -> str:
-    output_text = getattr(response, "output_text", None)
-    if isinstance(output_text, str) and output_text.strip():
-        return output_text
-
-    chunks: list[str] = []
-    for item in getattr(response, "output", []) or []:
-        for block in getattr(item, "content", []) or []:
-            text = getattr(block, "text", None)
-            if isinstance(text, str):
-                chunks.append(text)
-    return "\n".join(chunks).strip()
 
 _GL_COUNTRY_MAP: dict[str, str] = {
     entry["name"].lower(): entry["code"]
@@ -670,8 +662,17 @@ async def _scrape_firecrawl(
         return None
 
 
-async def _classify_with_claude(
-    client: anthropic.AsyncAnthropic,
+def _parse_classification_items(text: str) -> list | None:
+    """Parse an LLM classification result. Accepts {"items": [...]} (preferred)
+    or a bare [...] array. Returns the list (possibly empty) or None if no
+    parseable JSON structure was found (caller decides how to handle None)."""
+    obj = _parse_json_object(text)
+    if obj is not None and isinstance(obj.get("items"), list):
+        return obj["items"]
+    return _parse_json_array(text)
+
+
+def _build_classification_prompt(
     articles: list[dict],
     name: str,
     countries: list[str],
@@ -679,22 +680,15 @@ async def _classify_with_claude(
     subject_type: str,
     language_name: str,
     scan_focus: str | None,
-    model: str = "claude-haiku-4-5-20251001",
-) -> list[dict]:
-    if not articles:
-        return []
-
+) -> str:
+    """Shared classification prompt for BOTH providers (Claude's rich content,
+    output as a {"items": [...]} object)."""
     article_list = "\n\n---\n\n".join(
         f"[{i+1}] URL: {a['url']}\nTitle: {a['title']}\nSnippet: {a['snippet']}\nContent: {a['content']}"
         for i, a in enumerate(articles)
     )
-
-    name_parts = name.split()
-    first_name = name_parts[0] if name_parts else name
-    last_name = " ".join(name_parts[1:])
     countries_label = ", ".join(countries)
     keyword_list = ", ".join(keywords) if keywords else "general reputation"
-
     country_line = ""
     if countries:
         country_line = (
@@ -702,8 +696,6 @@ async def _classify_with_claude(
             if subject_type == "company"
             else f"The subject is from {countries_label}. Only include results clearly relevant to this person and these regions."
         )
-
-    name_filter = ""
 
     scan_focus_rules: dict[str, str] = {
         "negative": "\nSCAN FOCUS: Return ONLY articles with NEGATIVE sentiment or HIGH/MEDIUM risk. Exclude all positive and neutral articles from the output entirely.\n",
@@ -716,7 +708,7 @@ async def _classify_with_claude(
         else ""
     )
 
-    prompt = (
+    return (
         f'You are a reputation intelligence analyst. Classify the following {len(articles)} articles about "{name}".\n\n'
         f"{country_line}\nSearch context keywords used: {keyword_list}\n{scan_focus_rule}\n"
         f"CLASSIFICATION RULES:\n\nNEGATIVE sentiment — classify if the article contains ANY of:\n"
@@ -740,15 +732,35 @@ async def _classify_with_claude(
         f'- "medium": accidents, controversies, allegations, complaints\n'
         f'- "low": minor criticism or weak negative mentions\n'
         f'- "none": positive or neutral content\n\n'
-        f"{name_filter}\n\nARTICLES TO CLASSIFY:\n{article_list}\n\n"
-        f"Return a JSON array only — no explanation, no markdown code fences. Each element must have:\n"
+        f"ARTICLES TO CLASSIFY:\n{article_list}\n\n"
+        f'Return a JSON object with an "items" array — no explanation, no markdown code fences. '
+        f"Each item must have:\n"
         f'{{\n  "url": "...",\n  "title": "...",\n'
         f'  "snippet": "3 sentence explanation of the reputational significance of this article, written in your own words based on the title and content — not copied from the source. Write the snippet in {language_name}.",\n'
         f'  "sentiment": "negative" | "positive" | "neutral",\n'
         f'  "risk": "high" | "medium" | "low" | "none",\n'
         f'  "source": "domain.com",\n'
         f'  "type": "criminal" | "legal" | "news" | "complaint" | "regulatory" | "social" | "award" | "achievement" | "profile" | "wiki" | "directory"\n'
-        f"}}\n\nReturn ONLY the JSON array. If no valid articles, return []."
+        f'}}\n\nReturn ONLY the JSON object with the "items" array. If no valid articles, return {{"items": []}}.'
+    )
+
+
+async def _classify_with_claude(
+    client: anthropic.AsyncAnthropic,
+    articles: list[dict],
+    name: str,
+    countries: list[str],
+    keywords: list[str],
+    subject_type: str,
+    language_name: str,
+    scan_focus: str | None,
+    model: str = "claude-haiku-4-5-20251001",
+) -> list[dict]:
+    if not articles:
+        return []
+
+    prompt = _build_classification_prompt(
+        articles, name, countries, keywords, subject_type, language_name, scan_focus
     )
 
     async with client.messages.stream(
@@ -764,13 +776,71 @@ async def _classify_with_claude(
     text_block = next((b for b in response.content if b.type == "text"), None)
     if not text_block:
         return []
-    json_match = re.search(r"\[[\s\S]*\]", text_block.text.strip())
-    if not json_match:
-        return []
-    try:
-        return json.loads(json_match.group())
-    except Exception:
-        return []
+    return _parse_classification_items(text_block.text) or []
+
+
+def _build_meeting_summary_prompt(
+    name: str,
+    score: int,
+    links: list[dict],
+    language_name: str,
+) -> tuple[str, str]:
+    """Shared meeting-summary prompt (Claude's rich version) for both providers.
+    Returns (system_prompt, user_prompt)."""
+    neg_links = [
+        l
+        for l in links
+        if l.get("sentiment") == "negative" or l.get("risk") in ("high", "medium")
+    ]
+    pos_links = [l for l in links if l.get("sentiment") == "positive"]
+    high_links = [l for l in links if l.get("risk") == "high"]
+    med_links = [l for l in links if l.get("risk") == "medium"]
+    neutral_links = [l for l in links if l.get("sentiment") == "neutral"]
+
+    score_breakdown = f"Score: {score}/100 | High-risk: {len(high_links)} | Medium-risk: {len(med_links)} | Positive: {len(pos_links)} | Neutral: {len(neutral_links)}"
+
+    neg_summary = (
+        "Negative/Risk findings:\n"
+        + "\n".join(
+            f"- [{(l.get('risk') or 'none').upper()}] \"{l.get('title', '')}\" — {l.get('source', '')}"
+            + (f" ({l['date']})" if l.get("date") else "")
+            + f"\n  {l.get('snippet', '')}"
+            for l in neg_links[:8]
+        )
+        if neg_links
+        else "No negative results found."
+    )
+
+    pos_summary = (
+        "Positive findings:\n"
+        + "\n".join(
+            f"- \"{l.get('title', '')}\" — {l.get('source', '')}"
+            + (f" ({l['date']})" if l.get("date") else "")
+            for l in pos_links[:4]
+        )
+        if pos_links
+        else "No positive results found."
+    )
+
+    user_prompt = (
+        f"Analyze the following publicly available web search findings about a prospective client and produce an internal sales brief.\n\n"
+        f'Subject: "{name}"\n{score_breakdown}\n\n{neg_summary}\n\n{pos_summary}\n\n'
+        f"Return ONLY a JSON object with these 5 fields (no markdown, no explanation):\n"
+        f'{{\n  "headline": "one sharp sentence summarising the reputational situation for the sales team",\n'
+        f'  "issues": ["5-8 specific key reputation points — cite article titles or sources where relevant"],\n'
+        f'  "talkingPoints": ["4-6 opening lines for the client meeting — reference their actual situation, not generic phrases"],\n'
+        f'  "riskIndicators": ["4-6 concrete risk flags drawn from the findings above — include source name and date where available"],\n'
+        f'  "objectionHandlers": ["4-5 sharp, specific rebuttals for when the prospect says they don\'t need reputation management — reference their actual findings"]\n'
+        f"}}\n\nWrite all output in {language_name}."
+    )
+    system_prompt = (
+        "You are an AI assistant embedded in a professional reputation intelligence platform used by "
+        "reputation management firms. Your task is to analyze publicly available web search results "
+        "about a prospective client and produce structured internal sales briefing notes. "
+        "The findings below are summaries of news articles and web sources retrieved from public search engines. "
+        "Respond only with the requested JSON object."
+    )
+    return system_prompt, user_prompt
 
 
 async def _generate_meeting_summary(
@@ -782,60 +852,7 @@ async def _generate_meeting_summary(
     model: str = "claude-haiku-4-5-20251001",
 ) -> dict:
     try:
-        neg_links = [
-            l
-            for l in links
-            if l.get("sentiment") == "negative" or l.get("risk") in ("high", "medium")
-        ]
-        pos_links = [l for l in links if l.get("sentiment") == "positive"]
-        high_links = [l for l in links if l.get("risk") == "high"]
-        med_links = [l for l in links if l.get("risk") == "medium"]
-        neutral_links = [l for l in links if l.get("sentiment") == "neutral"]
-
-        score_breakdown = f"Score: {score}/100 | High-risk: {len(high_links)} | Medium-risk: {len(med_links)} | Positive: {len(pos_links)} | Neutral: {len(neutral_links)}"
-
-        neg_summary = (
-            "Negative/Risk findings:\n"
-            + "\n".join(
-                f"- [{(l.get('risk') or 'none').upper()}] \"{l.get('title', '')}\" — {l.get('source', '')}"
-                + (f" ({l['date']})" if l.get("date") else "")
-                + f"\n  {l.get('snippet', '')}"
-                for l in neg_links[:8]
-            )
-            if neg_links
-            else "No negative results found."
-        )
-
-        pos_summary = (
-            "Positive findings:\n"
-            + "\n".join(
-                f"- \"{l.get('title', '')}\" — {l.get('source', '')}"
-                + (f" ({l['date']})" if l.get("date") else "")
-                for l in pos_links[:4]
-            )
-            if pos_links
-            else "No positive results found."
-        )
-
-        prompt = (
-            f"Analyze the following publicly available web search findings about a prospective client and produce an internal sales brief.\n\n"
-            f'Subject: "{name}"\n{score_breakdown}\n\n{neg_summary}\n\n{pos_summary}\n\n'
-            f"Return ONLY a JSON object with these 5 fields (no markdown, no explanation):\n"
-            f'{{\n  "headline": "one sharp sentence summarising the reputational situation for the sales team",\n'
-            f'  "issues": ["5-8 specific key reputation points — cite article titles or sources where relevant"],\n'
-            f'  "talkingPoints": ["4-6 opening lines for the client meeting — reference their actual situation, not generic phrases"],\n'
-            f'  "riskIndicators": ["4-6 concrete risk flags drawn from the findings above — include source name and date where available"],\n'
-            f'  "objectionHandlers": ["4-5 sharp, specific rebuttals for when the prospect says they don\'t need reputation management — reference their actual findings"]\n'
-            f"}}\n\nWrite all output in {language_name}."
-        )
-
-        system_prompt = (
-            "You are an AI assistant embedded in a professional reputation intelligence platform used by "
-            "reputation management firms. Your task is to analyze publicly available web search results "
-            "about a prospective client and produce structured internal sales briefing notes. "
-            "The findings below are summaries of news articles and web sources retrieved from public search engines. "
-            "Respond only with the requested JSON object."
-        )
+        system_prompt, prompt = _build_meeting_summary_prompt(name, score, links, language_name)
         for attempt in range(3):
             try:
                 response = await client.messages.create(
@@ -894,57 +911,9 @@ def _parse_json_array(text: str) -> list | None:
             return None
 
 
-def _build_openai_classification_prompt(
-    articles: list[dict],
-    name: str,
-    countries: list[str],
-    keywords: list[str],
-    subject_type: str,
-    language_name: str,
-    scan_focus: str | None,
-) -> str:
-    article_list = "\n\n---\n\n".join(
-        f"[{i+1}] URL: {a['url']}\nTitle: {a['title']}\nSnippet: {a['snippet']}\nContent: {a['content']}"
-        for i, a in enumerate(articles)
-    )
-    countries_label = ", ".join(countries)
-    keyword_list = ", ".join(keywords) if keywords else "general reputation"
-    country_line = ""
-    if countries:
-        country_line = (
-            f"The subject is a company from {countries_label}. Only include results clearly relevant to this company and these regions."
-            if subject_type == "company"
-            else f"The subject is from {countries_label}. Only include results clearly relevant to this person and these regions."
-        )
-
-    scan_focus_rules: dict[str, str] = {
-        "negative": "SCAN FOCUS: Return ONLY articles with NEGATIVE sentiment or HIGH/MEDIUM risk.",
-        "positive": "SCAN FOCUS: Return ONLY articles with POSITIVE sentiment.",
-        "neutral": "SCAN FOCUS: Return ONLY articles with NEUTRAL sentiment.",
-    }
-    scan_focus_rule = (
-        scan_focus_rules.get(scan_focus or "", "")
-        if scan_focus and scan_focus != "all"
-        else ""
-    )
-
-    return (
-        f'You are a reputation intelligence analyst. Classify {len(articles)} articles about "{name}".\n\n'
-        f"{country_line}\nSearch context keywords used: {keyword_list}\n{scan_focus_rule}\n\n"
-        "Classification rules:\n"
-        "- Negative: criminal investigations, lawsuits, fraud, accusations, controversy, scandals, accidents, or reputation-damaging incidents.\n"
-        "- Positive: awards, achievements, leadership appointments, promotions, or clearly positive media coverage.\n"
-        "- Neutral: purely informational profiles, directories, or content with no reputational concern.\n"
-        "- If in doubt between negative and neutral, choose negative.\n"
-        "- Risk high: crimes, fraud, lawsuits, investigations, illegal activity.\n"
-        "- Risk medium: accidents, controversies, allegations, complaints.\n"
-        "- Risk low: minor criticism or weak negative mentions.\n"
-        "- Risk none: positive or neutral content.\n\n"
-        f"ARTICLES TO CLASSIFY:\n{article_list}\n\n"
-        'Return a JSON object with an "items" array. Each item must include url, title, '
-        f"snippet, sentiment, risk, source, and type. Write snippets in {language_name}. "
-        "If no articles are valid, return an empty items array."
-    )
+class OpenAIIncompleteError(RuntimeError):
+    """Raised when an OpenAI classification response is incomplete or
+    unparseable, so the batch is failed loud instead of silently dropped."""
 
 
 async def _classify_with_openai(
@@ -956,84 +925,54 @@ async def _classify_with_openai(
     subject_type: str,
     language_name: str,
     scan_focus: str | None,
+    max_attempts: int = 3,
 ) -> list[dict]:
     if not articles:
         return []
 
-    response = await client.responses.create(
-        model=OPENAI_STANDARD_MODEL,
-        reasoning=OPENAI_STANDARD_REASONING,
-        max_output_tokens=64000,
-        input=_build_openai_classification_prompt(
-            articles,
-            name,
-            countries,
-            keywords,
-            subject_type,
-            language_name,
-            scan_focus,
-        ),
-    )
-    if getattr(response, "status", None) == "incomplete":
-        print(f"[classify] OpenAI response incomplete: {response.incomplete_details}")
-
-    text = _extract_openai_text(response)
-    parsed = _parse_json_object(text)
-    if parsed and isinstance(parsed.get("items"), list):
-        return parsed["items"]
-    return _parse_json_array(text) or []
-
-
-def _build_openai_meeting_summary_prompt(
-    name: str,
-    score: int,
-    links: list[dict],
-    language_name: str,
-) -> tuple[str, str]:
-    neg_links = [
-        l
-        for l in links
-        if l.get("sentiment") == "negative" or l.get("risk") in ("high", "medium")
-    ]
-    pos_links = [l for l in links if l.get("sentiment") == "positive"]
-    high_links = [l for l in links if l.get("risk") == "high"]
-    med_links = [l for l in links if l.get("risk") == "medium"]
-    neutral_links = [l for l in links if l.get("sentiment") == "neutral"]
-
-    score_breakdown = f"Score: {score}/100 | High-risk: {len(high_links)} | Medium-risk: {len(med_links)} | Positive: {len(pos_links)} | Neutral: {len(neutral_links)}"
-    neg_summary = (
-        "Negative/Risk findings:\n"
-        + "\n".join(
-            f"- [{(l.get('risk') or 'none').upper()}] \"{l.get('title', '')}\" - {l.get('source', '')}"
-            + (f" ({l['date']})" if l.get("date") else "")
-            + f"\n  {l.get('snippet', '')}"
-            for l in neg_links[:8]
-        )
-        if neg_links
-        else "No negative results found."
-    )
-    pos_summary = (
-        "Positive findings:\n"
-        + "\n".join(
-            f"- \"{l.get('title', '')}\" - {l.get('source', '')}"
-            + (f" ({l['date']})" if l.get("date") else "")
-            for l in pos_links[:4]
-        )
-        if pos_links
-        else "No positive results found."
+    prompt = _build_classification_prompt(
+        articles, name, countries, keywords, subject_type, language_name, scan_focus
     )
 
-    system_prompt = (
-        "You are an AI assistant embedded in a professional reputation intelligence platform used by "
-        "reputation management firms. Produce structured internal sales briefing notes as JSON."
+    last_error: Exception | None = None
+    for attempt in range(max_attempts):
+        try:
+            response = await client.responses.create(
+                model=OPENAI_STANDARD_MODEL,
+                reasoning=OPENAI_STANDARD_REASONING,
+                max_output_tokens=64000,
+                input=prompt,
+            )
+        except Exception as e:
+            # Retry only genuine transient API errors; non-transient errors and
+            # an exhausted retry budget fall through to the loud raise below.
+            if not is_transient_openai_error(e):
+                raise
+            last_error = e
+            if attempt < max_attempts - 1:
+                await asyncio.sleep(1.5 * (attempt + 1))
+                continue
+            break
+
+        # Token budget exhausted — retrying will not help. Fail loud so the
+        # whole batch is never silently dropped (C2).
+        if getattr(response, "status", None) == "incomplete":
+            details = getattr(response, "incomplete_details", None)
+            raise OpenAIIncompleteError(
+                f"OpenAI classification incomplete for {len(articles)} articles: {details}"
+            )
+
+        items = _parse_classification_items(extract_openai_text(response))
+        if items is None:
+            # Completed but no parseable JSON — do not silently drop the batch.
+            raise OpenAIIncompleteError(
+                f"OpenAI classification returned unparseable output for {len(articles)} articles"
+            )
+        return items
+
+    raise OpenAIIncompleteError(
+        f"OpenAI classification failed after {max_attempts} attempts: {last_error}"
     )
-    prompt = (
-        "Analyze the following publicly available web search findings about a prospective client.\n\n"
-        f'Subject: "{name}"\n{score_breakdown}\n\n{neg_summary}\n\n{pos_summary}\n\n'
-        "Return a JSON object with headline, issues, talkingPoints, riskIndicators, and objectionHandlers. "
-        f"Write all output in {language_name}."
-    )
-    return system_prompt, prompt
 
 
 async def _generate_meeting_summary_with_openai(
@@ -1042,25 +981,34 @@ async def _generate_meeting_summary_with_openai(
     score: int,
     links: list[dict],
     language_name: str,
+    max_attempts: int = 3,
 ) -> dict:
-    try:
-        system_prompt, prompt = _build_openai_meeting_summary_prompt(
-            name, score, links, language_name
-        )
-        response = await client.responses.create(
-            model=OPENAI_STANDARD_MODEL,
-            reasoning=OPENAI_STANDARD_REASONING,
-            max_output_tokens=16000,
-            instructions=system_prompt,
-            input=prompt,
-        )
-        if getattr(response, "status", None) == "incomplete":
-            print(f"[meeting-summary] OpenAI response incomplete: {response.incomplete_details}")
-        parsed = _parse_json_object(_extract_openai_text(response))
-        if parsed:
-            return parsed
-    except Exception as e:
-        print(f"[meeting-summary] OpenAI error: {e}")
+    system_prompt, prompt = _build_meeting_summary_prompt(name, score, links, language_name)
+    for attempt in range(max_attempts):
+        try:
+            response = await client.responses.create(
+                model=OPENAI_STANDARD_MODEL,
+                reasoning=OPENAI_STANDARD_REASONING,
+                max_output_tokens=16000,
+                instructions=system_prompt,
+                input=prompt,
+            )
+            # Token-budget incomplete won't improve on retry — fall back now.
+            if getattr(response, "status", None) == "incomplete":
+                print(f"[meeting-summary] OpenAI incomplete: {getattr(response, 'incomplete_details', None)}")
+                break
+            parsed = _parse_json_object(extract_openai_text(response))
+            if parsed:
+                return parsed
+            print(f"[meeting-summary] OpenAI no JSON (attempt {attempt + 1})")
+        except Exception as e:
+            # B1: retry only genuine transient API errors (Claude parity).
+            if not is_transient_openai_error(e):
+                print(f"[meeting-summary] OpenAI non-transient error: {e}")
+                break
+            print(f"[meeting-summary] OpenAI transient error (attempt {attempt + 1}): {e}")
+        if attempt < max_attempts - 1:
+            await asyncio.sleep(1.5 * (attempt + 1))
     return _fallback_summary(score)
 
 
@@ -1098,12 +1046,7 @@ async def _execute_generate_lead(
     if not countries or (body.useKeywords and not body.keywords):
         raise ValueError("Required fields missing")
 
-    use_openai = body.scanTier == "standard"
-    tier_model = (
-        "claude-sonnet-4-6"
-        if body.scanTier == "advanced"
-        else "claude-haiku-4-5-20251001"
-    )
+    use_openai, tier_model = resolve_provider(body.scanTier)
 
     search_subject = (
         (body.company or "").strip()
@@ -1681,7 +1624,9 @@ async def _run_job(job_id: uuid.UUID, body: GenerateLeadRequest) -> None:
         result = await _execute_generate_lead(body, settings, job_id=job_id)
         await _update_job_status(job_id, "done", result=result)
     except BaseException as e:
-        await _update_job_status(job_id, "failed", error=f"{type(e).__name__}: {e}")
+        # Full detail server-side only; clients get a sanitized message (S1.1).
+        print(f"[generate_lead] job {job_id} failed: {type(e).__name__}: {e}")
+        await _update_job_status(job_id, "failed", error=safe_error_message(e))
         raise
 
 

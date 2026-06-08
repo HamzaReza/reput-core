@@ -1,7 +1,6 @@
 import asyncio
 import json
 import re
-from types import SimpleNamespace
 from typing import Literal
 
 import anthropic
@@ -12,65 +11,15 @@ from pydantic import BaseModel
 from app.config import get_settings
 from app.models.lead import WebAnalyst
 from app.utils.auth import get_current_web_analyst
+from app.utils.llm import (
+    OPENAI_STANDARD_MODEL,
+    OPENAI_STANDARD_REASONING,
+    as_text_message,
+    create_llm_message,
+    resolve_provider,
+)
 
 router = APIRouter(prefix="/pre-analysis", tags=["pre-analysis"])
-
-OPENAI_STANDARD_MODEL = "gpt-5-mini"
-OPENAI_STANDARD_REASONING = {"effort": "high"}
-
-
-def _extract_openai_text(response) -> str:
-    output_text = getattr(response, "output_text", None)
-    if isinstance(output_text, str) and output_text.strip():
-        return output_text
-
-    chunks: list[str] = []
-    for item in getattr(response, "output", []) or []:
-        for block in getattr(item, "content", []) or []:
-            text = getattr(block, "text", None)
-            if isinstance(text, str):
-                chunks.append(text)
-    return "\n".join(chunks).strip()
-
-
-def _as_text_message(response):
-    return SimpleNamespace(
-        content=[SimpleNamespace(type="text", text=_extract_openai_text(response))],
-        stop_reason=getattr(response, "status", None),
-    )
-
-
-async def _create_llm_message(
-    client,
-    use_openai: bool,
-    model: str,
-    max_tokens: int,
-    system: str,
-    messages: list[dict],
-    tools: list[dict] | None = None,
-):
-    if not use_openai:
-        kwargs = {
-            "model": model,
-            "max_tokens": max_tokens,
-            "system": system,
-            "messages": messages,
-        }
-        if tools is not None:
-            kwargs["tools"] = tools
-        return await client.messages.create(**kwargs)
-
-    content = str(messages[0].get("content", "")) if messages else ""
-    return _as_text_message(
-        await client.responses.create(
-            model=OPENAI_STANDARD_MODEL,
-            reasoning=OPENAI_STANDARD_REASONING,
-            max_output_tokens=max_tokens,
-            instructions=system,
-            input=content,
-            tools=[{"type": "web_search"}] if tools else None,
-        )
-    )
 
 NATIONALITY_ALIASES: dict[str, str] = {
     "american": "US",
@@ -316,7 +265,7 @@ async def pre_analysis(
     _analyst: WebAnalyst = Depends(get_current_web_analyst),
 ) -> dict:
     settings = get_settings()
-    use_openai = body.scanTier == "standard"
+    use_openai, model = resolve_provider(body.scanTier)
     if use_openai:
         if not settings.openai_api_key:
             raise HTTPException(status_code=500, detail="OPENAI_API_KEY not configured")
@@ -340,11 +289,6 @@ async def pre_analysis(
             status_code=400, detail="company is required for company subjects."
         )
 
-    model = (
-        "claude-sonnet-4-6"
-        if body.scanTier == "advanced"
-        else "claude-haiku-4-5-20251001"
-    )
     # web_search_tool = "web_search_20250305" if body.scanTier == "standard" else "web_search_20260209"
     web_search_tool = "web_search_20250305"
 
@@ -525,6 +469,11 @@ async def pre_analysis(
         )
 
         if use_openai:
+            # NOTE: OpenAI's hosted web_search tool has no per-request usage cap
+            # (no `max_uses` equivalent — the SDK tool only exposes
+            # `search_context_size`/`filters`/`user_location`). Search volume is
+            # model-controlled, unlike the Claude branch below which caps at
+            # max_uses 12 (search) / 10 (neg). Parity gap is intentional/unavoidable.
             search_result, neg_result = await asyncio.gather(
                 client.responses.create(
                     model=OPENAI_STANDARD_MODEL,
@@ -537,7 +486,9 @@ async def pre_analysis(
                 client.responses.create(
                     model=OPENAI_STANDARD_MODEL,
                     reasoning=OPENAI_STANDARD_REASONING,
-                    max_output_tokens=8096,
+                    # C1: 8096 starved output once reasoning(effort=high) consumed
+                    # most of the budget — raised to 16000.
+                    max_output_tokens=16000,
                     instructions=neg_system,
                     input=neg_content,
                     tools=[{"type": "web_search"}],
@@ -545,9 +496,9 @@ async def pre_analysis(
                 return_exceptions=True,
             )
             if not isinstance(search_result, Exception):
-                search_result = _as_text_message(search_result)
+                search_result = as_text_message(search_result)
             if not isinstance(neg_result, Exception):
-                neg_result = _as_text_message(neg_result)
+                neg_result = as_text_message(neg_result)
         else:
             search_result, neg_result = await asyncio.gather(
                 client.messages.create(
@@ -675,7 +626,7 @@ async def pre_analysis(
             )
             keywords_shape = '  "keywords": ["<keyword1>", ...]\n}\n'
 
-        format_msg = await _create_llm_message(
+        format_msg = await create_llm_message(
             client,
             use_openai,
             model=model,
