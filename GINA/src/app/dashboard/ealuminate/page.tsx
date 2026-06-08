@@ -889,6 +889,14 @@ function EaluminatePageInner() {
           setError(pollData.error ?? "Scan failed. Please try again.");
           setIsResuming(false);
           setLoading(false);
+        } else if (pollData.status === "cancelled") {
+          clearInterval(pollIntervalRef.current!);
+          localStorage.removeItem(JOB_STORAGE_KEY);
+          stopCycles();
+          setCurrentStep(null);
+          setLoading(false);
+          setIsResuming(false);
+          setError("Scan was cancelled.");
         }
         // "pending" | "running" → keep polling
       } catch {
@@ -1763,6 +1771,25 @@ function EaluminatePageInner() {
     }
   };
 
+  const handleAbort = async () => {
+    if (!jobId) return;
+    clearInterval(pollIntervalRef.current!);
+    localStorage.removeItem(JOB_STORAGE_KEY);
+    stopCycles();
+    try {
+      await fetch(`${scanApiUrl}/generate-lead/${jobId}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${getToken()}` },
+      });
+    } catch { /* non-fatal */ }
+    setJobId(null);
+    setCurrentStep(null);
+    setLoading(false);
+    setIsResuming(false);
+    setScanDuration(null);
+    setError("Scan aborted.");
+  };
+
   const handleRunScan = async () => {
     if (useKeywords && !editableKeywords.length) {
       setError("Add at least one keyword.");
@@ -1835,6 +1862,8 @@ function EaluminatePageInner() {
           useKeywords,
           scanFocus: scanFocus !== "all" ? scanFocus : undefined,
           scanTier,
+          background: description.trim() || undefined,
+          preAnalysisProfile: preAnalysisProfile || undefined,
         }),
       });
       if (res.status === 401) {
@@ -2103,6 +2132,7 @@ function EaluminatePageInner() {
           scanDuration={scanDuration}
           currentStep={currentStep}
           jobId={jobId}
+          onAbort={handleAbort}
         />
         )}
       </div>
