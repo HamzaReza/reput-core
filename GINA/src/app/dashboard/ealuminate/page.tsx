@@ -652,6 +652,7 @@ function EaluminatePageInner() {
     "individual",
   );
   const [firstName, setFirstName] = useState("");
+  const [middleName, setMiddleName] = useState("");
   const [lastName, setLastName] = useState("");
   const [company, setCompany] = useState("");
   const [countries, setCountries] = useState<string[]>([]);
@@ -714,7 +715,7 @@ function EaluminatePageInner() {
   const persistContextRef = useRef({
     leadId,
     clientId,
-    fullName: `${firstName.trim()} ${lastName.trim()}`.trim(),
+    fullName: [firstName.trim(), middleName.trim(), lastName.trim()].filter(Boolean).join(" "),
     company,
     country: countries[0] ?? "",
     description,
@@ -901,6 +902,14 @@ function EaluminatePageInner() {
           setError(pollData.error ?? "Scan failed. Please try again.");
           setIsResuming(false);
           setLoading(false);
+        } else if (pollData.status === "cancelled") {
+          clearInterval(pollIntervalRef.current!);
+          localStorage.removeItem(JOB_STORAGE_KEY);
+          stopCycles();
+          setCurrentStep(null);
+          setLoading(false);
+          setIsResuming(false);
+          setError("Scan was cancelled.");
         }
         // "pending" | "running" → keep polling
       } catch {
@@ -925,7 +934,7 @@ function EaluminatePageInner() {
     persistContextRef.current = {
       leadId,
       clientId,
-      fullName: `${firstName.trim()} ${lastName.trim()}`.trim(),
+      fullName: [firstName.trim(), middleName.trim(), lastName.trim()].filter(Boolean).join(" "),
       company,
       country: countries[0] ?? "",
       description,
@@ -942,6 +951,7 @@ function EaluminatePageInner() {
     leadId,
     clientId,
     firstName,
+    middleName,
     lastName,
     company,
     countries,
@@ -1287,7 +1297,8 @@ function EaluminatePageInner() {
       .then(async (lead) => {
         const parts = (lead.name ?? "").trim().split(/\s+/);
         setFirstName(parts[0] ?? "");
-        setLastName(parts.slice(1).join(" "));
+        setMiddleName(lead.middle_name ?? "");
+        setLastName(parts.length > 1 ? parts[parts.length - 1] : "");
         setCompany(lead.company ?? "");
         if (lead.country) setCountries([lead.country]);
         setDescription(lead.background ?? "");
@@ -1499,7 +1510,7 @@ function EaluminatePageInner() {
     return () => scanLogAbort.abort();
   }, [searchParams]);
 
-  const fullName = `${firstName.trim()} ${lastName.trim()}`.trim();
+  const fullName = [firstName.trim(), middleName.trim(), lastName.trim()].filter(Boolean).join(" ");
 
   const country = countries[0] ?? "";
 
@@ -1683,6 +1694,8 @@ function EaluminatePageInner() {
         body: JSON.stringify({
           firstName:
             subjectType === "individual" ? firstName.trim() : undefined,
+          middleName:
+            subjectType === "individual" ? middleName.trim() || undefined : undefined,
           lastName: subjectType === "individual" ? lastName.trim() : undefined,
           company: company.trim() || undefined,
           countries,
@@ -1717,6 +1730,7 @@ function EaluminatePageInner() {
       try {
         const ld = await leads.create({
           name: fullName || undefined,
+          middle_name: middleName.trim() || undefined,
           company: company.trim() || undefined,
           country,
           background: description.trim(),
@@ -1764,6 +1778,25 @@ function EaluminatePageInner() {
     } finally {
       setPreAnalysisLoading(false);
     }
+  };
+
+  const handleAbort = async () => {
+    if (!jobId) return;
+    clearInterval(pollIntervalRef.current!);
+    localStorage.removeItem(JOB_STORAGE_KEY);
+    stopCycles();
+    try {
+      await fetch(`${scanApiUrl}/generate-lead/${jobId}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${getToken()}` },
+      });
+    } catch { /* non-fatal */ }
+    setJobId(null);
+    setCurrentStep(null);
+    setLoading(false);
+    setIsResuming(false);
+    setScanDuration(null);
+    setError("Scan aborted.");
   };
 
   const handleRunScan = async () => {
@@ -1826,6 +1859,8 @@ function EaluminatePageInner() {
         body: JSON.stringify({
           firstName:
             subjectType === "individual" ? firstName.trim() : undefined,
+          middleName:
+            subjectType === "individual" ? middleName.trim() || undefined : undefined,
           lastName: subjectType === "individual" ? lastName.trim() : undefined,
           company: company.trim() || undefined,
           countries,
@@ -1836,6 +1871,8 @@ function EaluminatePageInner() {
           useKeywords,
           scanFocus: scanFocus !== "all" ? scanFocus : undefined,
           scanTier,
+          background: description.trim() || undefined,
+          preAnalysisProfile: preAnalysisProfile || undefined,
         }),
       });
       if (res.status === 401) {
@@ -1983,12 +2020,15 @@ function EaluminatePageInner() {
             setSubjectType(t);
             if (t === "company") {
               setFirstName("");
+              setMiddleName("");
               setLastName("");
             }
             if (t === "individual") setCompany("");
           }}
           firstName={firstName}
           setFirstName={setFirstName}
+          middleName={middleName}
+          setMiddleName={setMiddleName}
           lastName={lastName}
           setLastName={setLastName}
           company={company}
@@ -2101,6 +2141,7 @@ function EaluminatePageInner() {
           scanDuration={scanDuration}
           currentStep={currentStep}
           jobId={jobId}
+          onAbort={handleAbort}
         />
         )}
       </div>

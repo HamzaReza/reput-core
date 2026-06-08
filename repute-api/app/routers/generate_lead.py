@@ -32,6 +32,7 @@ from app.utils.llm import (
 router = APIRouter(prefix="/generate-lead", tags=["generate-lead"])
 
 _background_tasks: set[asyncio.Task] = set()
+_job_tasks: dict[uuid.UUID, asyncio.Task] = {}
 
 _PDF_URL_PATTERN = re.compile(r"\.pdf(?:$|[?#/&])")
 
@@ -41,6 +42,29 @@ _GL_COUNTRY_MAP: dict[str, str] = {
         (pathlib.Path(__file__).parent / "google_countries.json").read_text()
     )
 }
+# Modern/ISO names that differ from the legacy names in google_countries.json
+_GL_COUNTRY_MAP.update({
+    "bolivia, plurinational state of": "bo",
+    "cabo verde": "cv",
+    "congo, democratic republic of the": "cd",
+    "côte d'ivoire": "ci",
+    "czechia": "cz",
+    "eswatini": "sz",
+    "holy see": "va",
+    "libya": "ly",
+    "netherlands, kingdom of the": "nl",
+    "north macedonia": "mk",
+    "palestine, state of": "ps",
+    "réunion": "re",
+    "saint helena, ascension and tristan da cunha": "sh",
+    "serbia": "rs",
+    "türkiye": "tr",
+    "united kingdom of great britain and northern ireland": "gb",
+    "united states of america": "us",
+    "venezuela, bolivarian republic of": "ve",
+    "virgin islands (british)": "vg",
+    "virgin islands (u.s.)": "vi",
+})
 
 # ── Lookup tables ────────────────────────────────────────────────────────────
 
@@ -680,9 +704,12 @@ def _build_classification_prompt(
     subject_type: str,
     language_name: str,
     scan_focus: str | None,
+    background: str | None = None,
+    pre_analysis_profile: dict | None = None,
 ) -> str:
     """Shared classification prompt for BOTH providers (Claude's rich content,
-    output as a {"items": [...]} object)."""
+    output as a {"items": [...]} object). Optional subject context + homonym
+    disambiguation from the pre-analysis profile / analyst background."""
     article_list = "\n\n---\n\n".join(
         f"[{i+1}] URL: {a['url']}\nTitle: {a['title']}\nSnippet: {a['snippet']}\nContent: {a['content']}"
         for i, a in enumerate(articles)
@@ -697,6 +724,40 @@ def _build_classification_prompt(
             else f"The subject is from {countries_label}. Only include results clearly relevant to this person and these regions."
         )
 
+    # Build subject context block from pre-analysis profile and/or analyst-provided background
+    _ctx_parts: list[str] = []
+    if pre_analysis_profile and isinstance(pre_analysis_profile, dict):
+        _identity = (pre_analysis_profile.get("identity") or "").strip()
+        _bg = (pre_analysis_profile.get("background") or "").strip()
+        _neg = (pre_analysis_profile.get("negative_findings") or "").strip()
+        if _identity:
+            _ctx_parts.append(f"Identity: {_identity}")
+        if _bg:
+            _ctx_parts.append(f"Background: {_bg}")
+        _neg_fallbacks = {
+            "no negative findings in available sources.",
+            "no negative findings in available sources",
+        }
+        if _neg and _neg.lower().rstrip(".") not in _neg_fallbacks:
+            _ctx_parts.append(f"Known negative findings: {_neg}")
+    if background:
+        _ctx_parts.append(f"Analyst context: {background.strip()}")
+
+    subject_context_block = (
+        "SUBJECT CONTEXT — use to verify article relevance and improve classification accuracy:\n"
+        + "\n".join(_ctx_parts)
+        + "\n\n"
+        if _ctx_parts
+        else ""
+    )
+    homonym_rule = (
+        "HOMONYM RULE: If an article is clearly about a different person who shares the same name "
+        "but has a completely different profession, country, or background from the subject context "
+        "above — omit that article from your output entirely.\n\n"
+        if _ctx_parts and subject_type != "company"
+        else ""
+    )
+
     scan_focus_rules: dict[str, str] = {
         "negative": "\nSCAN FOCUS: Return ONLY articles with NEGATIVE sentiment or HIGH/MEDIUM risk. Exclude all positive and neutral articles from the output entirely.\n",
         "positive": "\nSCAN FOCUS: Return ONLY articles with POSITIVE sentiment. Exclude all negative and neutral articles from the output entirely.\n",
@@ -710,7 +771,7 @@ def _build_classification_prompt(
 
     return (
         f'You are a reputation intelligence analyst. Classify the following {len(articles)} articles about "{name}".\n\n'
-        f"{country_line}\nSearch context keywords used: {keyword_list}\n{scan_focus_rule}\n"
+        f"{country_line}\n{subject_context_block}{homonym_rule}Search context keywords used: {keyword_list}\n{scan_focus_rule}\n"
         f"CLASSIFICATION RULES:\n\nNEGATIVE sentiment — classify if the article contains ANY of:\n"
         f"- Criminal investigations, police involvement, charges, arrests\n"
         f"- Lawsuits, legal disputes, court cases, regulatory sanctions\n"
@@ -755,12 +816,15 @@ async def _classify_with_claude(
     language_name: str,
     scan_focus: str | None,
     model: str = "claude-haiku-4-5-20251001",
+    background: str | None = None,
+    pre_analysis_profile: dict | None = None,
 ) -> list[dict]:
     if not articles:
         return []
 
     prompt = _build_classification_prompt(
-        articles, name, countries, keywords, subject_type, language_name, scan_focus
+        articles, name, countries, keywords, subject_type, language_name, scan_focus,
+        background=background, pre_analysis_profile=pre_analysis_profile,
     )
 
     async with client.messages.stream(
@@ -925,13 +989,16 @@ async def _classify_with_openai(
     subject_type: str,
     language_name: str,
     scan_focus: str | None,
+    background: str | None = None,
+    pre_analysis_profile: dict | None = None,
     max_attempts: int = 3,
 ) -> list[dict]:
     if not articles:
         return []
 
     prompt = _build_classification_prompt(
-        articles, name, countries, keywords, subject_type, language_name, scan_focus
+        articles, name, countries, keywords, subject_type, language_name, scan_focus,
+        background=background, pre_analysis_profile=pre_analysis_profile,
     )
 
     last_error: Exception | None = None
@@ -1019,6 +1086,7 @@ async def _generate_meeting_summary_with_openai(
 
 class GenerateLeadRequest(BaseModel):
     firstName: str | None = None
+    middleName: str | None = None
     lastName: str | None = None
     company: str | None = None
     country: str | None = None
@@ -1030,6 +1098,8 @@ class GenerateLeadRequest(BaseModel):
     useKeywords: bool = True
     scanFocus: str | None = None
     scanTier: Literal["basic", "standard", "advanced"] = "standard"
+    background: str | None = None
+    preAnalysisProfile: dict | None = None
 
 
 # ── Core logic (extracted so background runner can call it) ──────────────────
@@ -1051,7 +1121,11 @@ async def _execute_generate_lead(
     search_subject = (
         (body.company or "").strip()
         if body.subjectType == "company" and body.company
-        else f"{(body.firstName or '').strip()} {(body.lastName or '').strip()}".strip()
+        else " ".join(filter(None, [
+            (body.firstName or "").strip(),
+            (body.middleName or "").strip(),
+            (body.lastName or "").strip(),
+        ]))
     )
     sanitized_subject = search_subject[:200].replace("\r", " ").replace("\n", " ")
 
@@ -1085,10 +1159,16 @@ async def _execute_generate_lead(
             _middle = _sname_parts[1:-1]
             if all(len(p.rstrip(".")) == 1 for p in _middle):
                 _search_subject = f"{_sname_parts[0]} {_sname_parts[-1]}"
+        elif body.subjectType == "company":
+            _COMPANY_SUFFIXES = re.compile(
+                r",?\s*\b(LLC|Inc|Corp|Ltd|Co|LLP|LP|PLC|GmbH|S\.A\.?|S\.L\.?|BV|AG|NV)\.?\s*$",
+                re.IGNORECASE,
+            )
+            _search_subject = _COMPANY_SUFFIXES.sub("", _search_subject).strip()
         quoted_subject = (
             f'"{_search_subject}"'
             if body.subjectType != "company"
-            else sanitized_subject
+            else _search_subject
         )
         search_queries = [quoted_subject]
         if body.useKeywords:
@@ -1210,7 +1290,7 @@ async def _execute_generate_lead(
         if body.subjectType == "company":
             _company_words = [
                 w
-                for w in re.findall(r"[a-z0-9]+", _strip_diacritics(sanitized_subject))
+                for w in re.findall(r"[a-z0-9]+", _strip_diacritics(_search_subject))
                 if len(w) > 2
             ]
             if _company_words:
@@ -1343,16 +1423,23 @@ async def _execute_generate_lead(
         _nf_last = ""
         name_filter_dropped: list[dict] = []
         if body.subjectType != "company":
-            _nf_parts = sanitized_subject.split()
-            _nf_first = _nf_parts[0] if _nf_parts else ""
-            _nf_last = " ".join(
-                p for p in _nf_parts[1:] if not (len(p.rstrip(".")) == 1 and p.rstrip(".").isalpha())
-            )
-            if _nf_first and _nf_last:
+            _nf_first = (body.firstName or "").strip()
+            _middle = (body.middleName or "").strip()
+            _last_only = (body.lastName or "").strip()
+            _nf_last_full = f"{_middle} {_last_only}".strip() if _middle else _last_only
+            _nf_last = _nf_last_full
+            if _nf_first and _last_only:
                 before = len(articles)
                 kept = []
                 for a in articles:
-                    if _passes_name_filter(a, _nf_first, _nf_last):
+                    if _middle:
+                        passes = (
+                            _passes_name_filter(a, _nf_first, _nf_last_full)
+                            or _passes_name_filter(a, _nf_first, _last_only)
+                        )
+                    else:
+                        passes = _passes_name_filter(a, _nf_first, _last_only)
+                    if passes:
                         kept.append(a)
                     else:
                         name_filter_dropped.append(a)
@@ -1403,6 +1490,8 @@ async def _execute_generate_lead(
                     body.subjectType,
                     output_language_name,
                     body.scanFocus,
+                    background=body.background,
+                    pre_analysis_profile=body.preAnalysisProfile,
                 )
             return await _classify_with_claude(
                 client,
@@ -1414,6 +1503,8 @@ async def _execute_generate_lead(
                 output_language_name,
                 body.scanFocus,
                 tier_model,
+                background=body.background,
+                pre_analysis_profile=body.preAnalysisProfile,
             )
 
     batches = [
@@ -1623,6 +1714,8 @@ async def _run_job(job_id: uuid.UUID, body: GenerateLeadRequest) -> None:
         settings = get_settings()
         result = await _execute_generate_lead(body, settings, job_id=job_id)
         await _update_job_status(job_id, "done", result=result)
+    except asyncio.CancelledError:
+        raise  # DB already updated to "cancelled" by DELETE route
     except BaseException as e:
         # Full detail server-side only; clients get a sanitized message (S1.1).
         print(f"[generate_lead] job {job_id} failed: {type(e).__name__}: {e}")
@@ -1664,7 +1757,9 @@ async def generate_lead(
 
     task = asyncio.create_task(_run_job(job_id, body))
     _background_tasks.add(task)
+    _job_tasks[job_id] = task
     task.add_done_callback(_background_tasks.discard)
+    task.add_done_callback(lambda _: _job_tasks.pop(job_id, None))
     return {"job_id": str(job_id)}
 
 
@@ -1683,3 +1778,25 @@ async def get_generate_lead_job(
         "error": job.error,
         "current_step": job.current_step,
     }
+
+
+@router.delete("/{job_id}")
+async def cancel_generate_lead_job(
+    job_id: uuid.UUID,
+    analyst: WebAnalyst = Depends(get_current_web_analyst),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    job = await db.get(GenerateLeadJob, job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if job.created_by_id != analyst.id:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    if job.status in ("done", "failed", "cancelled"):
+        return {"status": job.status}
+    task = _job_tasks.get(job_id)
+    if task and not task.done():
+        task.cancel()
+    job.status = "cancelled"
+    job.completed_at = datetime.now(timezone.utc)
+    await db.commit()
+    return {"status": "cancelled"}

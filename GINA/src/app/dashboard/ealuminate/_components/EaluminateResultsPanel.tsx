@@ -2,7 +2,7 @@
 
 import type { WebLink } from "@/lib/api";
 import type { ComponentType } from "react";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import type { RiskLevel, ScanResult } from "./types";
 
 const BRIEF_SECTION_COLORS: Record<string, string> = {
@@ -161,6 +161,7 @@ interface EaluminateResultsPanelProps {
   scanDuration?: number | null;
   currentStep?: string | null;
   jobId?: string | null;
+  onAbort?: () => void;
 }
 
 function scoreDescription(score: number): string {
@@ -191,9 +192,16 @@ export function EaluminateResultsPanel({
   scanDuration,
   currentStep,
   jobId,
+  onAbort,
 }: EaluminateResultsPanelProps) {
   const [openBriefSection, setOpenBriefSection] = useState<string | null>(null);
+  const [aborting, setAborting] = useState(false);
   const [showAllKeywords, setShowAllKeywords] = useState(false);
+
+  useEffect(() => {
+    if (loading) setAborting(false);
+  }, [loading]);
+
   // Compute keyword hit counts from allLinks
   const keywordCounts: Record<string, number> = {};
   allLinks.forEach((link) => {
@@ -402,6 +410,7 @@ export function EaluminateResultsPanel({
                     display: "flex",
                     alignItems: "center",
                     gap: "0.5rem",
+                    width: "100%",
                   }}
                 >
                   <span
@@ -425,6 +434,28 @@ export function EaluminateResultsPanel({
                       animation: "eal-scan-pulse 1.4s ease-in-out infinite",
                     }}
                   />
+                  {onAbort && (
+                    <button
+                      onClick={() => {
+                        setAborting(true);
+                        onAbort();
+                      }}
+                      disabled={aborting}
+                      style={{
+                        marginLeft: "auto",
+                        padding: "0.3rem 0.75rem",
+                        fontSize: "0.75rem",
+                        fontWeight: 600,
+                        borderRadius: "0.5rem",
+                        border: "1px solid rgba(239,68,68,0.4)",
+                        background: "rgba(239,68,68,0.06)",
+                        color: aborting ? "#94a3b8" : "#ef4444",
+                        cursor: aborting ? "not-allowed" : "pointer",
+                      }}
+                    >
+                      {aborting ? "Aborting…" : "Abort Scan"}
+                    </button>
+                  )}
                 </div>
               </div>
 
@@ -548,7 +579,8 @@ export function EaluminateResultsPanel({
                             justifyContent: "center",
                             flex: "1 1 auto",
                             minWidth: "clamp(1.5rem, 3vw, 3rem)",
-                            paddingTop: "calc(clamp(52px, 8vw, 68px) / 2 - 6px)",
+                            paddingTop:
+                              "calc(clamp(52px, 8vw, 68px) / 2 - 6px)",
                           }}
                         >
                           <svg

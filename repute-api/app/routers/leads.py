@@ -17,6 +17,7 @@ router = APIRouter(prefix="/leads", tags=["leads"])
 
 class LeadCreate(BaseModel):
     name: str | None = None
+    middle_name: str | None = None
     company: str | None = None
     country: str | None = None
     countries: list[str] = []
@@ -52,6 +53,7 @@ async def create_lead(
     if existing is not None:
         existing.scanned_by_id = current_web_analyst.id
         existing.scanned_by_role = current_web_analyst.role
+        existing.middle_name = payload.middle_name
         existing.company = payload.company
         existing.background = payload.background
         existing.pre_analysis_summary = payload.pre_analysis_summary
@@ -70,6 +72,7 @@ async def create_lead(
         scanned_by_id=current_web_analyst.id,
         scanned_by_role=current_web_analyst.role,
         name=payload.name,
+        middle_name=payload.middle_name,
         company=payload.company,
         country=payload.country,
         countries=payload.countries,
@@ -152,6 +155,7 @@ async def get_lead(
     return {
         "id": str(lead.id),
         "name": lead.name,
+        "middle_name": lead.middle_name,
         "company": lead.company,
         "country": lead.country,
         "background": lead.background,
@@ -204,6 +208,7 @@ async def list_leads(
         {
             "id": str(lead.id),
             "name": lead.name,
+            "middle_name": lead.middle_name,
             "company": lead.company,
             "country": lead.country,
             "background": lead.background,

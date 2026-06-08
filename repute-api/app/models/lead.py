@@ -44,6 +44,7 @@ class LeadGenerated(Base):
     scanned_by_email: Mapped[str | None] = mapped_column(String(255), index=True)
     scanned_by_role: Mapped[str | None] = mapped_column(String(20), nullable=True)
     name: Mapped[str | None] = mapped_column(String(255))
+    middle_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     company: Mapped[str | None] = mapped_column(String(255))
     country: Mapped[str | None] = mapped_column(String(255))
     background: Mapped[str | None] = mapped_column(Text)
