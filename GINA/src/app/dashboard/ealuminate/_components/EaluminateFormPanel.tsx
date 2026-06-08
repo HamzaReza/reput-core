@@ -67,6 +67,8 @@ interface EaluminateFormPanelProps {
   setSubjectType: (value: "individual" | "company") => void;
   firstName: string;
   setFirstName: (value: string) => void;
+  middleName: string;
+  setMiddleName: (value: string) => void;
   lastName: string;
   setLastName: (value: string) => void;
   company: string;
@@ -229,6 +231,8 @@ export function EaluminateFormPanel(props: EaluminateFormPanelProps) {
     setSubjectType,
     firstName,
     setFirstName,
+    middleName,
+    setMiddleName,
     lastName,
     setLastName,
     company,
@@ -547,7 +551,7 @@ export function EaluminateFormPanel(props: EaluminateFormPanelProps) {
                     style={{
                       gridColumn: "span 2",
                       display: "grid",
-                      gridTemplateColumns: "1fr 1fr",
+                      gridTemplateColumns: "1fr 1fr 1fr",
                       gap: "1rem",
                       alignItems: "end",
                     }}
@@ -560,6 +564,16 @@ export function EaluminateFormPanel(props: EaluminateFormPanelProps) {
                         onChange={(e) => setFirstName(e.target.value)}
                         placeholder="e.g. John"
                         required
+                        style={inputStyle}
+                      />
+                    </div>
+                    <div>
+                      <label style={labelStyle}>Middle Name</label>
+                      <input
+                        type="text"
+                        value={middleName}
+                        onChange={(e) => setMiddleName(e.target.value)}
+                        placeholder="e.g. James"
                         style={inputStyle}
                       />
                     </div>

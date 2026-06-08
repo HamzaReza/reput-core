@@ -639,6 +639,7 @@ function EaluminatePageInner() {
     "individual",
   );
   const [firstName, setFirstName] = useState("");
+  const [middleName, setMiddleName] = useState("");
   const [lastName, setLastName] = useState("");
   const [company, setCompany] = useState("");
   const [countries, setCountries] = useState<string[]>([]);
@@ -701,7 +702,7 @@ function EaluminatePageInner() {
   const persistContextRef = useRef({
     leadId,
     clientId,
-    fullName: `${firstName.trim()} ${lastName.trim()}`.trim(),
+    fullName: [firstName.trim(), middleName.trim(), lastName.trim()].filter(Boolean).join(" "),
     company,
     country: countries[0] ?? "",
     description,
@@ -912,7 +913,7 @@ function EaluminatePageInner() {
     persistContextRef.current = {
       leadId,
       clientId,
-      fullName: `${firstName.trim()} ${lastName.trim()}`.trim(),
+      fullName: [firstName.trim(), middleName.trim(), lastName.trim()].filter(Boolean).join(" "),
       company,
       country: countries[0] ?? "",
       description,
@@ -929,6 +930,7 @@ function EaluminatePageInner() {
     leadId,
     clientId,
     firstName,
+    middleName,
     lastName,
     company,
     countries,
@@ -1274,7 +1276,8 @@ function EaluminatePageInner() {
       .then(async (lead) => {
         const parts = (lead.name ?? "").trim().split(/\s+/);
         setFirstName(parts[0] ?? "");
-        setLastName(parts.slice(1).join(" "));
+        setMiddleName(lead.middle_name ?? "");
+        setLastName(parts.length > 1 ? parts[parts.length - 1] : "");
         setCompany(lead.company ?? "");
         if (lead.country) setCountries([lead.country]);
         setDescription(lead.background ?? "");
@@ -1490,7 +1493,7 @@ function EaluminatePageInner() {
     return () => scanLogAbort.abort();
   }, [searchParams]);
 
-  const fullName = `${firstName.trim()} ${lastName.trim()}`.trim();
+  const fullName = [firstName.trim(), middleName.trim(), lastName.trim()].filter(Boolean).join(" ");
 
   const country = countries[0] ?? "";
 
@@ -1674,6 +1677,8 @@ function EaluminatePageInner() {
         body: JSON.stringify({
           firstName:
             subjectType === "individual" ? firstName.trim() : undefined,
+          middleName:
+            subjectType === "individual" ? middleName.trim() || undefined : undefined,
           lastName: subjectType === "individual" ? lastName.trim() : undefined,
           company: company.trim() || undefined,
           countries,
@@ -1708,6 +1713,7 @@ function EaluminatePageInner() {
       try {
         const ld = await leads.create({
           name: fullName || undefined,
+          middle_name: middleName.trim() || undefined,
           company: company.trim() || undefined,
           country,
           background: description.trim(),
@@ -1817,6 +1823,8 @@ function EaluminatePageInner() {
         body: JSON.stringify({
           firstName:
             subjectType === "individual" ? firstName.trim() : undefined,
+          middleName:
+            subjectType === "individual" ? middleName.trim() || undefined : undefined,
           lastName: subjectType === "individual" ? lastName.trim() : undefined,
           company: company.trim() || undefined,
           countries,
@@ -1974,12 +1982,15 @@ function EaluminatePageInner() {
             setSubjectType(t);
             if (t === "company") {
               setFirstName("");
+              setMiddleName("");
               setLastName("");
             }
             if (t === "individual") setCompany("");
           }}
           firstName={firstName}
           setFirstName={setFirstName}
+          middleName={middleName}
+          setMiddleName={setMiddleName}
           lastName={lastName}
           setLastName={setLastName}
           company={company}

@@ -32,6 +32,29 @@ _GL_COUNTRY_MAP: dict[str, str] = {
         (pathlib.Path(__file__).parent / "google_countries.json").read_text()
     )
 }
+# Modern/ISO names that differ from the legacy names in google_countries.json
+_GL_COUNTRY_MAP.update({
+    "bolivia, plurinational state of": "bo",
+    "cabo verde": "cv",
+    "congo, democratic republic of the": "cd",
+    "côte d'ivoire": "ci",
+    "czechia": "cz",
+    "eswatini": "sz",
+    "holy see": "va",
+    "libya": "ly",
+    "netherlands, kingdom of the": "nl",
+    "north macedonia": "mk",
+    "palestine, state of": "ps",
+    "réunion": "re",
+    "saint helena, ascension and tristan da cunha": "sh",
+    "serbia": "rs",
+    "türkiye": "tr",
+    "united kingdom of great britain and northern ireland": "gb",
+    "united states of america": "us",
+    "venezuela, bolivarian republic of": "ve",
+    "virgin islands (british)": "vg",
+    "virgin islands (u.s.)": "vi",
+})
 
 # ── Lookup tables ────────────────────────────────────────────────────────────
 
@@ -852,6 +875,7 @@ async def _generate_meeting_summary(
 
 class GenerateLeadRequest(BaseModel):
     firstName: str | None = None
+    middleName: str | None = None
     lastName: str | None = None
     company: str | None = None
     country: str | None = None
@@ -888,7 +912,11 @@ async def _execute_generate_lead(
     search_subject = (
         (body.company or "").strip()
         if body.subjectType == "company" and body.company
-        else f"{(body.firstName or '').strip()} {(body.lastName or '').strip()}".strip()
+        else " ".join(filter(None, [
+            (body.firstName or "").strip(),
+            (body.middleName or "").strip(),
+            (body.lastName or "").strip(),
+        ]))
     )
     sanitized_subject = search_subject[:200].replace("\r", " ").replace("\n", " ")
 
@@ -1176,16 +1204,23 @@ async def _execute_generate_lead(
         _nf_last = ""
         name_filter_dropped: list[dict] = []
         if body.subjectType != "company":
-            _nf_parts = sanitized_subject.split()
-            _nf_first = _nf_parts[0] if _nf_parts else ""
-            _nf_last = " ".join(
-                p for p in _nf_parts[1:] if not (len(p.rstrip(".")) == 1 and p.rstrip(".").isalpha())
-            )
-            if _nf_first and _nf_last:
+            _nf_first = (body.firstName or "").strip()
+            _middle = (body.middleName or "").strip()
+            _last_only = (body.lastName or "").strip()
+            _nf_last_full = f"{_middle} {_last_only}".strip() if _middle else _last_only
+            _nf_last = _nf_last_full
+            if _nf_first and _last_only:
                 before = len(articles)
                 kept = []
                 for a in articles:
-                    if _passes_name_filter(a, _nf_first, _nf_last):
+                    if _middle:
+                        passes = (
+                            _passes_name_filter(a, _nf_first, _nf_last_full)
+                            or _passes_name_filter(a, _nf_first, _last_only)
+                        )
+                    else:
+                        passes = _passes_name_filter(a, _nf_first, _last_only)
+                    if passes:
                         kept.append(a)
                     else:
                         name_filter_dropped.append(a)

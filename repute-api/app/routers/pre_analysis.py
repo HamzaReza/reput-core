@@ -237,6 +237,7 @@ def _country_code(country: str) -> str | None:
 
 class PreAnalysisRequest(BaseModel):
     firstName: str | None = None
+    middleName: str | None = None
     lastName: str | None = None
     company: str | None = None
     country: str | None = None
@@ -247,7 +248,9 @@ class PreAnalysisRequest(BaseModel):
     keywordLength: int | None = None  # 1, 2, or 3 words; None = no constraint
     subjectType: Literal["individual", "company"] = "individual"
     reportLanguage: str | None = None
-    keywordLanguages: list[str] | None = None  # ISO codes; keywords generated per language
+    keywordLanguages: list[str] | None = (
+        None  # ISO codes; keywords generated per language
+    )
     scanTier: Literal["standard", "advanced"] = "standard"
 
 
@@ -325,18 +328,15 @@ async def pre_analysis(
     )
     if body.keywordLength == 1:
         word_count_instruction = (
-            "each keyword should be 1 word where possible."
-            + no_underscore_instruction
+            "each keyword should be 1 word where possible." + no_underscore_instruction
         )
     elif body.keywordLength == 2:
         word_count_instruction = (
-            "each keyword should be 2 words where possible."
-            + no_underscore_instruction
+            "each keyword should be 2 words where possible." + no_underscore_instruction
         )
     elif body.keywordLength == 3:
         word_count_instruction = (
-            "each keyword should be 3 words where possible."
-            + no_underscore_instruction
+            "each keyword should be 3 words where possible." + no_underscore_instruction
         )
     else:
         word_count_instruction = "1-3 words each." + no_underscore_instruction
@@ -634,6 +634,7 @@ async def pre_analysis(
                 parsed = json.loads(json_match.group())
                 profile = parsed.get("profile", profile)
                 raw_kw = parsed.get("keywords", [])
+
                 def _clean_kw(k: object) -> str:
                     # Models sometimes snake_case multi-word terms to satisfy
                     # word-count constraints — normalise back to spaces.
@@ -656,8 +657,7 @@ async def pre_analysis(
                 elif isinstance(raw_kw, list):
                     # single-language request, or the model ignored grouping
                     keywords = [
-                        _clean_kw(k)
-                        for k in raw_kw[: cap * max(1, len(kw_lang_names))]
+                        _clean_kw(k) for k in raw_kw[: cap * max(1, len(kw_lang_names))]
                     ]
                 else:
                     keywords = []

@@ -790,6 +790,7 @@ export async function POST(req: NextRequest) {
 
   const {
     firstName,
+    middleName,
     lastName,
     company,
     country: countrySingle,
@@ -803,6 +804,7 @@ export async function POST(req: NextRequest) {
     scanTier = "standard",
   } = (await req.json()) as {
     firstName?: string;
+    middleName?: string;
     lastName?: string;
     company?: string;
     country?: string;
@@ -836,7 +838,7 @@ export async function POST(req: NextRequest) {
   const searchSubject =
     subjectType === "company" && company
       ? company.trim()
-      : `${(firstName ?? "").trim()} ${(lastName ?? "").trim()}`.trim();
+      : [firstName, middleName, lastName].map((s) => (s ?? "").trim()).filter(Boolean).join(" ");
   const sanitizedSubject = searchSubject.slice(0, 200).replace(/[\r\n]/g, " ");
 
   const client = new Anthropic({ apiKey });
