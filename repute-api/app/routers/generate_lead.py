@@ -372,6 +372,30 @@ def _strip_diacritics(s: str) -> str:
     )
 
 
+def _normalize_name_tokens(s: str) -> list[str]:
+    return re.findall(r"[a-z0-9]+", _strip_diacritics(s))
+
+
+def _has_token_sequence(tokens: list[str], sequence: list[str]) -> bool:
+    if not tokens or not sequence or len(sequence) > len(tokens):
+        return False
+    return any(
+        tokens[i : i + len(sequence)] == sequence
+        for i in range(len(tokens) - len(sequence) + 1)
+    )
+
+
+def _token_matches_name_part(token: str, expected_parts: list[str]) -> bool:
+    for part in expected_parts:
+        if token == part:
+            return True
+        if len(token) == 1 and part.startswith(token):
+            return True
+        if len(part) == 1 and token.startswith(part):
+            return True
+    return False
+
+
 _NAME_PARTICLES = {
     "the",
     "and",
@@ -393,7 +417,26 @@ _NAME_PARTICLES = {
 }
 
 
-def _passes_name_filter(article: dict, first_name: str, last_name: str) -> bool:
+def _build_name_filter_parts(
+    body, fallback_subject: str | None = None
+) -> tuple[str, str]:
+    if getattr(body, "subjectType", "individual") == "company":
+        return "", ""
+
+    first = (getattr(body, "firstName", "") or "").strip()
+    last = (getattr(body, "lastName", "") or "").strip()
+    if first and last:
+        return first, last
+
+    fallback = (fallback_subject or "").strip()
+    parts = fallback.split()
+    if len(parts) > 1:
+        return parts[0], " ".join(parts[1:])
+
+    return "", ""
+
+
+def _passes_name_filter_legacy(article: dict, first_name: str, last_name: str) -> bool:
     raw = " ".join(
         [
             article.get("title", ""),
@@ -430,6 +473,45 @@ def _passes_name_filter(article: dict, first_name: str, last_name: str) -> bool:
         if found in _NAME_PARTICLES:
             continue
         if found != first and found not in first and first not in found:
+            return False
+
+    return True
+
+
+def _passes_name_filter(article: dict, first_name: str, last_name: str) -> bool:
+    raw = " ".join(
+        [
+            article.get("title", ""),
+            article.get("snippet", ""),
+            article.get("content", ""),
+        ]
+    )
+    text_tokens = _normalize_name_tokens(raw)
+    first_tokens = _normalize_name_tokens(first_name)
+    last_tokens = _normalize_name_tokens(last_name)
+    if not text_tokens or not first_tokens or not last_tokens:
+        return True
+
+    full_name_tokens = first_tokens + last_tokens
+    if _has_token_sequence(text_tokens, full_name_tokens):
+        return True
+
+    surname_first_tokens = [last_tokens[-1], *first_tokens, *last_tokens[:-1]]
+    if _has_token_sequence(text_tokens, surname_first_tokens):
+        return True
+
+    headline_tokens = _normalize_name_tokens(
+        " ".join([article.get("title", ""), article.get("snippet", "")])
+    )
+    last_word = last_tokens[-1]
+    expected_leading_parts = first_tokens + last_tokens[:-1]
+    for idx, token in enumerate(headline_tokens):
+        if token != last_word or idx == 0:
+            continue
+        found = headline_tokens[idx - 1]
+        if len(found) <= 2 or found in _NAME_PARTICLES:
+            continue
+        if not _token_matches_name_part(found, expected_leading_parts):
             return False
 
     return True
@@ -1089,11 +1171,7 @@ async def _execute_generate_lead(
         _nf_last = ""
         name_filter_dropped: list[dict] = []
         if body.subjectType != "company":
-            _nf_parts = sanitized_subject.split()
-            _nf_first = _nf_parts[0] if _nf_parts else ""
-            _nf_last = " ".join(
-                p for p in _nf_parts[1:] if not (len(p.rstrip(".")) == 1 and p.rstrip(".").isalpha())
-            )
+            _nf_first, _nf_last = _build_name_filter_parts(body, sanitized_subject)
             if _nf_first and _nf_last:
                 before = len(articles)
                 kept = []
