@@ -5,18 +5,14 @@ from typing import Literal
 
 import anthropic
 from fastapi import APIRouter, Depends, HTTPException
-from openai import AsyncOpenAI
 from pydantic import BaseModel
 
 from app.config import get_settings
 from app.models.lead import WebAnalyst
 from app.utils.auth import get_current_web_analyst
 from app.utils.llm import (
-    OPENAI_STANDARD_MODEL,
-    OPENAI_STANDARD_REASONING,
-    as_text_message,
-    create_llm_message,
-    resolve_provider,
+    resolve_pre_analysis_provider,
+    summarize_usage,
 )
 
 router = APIRouter(prefix="/pre-analysis", tags=["pre-analysis"])
@@ -266,11 +262,9 @@ async def pre_analysis(
     _analyst: WebAnalyst = Depends(get_current_web_analyst),
 ) -> dict:
     settings = get_settings()
-    use_openai, model = resolve_provider(body.scanTier)
-    if use_openai:
-        if not settings.openai_api_key:
-            raise HTTPException(status_code=500, detail="OPENAI_API_KEY not configured")
-    elif not settings.anthropic_api_key:
+    # Pre-analysis runs on Claude only: basic + standard → Haiku, advanced → Sonnet.
+    model = resolve_pre_analysis_provider(body.scanTier)
+    if not settings.anthropic_api_key:
         raise HTTPException(status_code=500, detail="ANTHROPIC_API_KEY not configured")
 
     countries: list[str] = (
@@ -467,11 +461,7 @@ async def pre_analysis(
     )
 
     # ── Parallel execution: research summary + negative estimation ────────────
-    client = (
-        AsyncOpenAI(api_key=settings.openai_api_key)
-        if use_openai
-        else anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
-    )
+    client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
     profile = dict(FALLBACK_PROFILE)
     keywords: list[str] = []
     neg_links: dict | None = None
@@ -481,55 +471,25 @@ async def pre_analysis(
             f"[pre-analysis] starting parallel calls for: {subject_label!r} | countries={countries}"
         )
 
-        if use_openai:
-            # NOTE: OpenAI's hosted web_search tool has no per-request usage cap
-            # (no `max_uses` equivalent — the SDK tool only exposes
-            # `search_context_size`/`filters`/`user_location`). Search volume is
-            # model-controlled, unlike the Claude branch below which caps at
-            # max_uses 12 (search) / 10 (neg). Parity gap is intentional/unavoidable.
-            search_result, neg_result = await asyncio.gather(
-                client.responses.create(
-                    model=OPENAI_STANDARD_MODEL,
-                    reasoning=OPENAI_STANDARD_REASONING,
-                    max_output_tokens=16000,
-                    instructions=search_system,
-                    input=search_content,
-                    tools=[{"type": "web_search"}],
-                ),
-                client.responses.create(
-                    model=OPENAI_STANDARD_MODEL,
-                    reasoning=OPENAI_STANDARD_REASONING,
-                    # C1: 8096 starved output once reasoning(effort=high) consumed
-                    # most of the budget — raised to 16000.
-                    max_output_tokens=16000,
-                    instructions=neg_system,
-                    input=neg_content,
-                    tools=[{"type": "web_search"}],
-                ),
-                return_exceptions=True,
-            )
-            if not isinstance(search_result, Exception):
-                search_result = as_text_message(search_result)
-            if not isinstance(neg_result, Exception):
-                neg_result = as_text_message(neg_result)
-        else:
-            search_result, neg_result = await asyncio.gather(
-                client.messages.create(
-                    model=model,
-                    max_tokens=16000,
-                    system=search_system,
-                    tools=[{"type": web_search_tool, "name": "web_search", "max_uses": 12}],  # type: ignore[list-item]
-                    messages=[{"role": "user", "content": search_content}],
-                ),
-                client.messages.create(
-                    model=model,
-                    max_tokens=8096,
-                    system=neg_system,
-                    tools=[{"type": web_search_tool, "name": "web_search", "max_uses": 10}],  # type: ignore[list-item]
-                    messages=[{"role": "user", "content": neg_content}],
-                ),
-                return_exceptions=True,
-            )
+        # Claude web_search caps at max_uses 12 (search) / 10 (neg) to bound the
+        # web_search_tool_result tokens pulled into context.
+        search_result, neg_result = await asyncio.gather(
+            client.messages.create(
+                model=model,
+                max_tokens=16000,
+                system=search_system,
+                tools=[{"type": web_search_tool, "name": "web_search", "max_uses": 12}],  # type: ignore[list-item]
+                messages=[{"role": "user", "content": search_content}],
+            ),
+            client.messages.create(
+                model=model,
+                max_tokens=8096,
+                system=neg_system,
+                tools=[{"type": web_search_tool, "name": "web_search", "max_uses": 10}],  # type: ignore[list-item]
+                messages=[{"role": "user", "content": neg_content}],
+            ),
+            return_exceptions=True,
+        )
 
         # ── Handle search result ──────────────────────────────────────────────
         if isinstance(search_result, Exception):
@@ -546,6 +506,8 @@ async def pre_analysis(
                 )
             else:
                 print(f"[pre-analysis] non-text block[{i}]: type={block.type!r}")
+
+        print(f"[pre-analysis] search usage — {summarize_usage(getattr(search_msg, 'usage', None))}")
 
         research_summary = "\n".join(
             block.text for block in search_msg.content if block.type == "text"
@@ -576,6 +538,7 @@ async def pre_analysis(
             print(
                 f"[pre-analysis] neg estimation done — stop_reason={neg_msg.stop_reason!r}"
             )
+            print(f"[pre-analysis] neg usage — {summarize_usage(getattr(neg_msg, 'usage', None))}")
             neg_text = "\n".join(
                 block.text for block in neg_msg.content if block.type == "text"
             ).strip()
@@ -639,9 +602,7 @@ async def pre_analysis(
             )
             keywords_shape = '  "keywords": ["<keyword1>", ...]\n}\n'
 
-        format_msg = await create_llm_message(
-            client,
-            use_openai,
+        format_msg = await client.messages.create(
             model=model,
             max_tokens=16000,
             system=(
@@ -670,6 +631,8 @@ async def pre_analysis(
                 }
             ],
         )
+
+        print(f"[pre-analysis] format usage — {summarize_usage(getattr(format_msg, 'usage', None))}")
 
         text_block = next((b for b in format_msg.content if b.type == "text"), None)
         if text_block:

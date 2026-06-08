@@ -9,13 +9,9 @@ from __future__ import annotations
 
 import re as _re
 from types import SimpleNamespace
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import openai
-
-if TYPE_CHECKING:  # pragma: no cover - typing only
-    from openai import AsyncOpenAI
-    import anthropic
 
 # ── Standard-tier (OpenAI) configuration ──────────────────────────────────────
 OPENAI_STANDARD_MODEL = "gpt-5-mini"
@@ -55,6 +51,17 @@ def resolve_provider(scan_tier: str) -> tuple[bool, str]:
     return use_openai, model
 
 
+def resolve_pre_analysis_provider(scan_tier: str) -> str:
+    """Claude model for the PRE-ANALYSIS endpoint (Claude-only — never OpenAI).
+
+    advanced → Sonnet; basic / standard / anything else → Haiku. Pre-analysis
+    intentionally diverges from resolve_provider (which sends standard → OpenAI
+    for lead generation): decision 2026-06-08 — Haiku-only for pre-analysis on
+    basic + standard, chosen for ~2x faster turnaround vs gpt-5-mini.
+    """
+    return _CLAUDE_ADVANCED_MODEL if scan_tier == "advanced" else _CLAUDE_DEFAULT_MODEL
+
+
 def extract_openai_text(response: Any) -> str:
     """Pull text out of an OpenAI Responses API result, tolerating reasoning
     items that carry no text/content."""
@@ -82,47 +89,18 @@ def as_text_message(response: Any) -> SimpleNamespace:
     return SimpleNamespace(
         content=[SimpleNamespace(type="text", text=extract_openai_text(response))],
         stop_reason=getattr(response, "status", None),
+        usage=getattr(response, "usage", None),
     )
 
 
-async def create_llm_message(
-    client: "AsyncOpenAI | anthropic.AsyncAnthropic",
-    use_openai: bool,
-    model: str,
-    max_tokens: int,
-    system: str,
-    messages: list[dict],
-    tools: list[dict] | None = None,
-) -> Any:
-    """Provider-agnostic single-message call used by pre_analysis.
-
-    WARNING: the OpenAI branch only forwards ``messages[0]``; multi-turn
-    histories are not supported on the OpenAI path.
-    """
-    if not use_openai:
-        kwargs: dict[str, Any] = {
-            "model": model,
-            "max_tokens": max_tokens,
-            "system": system,
-            "messages": messages,
-        }
-        if tools is not None:
-            kwargs["tools"] = tools
-        return await client.messages.create(**kwargs)
-
-    content = str(messages[0].get("content", "")) if messages else ""
-    return as_text_message(
-        await client.responses.create(
-            model=OPENAI_STANDARD_MODEL,
-            reasoning=OPENAI_STANDARD_REASONING,
-            max_output_tokens=max_tokens,
-            instructions=system,
-            input=content,
-            # NOTE: OpenAI's hosted web_search tool has no per-request usage cap
-            # (no `max_uses` equivalent — only `search_context_size`/`filters`).
-            tools=[{"type": "web_search"}] if tools else None,
-        )
-    )
+def summarize_usage(usage: Any) -> str:
+    """Compact token-count line for one LLM call (in / out / total)."""
+    if usage is None:
+        return "tokens=unavailable"
+    in_tok = int(getattr(usage, "input_tokens", 0) or 0)
+    out_tok = int(getattr(usage, "output_tokens", 0) or 0)
+    total = int(getattr(usage, "total_tokens", 0) or 0) or (in_tok + out_tok)
+    return f"in={in_tok} out={out_tok} total={total}"
 
 
 def is_transient_openai_error(error: BaseException) -> bool:
