@@ -396,6 +396,30 @@ def _strip_diacritics(s: str) -> str:
     )
 
 
+def _normalize_name_tokens(s: str) -> list[str]:
+    return re.findall(r"[a-z0-9]+", _strip_diacritics(s))
+
+
+def _has_token_sequence(tokens: list[str], sequence: list[str]) -> bool:
+    if not tokens or not sequence or len(sequence) > len(tokens):
+        return False
+    return any(
+        tokens[i : i + len(sequence)] == sequence
+        for i in range(len(tokens) - len(sequence) + 1)
+    )
+
+
+def _token_matches_name_part(token: str, expected_parts: list[str]) -> bool:
+    for part in expected_parts:
+        if token == part:
+            return True
+        if len(token) == 1 and part.startswith(token):
+            return True
+        if len(part) == 1 and token.startswith(part):
+            return True
+    return False
+
+
 _NAME_PARTICLES = {
     "the",
     "and",
@@ -417,7 +441,7 @@ _NAME_PARTICLES = {
 }
 
 
-def _passes_name_filter(article: dict, first_name: str, last_name: str) -> bool:
+def _passes_name_filter_legacy(article: dict, first_name: str, last_name: str) -> bool:
     raw = " ".join(
         [
             article.get("title", ""),
@@ -454,6 +478,51 @@ def _passes_name_filter(article: dict, first_name: str, last_name: str) -> bool:
         if found in _NAME_PARTICLES:
             continue
         if found != first and found not in first and first not in found:
+            return False
+
+    return True
+
+
+def _passes_name_filter(article: dict, first_name: str, last_name: str) -> bool:
+    raw = " ".join(
+        [
+            article.get("title", ""),
+            article.get("snippet", ""),
+            article.get("content", ""),
+        ]
+    )
+    text_tokens = _normalize_name_tokens(raw)
+    first_tokens = _normalize_name_tokens(first_name)
+    last_tokens = _normalize_name_tokens(last_name)
+    if not text_tokens or not first_tokens or not last_tokens:
+        return True
+
+    full_name_tokens = first_tokens + last_tokens
+    if _has_token_sequence(text_tokens, full_name_tokens):
+        return True
+
+    surname_first_tokens = [last_tokens[-1], *first_tokens, *last_tokens[:-1]]
+    if _has_token_sequence(text_tokens, surname_first_tokens):
+        return True
+
+    headline_tokens = _normalize_name_tokens(
+        " ".join([article.get("title", ""), article.get("snippet", "")])
+    )
+    last_word = last_tokens[-1]
+    expected_leading_parts = first_tokens + last_tokens[:-1]
+    # Recall guard: drop on a surname-adjacency mismatch only when none of the
+    # subject's given names (first + middle) appear anywhere — otherwise it's
+    # plausibly them (e.g. a middle name the query omitted), so keep.
+    subject_given_present = bool(set(expected_leading_parts) & set(text_tokens))
+    for idx, token in enumerate(headline_tokens):
+        if token != last_word or idx == 0:
+            continue
+        found = headline_tokens[idx - 1]
+        if len(found) <= 2 or found in _NAME_PARTICLES:
+            continue
+        if not _token_matches_name_part(found, expected_leading_parts):
+            if subject_given_present:
+                continue
             return False
 
     return True
@@ -1252,6 +1321,14 @@ async def _execute_generate_lead(
             _nf_first = (body.firstName or "").strip()
             _middle = (body.middleName or "").strip()
             _last_only = (body.lastName or "").strip()
+            # Fallback: derive names from the subject string when the structured
+            # firstName/lastName fields are not provided by the caller.
+            if not (_nf_first and _last_only):
+                _parts = sanitized_subject.split()
+                if len(_parts) > 1:
+                    _nf_first = _parts[0]
+                    _last_only = " ".join(_parts[1:])
+                    _middle = ""
             _nf_last_full = f"{_middle} {_last_only}".strip() if _middle else _last_only
             _nf_last = _nf_last_full
             if _nf_first and _last_only:
