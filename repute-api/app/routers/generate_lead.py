@@ -885,6 +885,148 @@ async def _classify_with_claude(
         return []
 
 
+async def _classify_unscraped_with_claude(
+    client: anthropic.AsyncAnthropic,
+    articles: list[dict],
+    name: str,
+    countries: list[str],
+    keywords: list[str],
+    subject_type: str,
+    language_name: str,
+    scan_focus: str | None,
+    model: str = "claude-haiku-4-5-20251001",
+    background: str | None = None,
+    pre_analysis_profile: dict | None = None,
+) -> list[dict]:
+    """Classify articles whose full content could not be scraped (snippet only).
+
+    Uses a conservative prompt: no negative-bias default, requires an explicit
+    reputational signal in the title/snippet, excludes generic social media pages.
+    """
+    if not articles:
+        return []
+
+    article_list = "\n\n---\n\n".join(
+        f"[{i+1}] URL: {a['url']}\nTitle: {a['title']}\nSnippet: {a['snippet']}"
+        for i, a in enumerate(articles)
+    )
+
+    countries_label = ", ".join(countries)
+    keyword_list = ", ".join(keywords) if keywords else "general reputation"
+
+    country_line = ""
+    if countries:
+        country_line = (
+            f"The subject is a company from {countries_label}. Only include results clearly relevant to this company and these regions."
+            if subject_type == "company"
+            else f"The subject is from {countries_label}. Only include results clearly relevant to this person and these regions."
+        )
+
+    _ctx_parts: list[str] = []
+    if pre_analysis_profile and isinstance(pre_analysis_profile, dict):
+        _identity = (pre_analysis_profile.get("identity") or "").strip()
+        _bg = (pre_analysis_profile.get("background") or "").strip()
+        _neg = (pre_analysis_profile.get("negative_findings") or "").strip()
+        if _identity:
+            _ctx_parts.append(f"Identity: {_identity}")
+        if _bg:
+            _ctx_parts.append(f"Background: {_bg}")
+        _neg_fallbacks = {
+            "no negative findings in available sources.",
+            "no negative findings in available sources",
+        }
+        if _neg and _neg.lower().rstrip(".") not in _neg_fallbacks:
+            _ctx_parts.append(f"Known negative findings: {_neg}")
+    if background:
+        _ctx_parts.append(f"Analyst context: {background.strip()}")
+
+    subject_context_block = (
+        "SUBJECT CONTEXT — use to verify article relevance and improve classification accuracy:\n"
+        + "\n".join(_ctx_parts)
+        + "\n\n"
+        if _ctx_parts
+        else ""
+    )
+    homonym_rule = (
+        "HOMONYM RULE: If an article is clearly about a different person who shares the same name "
+        "but has a completely different profession, country, or background from the subject context "
+        "above — omit that article from your output entirely.\n\n"
+        if _ctx_parts and subject_type != "company"
+        else ""
+    )
+
+    scan_focus_rules: dict[str, str] = {
+        "negative": "\nSCAN FOCUS: Return ONLY articles with NEGATIVE sentiment or HIGH/MEDIUM risk. Exclude all positive and neutral articles from the output entirely.\n",
+        "positive": "\nSCAN FOCUS: Return ONLY articles with POSITIVE sentiment. Exclude all negative and neutral articles from the output entirely.\n",
+        "neutral": "\nSCAN FOCUS: Return ONLY articles with NEUTRAL sentiment (purely informational). Exclude all negative and positive articles from the output entirely.\n",
+    }
+    scan_focus_rule = (
+        scan_focus_rules.get(scan_focus or "", "")
+        if scan_focus and scan_focus != "all"
+        else ""
+    )
+
+    prompt = (
+        f'You are a reputation intelligence analyst. Classify the following {len(articles)} articles about "{name}".\n\n'
+        f"{country_line}\n{subject_context_block}{homonym_rule}Search context keywords used: {keyword_list}\n{scan_focus_rule}\n"
+        f"IMPORTANT: These articles could NOT be scraped — only the short Google title and snippet are available. "
+        f"Do NOT infer, assume, or fabricate any content beyond what is explicitly shown.\n\n"
+        f"CLASSIFICATION RULES:\n\n"
+        f"NEGATIVE sentiment — only if the title or snippet CLEARLY indicates:\n"
+        f"- Criminal investigations, police involvement, charges, arrests\n"
+        f"- Lawsuits, legal disputes, court cases, regulatory sanctions\n"
+        f"- Fraud, scams, financial misconduct\n"
+        f"- Accusations, allegations, or suspicion of wrongdoing\n"
+        f"- Controversies, scandals, or reputation-damaging incidents\n\n"
+        f"POSITIVE sentiment — only if the title or snippet CLEARLY shows:\n"
+        f"- Awards, honors, recognitions\n"
+        f"- Major achievements or business/professional success\n"
+        f"- Leadership appointments or promotions\n\n"
+        f"NEUTRAL sentiment — only if:\n"
+        f"- Purely informational (Wikipedia entry, directory listing, company profile)\n"
+        f"- ZERO reputational concern whatsoever\n\n"
+        f'RISK CLASSIFICATION:\n- "high": crimes, fraud, lawsuits, investigations, illegal activity\n'
+        f'- "medium": accidents, controversies, allegations, complaints\n'
+        f'- "low": minor criticism or weak negative mentions\n'
+        f'- "none": positive or neutral content\n\n'
+        f"STRICT RULES — apply to every article in this batch:\n"
+        f"- Only classify if the title or snippet contains a CLEAR, EXPLICIT reputational signal\n"
+        f'- Generic social media pages (e.g. "John Smith | Facebook"), profile bios,\n'
+        f"  directory listings, or results with no explicit signal → EXCLUDE\n"
+        f"- WHEN IN DOUBT → EXCLUDE (not negative — there is simply not enough information)\n\n"
+        f"ARTICLES TO CLASSIFY:\n{article_list}\n\n"
+        f"Return a JSON array only — no explanation, no markdown code fences. Each element must have:\n"
+        f'{{\n  "url": "...",\n  "title": "...",\n'
+        f'  "snippet": "1-2 sentences based ONLY on the title and snippet shown. If not enough information, write \\"Content unavailable.\\"  Write in {language_name}.",\n'
+        f'  "sentiment": "negative" | "positive" | "neutral",\n'
+        f'  "risk": "high" | "medium" | "low" | "none",\n'
+        f'  "source": "domain.com",\n'
+        f'  "type": "criminal" | "legal" | "news" | "complaint" | "regulatory" | "social" | "award" | "achievement" | "profile" | "wiki" | "directory"\n'
+        f"}}\n\nReturn ONLY the JSON array. If no valid articles, return []."
+    )
+
+    async with client.messages.stream(
+        model=model,
+        max_tokens=64000,
+        messages=[{"role": "user", "content": prompt}],
+    ) as stream:
+        response = await stream.get_final_message()
+
+    if response.stop_reason == "max_tokens":
+        print("[classify-unscraped] Claude hit max_tokens — JSON may be truncated")
+
+    text_block = next((b for b in response.content if b.type == "text"), None)
+    if not text_block:
+        return []
+    json_match = re.search(r"\[[\s\S]*\]", text_block.text.strip())
+    if not json_match:
+        return []
+    try:
+        return json.loads(json_match.group())
+    except Exception:
+        return []
+
+
 async def _generate_meeting_summary(
     client: anthropic.AsyncAnthropic,
     name: str,
@@ -1381,7 +1523,13 @@ async def _execute_generate_lead(
     CLASSIFY_BATCH_SIZE = 20
     _claude_sem = asyncio.Semaphore(3)
 
-    async def _classify_batch(batch: list[dict]) -> list[dict]:
+    # Split into scraped (full content) and unscraped (snippet only) before classifying.
+    # The two groups use different prompts: normal bias rules for scraped content,
+    # conservative exclude-by-default rules for unscraped content to prevent hallucination.
+    scraped_articles = [a for a in articles if scrape_results_by_url.get(a["url"])]
+    unscraped_articles = [a for a in articles if not scrape_results_by_url.get(a["url"])]
+
+    async def _classify_batch_normal(batch: list[dict]) -> list[dict]:
         async with _claude_sem:
             return await _classify_with_claude(
                 client,
@@ -1397,11 +1545,36 @@ async def _execute_generate_lead(
                 pre_analysis_profile=body.preAnalysisProfile,
             )
 
-    batches = [
-        articles[i : i + CLASSIFY_BATCH_SIZE]
-        for i in range(0, len(articles), CLASSIFY_BATCH_SIZE)
+    async def _classify_batch_unscraped(batch: list[dict]) -> list[dict]:
+        async with _claude_sem:
+            return await _classify_unscraped_with_claude(
+                client,
+                batch,
+                sanitized_subject,
+                countries,
+                body.keywords,
+                body.subjectType,
+                output_language_name,
+                body.scanFocus,
+                tier_model,
+                background=body.background,
+                pre_analysis_profile=body.preAnalysisProfile,
+            )
+
+    scraped_batches = [
+        scraped_articles[i : i + CLASSIFY_BATCH_SIZE]
+        for i in range(0, len(scraped_articles), CLASSIFY_BATCH_SIZE)
     ]
-    batch_results = await asyncio.gather(*[_classify_batch(b) for b in batches])
+    unscraped_batches = [
+        unscraped_articles[i : i + CLASSIFY_BATCH_SIZE]
+        for i in range(0, len(unscraped_articles), CLASSIFY_BATCH_SIZE)
+    ]
+    all_batches = scraped_batches + unscraped_batches
+    all_tasks = (
+        [_classify_batch_normal(b) for b in scraped_batches]
+        + [_classify_batch_unscraped(b) for b in unscraped_batches]
+    )
+    batch_results = await asyncio.gather(*all_tasks)
     classified: list[dict] = [item for result in batch_results for item in result]
 
     _all_returned_urls = {item.get("url") for item in classified}
@@ -1412,6 +1585,7 @@ async def _execute_generate_lead(
         "batches": [
             {
                 "batch": bi + 1,
+                "type": "scraped" if bi < len(scraped_batches) else "unscraped",
                 "sentCount": len(batch),
                 "sent": [a["url"] for a in batch],
                 "returnedCount": len(batch_results[bi]),
@@ -1424,7 +1598,7 @@ async def _execute_generate_lead(
                     for item in batch_results[bi]
                 ],
             }
-            for bi, batch in enumerate(batches)
+            for bi, batch in enumerate(all_batches)
         ],
         "dropped": {"count": len(_claude_dropped), "links": _claude_dropped},
     }
