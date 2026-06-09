@@ -528,6 +528,60 @@ def _passes_name_filter(article: dict, first_name: str, last_name: str) -> bool:
     return True
 
 
+# --- Company-subject matching -------------------------------------------------
+# Trailing legal-form suffixes, stripped before a company name becomes a search
+# query. Applied repeatedly so stacked forms (e.g. "...Ltd SAC") all come off.
+_COMPANY_SUFFIX_RE = re.compile(
+    r",?\s*\b("
+    r"LLC|L\.L\.C|Inc|Corp|Corporation|Ltd|Limited|Co|LLP|LP|PLC|GmbH|"
+    r"S\.A\.?|S\.L\.?|SAC|S\.A\.C|SAS|S\.A\.S|SRL|S\.R\.L|SARL|"
+    r"BV|AG|NV|Pte|Pty|Sdn|Bhd"
+    r")\.?\s*$",
+    re.IGNORECASE,
+)
+
+# Legal-form and ultra-generic descriptor words that must never be *required*
+# when matching company articles: short Serper snippets routinely omit them, so
+# demanding every one of them dropped almost all genuinely relevant results.
+_COMPANY_STOPWORDS = {
+    "llc", "inc", "corp", "corporation", "ltd", "limited", "co", "llp", "lp",
+    "plc", "gmbh", "sac", "sas", "srl", "sarl", "spa", "bv", "ag", "nv",
+    "pte", "pty", "sdn", "bhd", "holding", "holdings", "group", "groupe",
+    "grupo", "company", "fund", "funds", "capital", "partners", "partner",
+    "management", "ventures", "venture", "global", "international", "advisors",
+    "advisers", "asset", "assets", "investment", "investments", "trust",
+    "associates", "consulting", "consultancy", "enterprises", "enterprise",
+    "services", "solutions",
+}
+
+
+def _strip_company_suffixes(name: str) -> str:
+    out = name.strip()
+    prev = ""
+    while out and out != prev:
+        prev = out
+        out = _COMPANY_SUFFIX_RE.sub("", out).strip()
+    return out
+
+
+def _company_match_tokens(search_subject: str) -> list[str]:
+    tokens = [t for t in _normalize_name_tokens(search_subject) if len(t) > 2]
+    distinctive = [t for t in tokens if t not in _COMPANY_STOPWORDS]
+    # Fall back to the full set for names made entirely of generic words
+    # (e.g. "Capital Group") so the prefilter still anchors on something.
+    return distinctive or tokens
+
+
+def _passes_company_filter(article: dict, search_subject: str) -> bool:
+    tokens = _company_match_tokens(search_subject)
+    if not tokens:
+        return True
+    hay = _strip_diacritics(
+        " ".join([article.get("title", ""), article.get("snippet", "")])
+    )
+    return all(token in hay for token in tokens)
+
+
 def _derive_score(neg_count: int, pos_count: int) -> int:
     if neg_count == 0:
         if pos_count >= 10:
@@ -1055,11 +1109,7 @@ async def _execute_generate_lead(
             if all(len(p.rstrip(".")) == 1 for p in _middle):
                 _search_subject = f"{_sname_parts[0]} {_sname_parts[-1]}"
         elif body.subjectType == "company":
-            _COMPANY_SUFFIXES = re.compile(
-                r",?\s*\b(LLC|Inc|Corp|Ltd|Co|LLP|LP|PLC|GmbH|S\.A\.?|S\.L\.?|BV|AG|NV)\.?\s*$",
-                re.IGNORECASE,
-            )
-            _search_subject = _COMPANY_SUFFIXES.sub("", _search_subject).strip()
+            _search_subject = _strip_company_suffixes(_search_subject)
         quoted_subject = (
             f'"{_search_subject}"'
             if body.subjectType != "company"
@@ -1183,18 +1233,11 @@ async def _execute_generate_lead(
 
         _name_parts = sanitized_subject.split()
         if body.subjectType == "company":
-            _company_words = [
-                w
-                for w in re.findall(r"[a-z0-9]+", _strip_diacritics(_search_subject))
-                if len(w) > 2
-            ]
+            _company_words = _company_match_tokens(_search_subject)
             if _company_words:
                 _pf_kept: list[dict] = []
                 for a in articles:
-                    if all(
-                        w in _strip_diacritics(a["title"] + " " + a["snippet"])
-                        for w in _company_words
-                    ):
+                    if _passes_company_filter(a, _search_subject):
                         _pf_kept.append(a)
                     else:
                         _prefilter_dropped.append(
