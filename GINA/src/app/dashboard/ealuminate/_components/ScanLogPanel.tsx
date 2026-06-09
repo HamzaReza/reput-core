@@ -7,6 +7,7 @@ const STAGE_COLORS = {
   serper: "#4479DA",
   firecrawl: "#f59e0b",
   nameFilter: "#6366f1",
+  companyNameFilter: "#8b5cf6",
   claude: "#48D4B8",
 };
 
@@ -256,9 +257,15 @@ function EmptyNote({ text }: { text: string }) {
 }
 
 export function ScanLogPanel({ scanLog }: { scanLog: ScanLog }) {
-  const { serper, prefilter, firecrawl, nameFilter, claude } = scanLog;
+  const { serper, prefilter, firecrawl, nameFilter, companyNameFilter, claude } =
+    scanLog;
   const sentTotal = claude?.batches.reduce((n, b) => n + b.sentCount, 0) ?? 0;
   const returnedTotal = claude?.batches.reduce((n, b) => n + b.returnedCount, 0) ?? 0;
+  // company_words_missing drops get their own "Company Name Filter" card below,
+  // so exclude them from the generic pre-scrape list to avoid showing them twice.
+  const prefilterShown = companyNameFilter
+    ? (prefilter?.dropped ?? []).filter((d) => d.reason !== "company_words_missing")
+    : prefilter?.dropped ?? [];
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
@@ -290,16 +297,43 @@ export function ScanLogPanel({ scanLog }: { scanLog: ScanLog }) {
               ))}
             </Collapse>
           )}
-          {prefilter && prefilter.count > 0 && (
+          {prefilterShown.length > 0 && (
             <Collapse
               label="Dropped before scraping"
-              count={prefilter.count}
+              count={prefilterShown.length}
               color="#ef4444"
             >
-              {prefilter.dropped.map((d, i) => (
+              {prefilterShown.map((d, i) => (
                 <UrlRow key={i} url={d.url} chip={d.reason} chipColor="#ef4444" />
               ))}
             </Collapse>
+          )}
+        </StageCard>
+      )}
+
+      {companyNameFilter && (
+        <StageCard
+          color={STAGE_COLORS.companyNameFilter}
+          title="Company Name Filter"
+          summary={`match: ${companyNameFilter.matchTokens.join(" + ")} · kept ${companyNameFilter.keptCount} · pre-scrape`}
+          badges={
+            <Badge
+              label={`${companyNameFilter.dropped.count} dropped`}
+              color={companyNameFilter.dropped.count ? "#ef4444" : "#48D4B8"}
+            />
+          }
+        >
+          {companyNameFilter.dropped.count === 0 ? (
+            <EmptyNote text="no links dropped by the company name filter" />
+          ) : (
+            companyNameFilter.dropped.articles.map((a, i) => (
+              <Collapse key={i} label={a.title || a.url} color="#ef4444">
+                <UrlRow url={a.url} />
+                <p style={{ margin: "0.35rem 0 0.2rem", fontSize: "0.72rem", color: "#334155" }}>
+                  <strong>Snippet:</strong> {a.snippet || "—"}
+                </p>
+              </Collapse>
+            ))
           )}
         </StageCard>
       )}

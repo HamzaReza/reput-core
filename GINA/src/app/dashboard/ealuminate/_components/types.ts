@@ -68,6 +68,15 @@ export interface ScanLog {
       articles: { url: string; title: string; snippet: string; content: string }[];
     };
   };
+  companyNameFilter?: {
+    searchSubject: string;
+    matchTokens: string[];
+    keptCount: number;
+    dropped: {
+      count: number;
+      articles: { url: string; title: string; snippet: string }[];
+    };
+  };
   claude?: {
     model: string;
     scanFocus: string | null;

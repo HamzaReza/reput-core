@@ -1110,13 +1110,8 @@ async def _execute_generate_lead(
                 _search_subject = f"{_sname_parts[0]} {_sname_parts[-1]}"
         elif body.subjectType == "company":
             _search_subject = _strip_company_suffixes(_search_subject)
-        # People search as an exact phrase only. Companies run BOTH a quoted
-        # (exact-phrase) and an unquoted variant of every query: the quoted pass
-        # surfaces the entity even when a loose search buries it past the page
-        # cap, the unquoted pass keeps broad recall, and the company prefilter
-        # drops the namesake noise the unquoted pass pulls in. query_keywords
-        # records each query's source keyword so attribution survives the
-        # doubled, reordered query list.
+        # Companies run quoted+unquoted variants: quoted surfaces exact entity, unquoted keeps broad recall.
+        # Company prefilter drops namesake noise; query_keywords tracks source keyword for attribution.
         _subject_variants = (
             [f'"{_search_subject}"', _search_subject]
             if body.subjectType == "company"
@@ -1241,14 +1236,35 @@ async def _execute_generate_lead(
             _company_words = _company_match_tokens(_search_subject)
             if _company_words:
                 _pf_kept: list[dict] = []
+                _company_dropped: list[dict] = []
                 for a in articles:
                     if _passes_company_filter(a, _search_subject):
                         _pf_kept.append(a)
                     else:
+                        _company_dropped.append(a)
                         _prefilter_dropped.append(
                             {"url": a["url"], "reason": "company_words_missing"}
                         )
                 articles = _pf_kept
+                # Dedicated company-name-filter trace (the company analogue of
+                # nameFilter). Runs pre-scrape, so dropped items carry only the
+                # Serper title+snippet, never scraped content.
+                scan_log["companyNameFilter"] = {
+                    "searchSubject": _search_subject,
+                    "matchTokens": _company_words,
+                    "keptCount": len(_pf_kept),
+                    "dropped": {
+                        "count": len(_company_dropped),
+                        "articles": [
+                            {
+                                "url": a["url"],
+                                "title": a.get("title", ""),
+                                "snippet": a.get("snippet", ""),
+                            }
+                            for a in _company_dropped
+                        ],
+                    },
+                }
         else:
             _fn = _strip_diacritics(_name_parts[0]) if _name_parts else ""
             _ln = _strip_diacritics(_name_parts[-1]) if len(_name_parts) > 1 else ""
