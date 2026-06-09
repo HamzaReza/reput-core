@@ -1170,7 +1170,11 @@ async def _execute_generate_lead(
         scan_log["serper"] = {
             "queries": [
                 {
-                    "keyword": query_keywords[i // _num_countries],
+                    "keyword": (
+                        query_keywords[i // _num_countries]
+                        if i // _num_countries < len(query_keywords)
+                        else None
+                    ),
                     "query": all_searches[i]["q"],
                     "country": (
                         countries[i % _num_countries]
