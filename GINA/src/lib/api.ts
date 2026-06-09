@@ -17,6 +17,22 @@ export function setToken(token: string): void {
   } catch {}
 }
 
+const REFRESH_TOKEN_KEY = "reput_refresh_token";
+
+export function getRefreshToken(): string | null {
+  try {
+    return localStorage.getItem(REFRESH_TOKEN_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function setRefreshToken(token: string): void {
+  try {
+    localStorage.setItem(REFRESH_TOKEN_KEY, token);
+  } catch {}
+}
+
 export function clearAuth(): void {
   try {
     const splash = localStorage.getItem("reput_splash_shown");
@@ -177,10 +193,46 @@ async function fetchWithHelp(
   }
 }
 
+// Single-flight refresh: concurrent 401s share one in-flight refresh call so
+// we never fire a stampede of /auth/refresh-web-analyst requests.
+let refreshPromise: Promise<boolean> | null = null;
+
+async function refreshAccessToken(): Promise<boolean> {
+  const refreshToken = getRefreshToken();
+  if (!refreshToken) return false;
+  try {
+    const res = await fetchWithHelp(`${BASE_URL}/auth/refresh-web-analyst`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ refresh_token: refreshToken }),
+    });
+    if (!res.ok) return false;
+    const data = (await res.json()) as {
+      access_token: string;
+      refresh_token: string;
+    };
+    setToken(data.access_token);
+    setRefreshToken(data.refresh_token);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function attemptRefresh(): Promise<boolean> {
+  if (!refreshPromise) {
+    refreshPromise = refreshAccessToken().finally(() => {
+      refreshPromise = null;
+    });
+  }
+  return refreshPromise;
+}
+
 async function request<T>(
   path: string,
   options: RequestInit = {},
   withAuth = false,
+  _retried = false,
 ): Promise<T> {
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
@@ -199,6 +251,11 @@ async function request<T>(
 
   if (!res.ok) {
     if (withAuth && res.status === 401) {
+      // Access token likely expired — try one silent refresh, then replay the
+      // request. _retried guards against looping if the new token is rejected too.
+      if (!_retried && (await attemptRefresh())) {
+        return request<T>(path, options, withAuth, true);
+      }
       clearAuth();
       if (typeof window !== "undefined") {
         window.location.replace("/login?reason=session_expired");
@@ -257,10 +314,17 @@ export const auth = {
       }
       return res.json() as Promise<{
         access_token: string;
+        refresh_token: string;
         web_analyst: WebAnalyst;
       }>;
     });
   },
+
+  refreshWebAnalyst: (refreshToken: string) =>
+    request<{ access_token: string; refresh_token: string }>(
+      "/auth/refresh-web-analyst",
+      { method: "POST", body: JSON.stringify({ refresh_token: refreshToken }) },
+    ),
 
   me: () => request<User>("/auth/me", {}, true),
 

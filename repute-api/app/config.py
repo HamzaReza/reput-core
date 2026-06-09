@@ -65,6 +65,12 @@ class Settings(BaseSettings):
     jwt_secret: str = "change-me-in-production-use-a-long-random-string"
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 60 * 24  # 24 hours
+    # Refresh token — long-lived, lets the client silently renew an expired
+    # access token instead of forcing re-login. Tunable via REFRESH_TOKEN_EXPIRE_MINUTES.
+    refresh_token_expire_minutes: int = Field(
+        default=60 * 24 * 30,  # 30 days
+        validation_alias="REFRESH_TOKEN_EXPIRE_MINUTES",
+    )
 
     # External API keys
     anthropic_api_key: str = Field(default="", validation_alias="ANTHROPIC_API_KEY")

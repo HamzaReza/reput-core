@@ -1,6 +1,6 @@
 "use client";
 
-import { auth, setToken } from "@/lib/api";
+import { auth, setToken, setRefreshToken } from "@/lib/api";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { toast, ToastContainer } from "react-toastify";
@@ -83,6 +83,7 @@ export default function LoginPage() {
     try {
       const res = await auth.loginWebAnalyst(email, password);
       setToken(res.access_token);
+      setRefreshToken(res.refresh_token);
       try {
         localStorage.setItem("reput_user", JSON.stringify(res.web_analyst));
         localStorage.setItem(
