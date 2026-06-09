@@ -510,6 +510,10 @@ def _passes_name_filter(article: dict, first_name: str, last_name: str) -> bool:
     )
     last_word = last_tokens[-1]
     expected_leading_parts = first_tokens + last_tokens[:-1]
+    # Recall guard: drop on a surname-adjacency mismatch only when none of the
+    # subject's given names (first + middle) appear anywhere — otherwise it's
+    # plausibly them (e.g. a middle name the query omitted), so keep.
+    subject_given_present = bool(set(expected_leading_parts) & set(text_tokens))
     for idx, token in enumerate(headline_tokens):
         if token != last_word or idx == 0:
             continue
@@ -517,6 +521,8 @@ def _passes_name_filter(article: dict, first_name: str, last_name: str) -> bool:
         if len(found) <= 2 or found in _NAME_PARTICLES:
             continue
         if not _token_matches_name_part(found, expected_leading_parts):
+            if subject_given_present:
+                continue
             return False
 
     return True
