@@ -1110,14 +1110,25 @@ async def _execute_generate_lead(
                 _search_subject = f"{_sname_parts[0]} {_sname_parts[-1]}"
         elif body.subjectType == "company":
             _search_subject = _strip_company_suffixes(_search_subject)
-        quoted_subject = (
-            f'"{_search_subject}"'
-            if body.subjectType != "company"
-            else _search_subject
+        # People search as an exact phrase only. Companies run BOTH a quoted
+        # (exact-phrase) and an unquoted variant of every query: the quoted pass
+        # surfaces the entity even when a loose search buries it past the page
+        # cap, the unquoted pass keeps broad recall, and the company prefilter
+        # drops the namesake noise the unquoted pass pulls in. query_keywords
+        # records each query's source keyword so attribution survives the
+        # doubled, reordered query list.
+        _subject_variants = (
+            [f'"{_search_subject}"', _search_subject]
+            if body.subjectType == "company"
+            else [f'"{_search_subject}"']
         )
-        search_queries = [quoted_subject]
+        search_queries = list(_subject_variants)
+        query_keywords: list[str | None] = [None] * len(_subject_variants)
         if body.useKeywords:
-            search_queries += [f"{quoted_subject} {kw}" for kw in body.keywords]
+            for kw in body.keywords:
+                for variant in _subject_variants:
+                    search_queries.append(f"{variant} {kw}")
+                    query_keywords.append(kw)
 
         country_configs = [
             {
@@ -1159,12 +1170,7 @@ async def _execute_generate_lead(
         scan_log["serper"] = {
             "queries": [
                 {
-                    "keyword": (
-                        body.keywords[(i // _num_countries) - 1]
-                        if body.useKeywords
-                        and 1 <= (i // _num_countries) <= len(body.keywords)
-                        else None
-                    ),
+                    "keyword": query_keywords[i // _num_countries],
                     "query": all_searches[i]["q"],
                     "country": (
                         countries[i % _num_countries]
@@ -1193,12 +1199,7 @@ async def _execute_generate_lead(
         for kw_idx, results in enumerate(all_organic):
             country_idx = kw_idx % num_countries
             query_idx = kw_idx // num_countries
-            kw_keyword_idx = query_idx - 1
-            kw = (
-                body.keywords[kw_keyword_idx]
-                if body.useKeywords and 0 <= kw_keyword_idx < len(body.keywords)
-                else None
-            )
+            kw = query_keywords[query_idx] if query_idx < len(query_keywords) else None
             for r in results:
                 url = r.get("link", "")
                 if not url:
@@ -1523,10 +1524,9 @@ async def _execute_generate_lead(
         "_serper": [
             {
                 "keyword": (
-                    body.keywords[kw_idx - 1]
-                    if body.useKeywords
-                    and kw_idx >= 1
-                    and kw_idx - 1 < len(body.keywords)
+                    query_keywords[kw_idx]
+                    if kw_idx < len(query_keywords)
+                    and query_keywords[kw_idx] is not None
                     else all_searches[i]["q"]
                 ),
                 "country": (
