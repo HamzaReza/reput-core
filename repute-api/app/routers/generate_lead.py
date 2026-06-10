@@ -565,21 +565,32 @@ def _strip_company_suffixes(name: str) -> str:
 
 
 def _company_match_tokens(search_subject: str) -> list[str]:
-    tokens = [t for t in _normalize_name_tokens(search_subject) if len(t) > 2]
-    distinctive = [t for t in tokens if t not in _COMPANY_STOPWORDS]
-    # Fall back to the full set for names made entirely of generic words
-    # (e.g. "Capital Group") so the prefilter still anchors on something.
-    return distinctive or tokens
+    return [t for t in _normalize_name_tokens(search_subject) if len(t) > 2]
+
+
+def _company_name_phrases(search_subject: str) -> list[str]:
+    tokens = _company_match_tokens(search_subject)
+    n = len(tokens)
+    if n == 0:
+        return []
+    if n == 1:
+        return tokens
+    # All contiguous subsequences of length >= 2, longest first.
+    phrases: list[str] = []
+    for length in range(n, 1, -1):
+        for start in range(n - length + 1):
+            phrases.append(" ".join(tokens[start : start + length]))
+    return phrases
 
 
 def _passes_company_filter(article: dict, search_subject: str) -> bool:
-    tokens = _company_match_tokens(search_subject)
-    if not tokens:
+    phrases = _company_name_phrases(search_subject)
+    if not phrases:
         return True
     hay = _strip_diacritics(
         " ".join([article.get("title", ""), article.get("snippet", "")])
     )
-    return all(token in hay for token in tokens)
+    return any(phrase in hay for phrase in phrases)
 
 
 def _derive_score(neg_count: int, pos_count: int) -> int:
