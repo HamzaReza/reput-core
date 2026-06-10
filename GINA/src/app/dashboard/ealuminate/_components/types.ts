@@ -71,6 +71,7 @@ export interface ScanLog {
   companyNameFilter?: {
     searchSubject: string;
     matchTokens: string[];
+    abbreviations?: string[];
     keptCount: number;
     dropped: {
       count: number;

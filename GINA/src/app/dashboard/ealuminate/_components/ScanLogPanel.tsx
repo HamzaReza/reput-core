@@ -315,7 +315,7 @@ export function ScanLogPanel({ scanLog }: { scanLog: ScanLog }) {
         <StageCard
           color={STAGE_COLORS.companyNameFilter}
           title="Company Name Filter"
-          summary={`match: ${companyNameFilter.matchTokens.join(" + ")} · kept ${companyNameFilter.keptCount} · pre-scrape`}
+          summary={`match: ${companyNameFilter.matchTokens.join(" + ")}${companyNameFilter.abbreviations?.length ? ` (or ${companyNameFilter.abbreviations.map((a) => `"${a.toUpperCase()}"`).join(", ")})` : ""} · kept ${companyNameFilter.keptCount} · pre-scrape`}
           badges={
             <Badge
               label={`${companyNameFilter.dropped.count} dropped`}

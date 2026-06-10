@@ -583,14 +583,44 @@ def _company_name_phrases(search_subject: str) -> list[str]:
     return phrases
 
 
-def _passes_company_filter(article: dict, search_subject: str) -> bool:
+def _company_abbreviations(name: str) -> list[str]:
+    """Return candidate abbreviations to use as fallback matches in the company filter.
+
+    Two patterns:
+    - Short tokens (2–4 chars) already in the name are likely pre-existing abbreviations
+      (e.g. "bsf" in "BSF Enterprise" — press writes "BSF" alone).
+    - First-letter acronym of all tokens, if it comes out 3–6 chars
+      (e.g. "bmg" for "Blackstone Mercantile Group").
+    """
+    tokens = re.findall(r"[a-z0-9]+", _strip_diacritics(name))
+    candidates: list[str] = []
+    for t in tokens:
+        if 2 <= len(t) <= 4 and t not in _COMPANY_STOPWORDS:
+            candidates.append(t)
+    acronym = "".join(t[0] for t in tokens if t)
+    if 3 <= len(acronym) <= 6 and acronym not in candidates:
+        candidates.append(acronym)
+    return candidates
+
+
+def _passes_company_filter(
+    article: dict,
+    search_subject: str,
+    abbreviations: list[str] | None = None,
+) -> bool:
     phrases = _company_name_phrases(search_subject)
     if not phrases:
         return True
     hay = _strip_diacritics(
         " ".join([article.get("title", ""), article.get("snippet", "")])
     )
-    return any(phrase in hay for phrase in phrases)
+    if any(phrase in hay for phrase in phrases):
+        return True
+    if abbreviations:
+        for abbr in abbreviations:
+            if re.search(rf"\b{re.escape(abbr)}\b", hay):
+                return True
+    return False
 
 
 def _derive_score(neg_count: int, pos_count: int) -> int:
@@ -1245,11 +1275,12 @@ async def _execute_generate_lead(
         _name_parts = sanitized_subject.split()
         if body.subjectType == "company":
             _company_words = _company_match_tokens(_search_subject)
+            _abbreviations = _company_abbreviations(_search_subject)
             if _company_words:
                 _pf_kept: list[dict] = []
                 _company_dropped: list[dict] = []
                 for a in articles:
-                    if _passes_company_filter(a, _search_subject):
+                    if _passes_company_filter(a, _search_subject, _abbreviations):
                         _pf_kept.append(a)
                     else:
                         _company_dropped.append(a)
@@ -1263,6 +1294,7 @@ async def _execute_generate_lead(
                 scan_log["companyNameFilter"] = {
                     "searchSubject": _search_subject,
                     "matchTokens": _company_words,
+                    "abbreviations": _abbreviations,
                     "keptCount": len(_pf_kept),
                     "dropped": {
                         "count": len(_company_dropped),
