@@ -155,6 +155,9 @@ export async function exportLinksXlsx(params: ExportLinksXlsxParams): Promise<vo
   const a = document.createElement("a");
   a.href = url;
   a.download = `${sanitize(fullName) || "scan"}-links.xlsx`;
+  document.body.appendChild(a);
   a.click();
-  URL.revokeObjectURL(url);
+  document.body.removeChild(a);
+  // Defer revoke so the browser can start the download before the URL is freed
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }

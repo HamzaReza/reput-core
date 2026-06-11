@@ -1525,6 +1525,9 @@ function EaluminatePageInner() {
       country,
       keywords: editableKeywords,
       links: selectedLinks,
+    }).catch((err) => {
+      console.error("XLSX export failed", err);
+      alert("Failed to export XLSX. Please try again.");
     });
   };
 

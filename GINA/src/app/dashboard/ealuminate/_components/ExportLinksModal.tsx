@@ -299,7 +299,12 @@ export default function ExportLinksModal({
                     target="_blank"
                     rel="noopener noreferrer"
                     title="Open link in new tab"
-                    onClick={(e) => e.stopPropagation()}
+                    onClick={(e) => {
+                      // preventDefault stops the wrapping <label> from toggling the checkbox
+                      e.preventDefault();
+                      e.stopPropagation();
+                      window.open(link.url, "_blank", "noopener,noreferrer");
+                    }}
                     style={{
                       display: "flex",
                       alignItems: "center",
