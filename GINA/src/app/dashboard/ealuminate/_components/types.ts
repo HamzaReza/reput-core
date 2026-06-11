@@ -40,7 +40,11 @@ export interface ScanLog {
   serper?: {
     queries: ScanLogSerperQuery[];
     totalRaw: number;
-    deduped?: { count: number; links: string[] };
+    deduped?: {
+      count: number;
+      links: string[];
+      articles?: { url: string; title: string; snippet: string }[];
+    };
   };
   prefilter?: {
     count: number;

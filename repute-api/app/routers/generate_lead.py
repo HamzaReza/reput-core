@@ -1266,6 +1266,16 @@ async def _execute_generate_lead(
         scan_log["serper"]["deduped"] = {
             "count": len(articles),
             "links": [a["url"] for a in articles],
+            # Per-link title+snippet for the scan-log UI; deduped is the full
+            # unique set every later list (firecrawl, claude, dropped) draws from.
+            "articles": [
+                {
+                    "url": a["url"],
+                    "title": a.get("title", ""),
+                    "snippet": a.get("snippet", ""),
+                }
+                for a in articles
+            ],
         }
 
         # Track everything removed between dedupe and the scrape phase so

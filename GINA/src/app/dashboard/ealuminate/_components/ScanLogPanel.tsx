@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import type { ScanLog } from "./types";
 
 const STAGE_COLORS = {
@@ -16,6 +16,28 @@ const SENTIMENT_COLORS: Record<string, string> = {
   positive: "#48D4B8",
   neutral: "#64748b",
 };
+
+type FirecrawlStatus = "success" | "failed" | "skipped" | "notAttempted";
+
+const FIRECRAWL_STATUS_META: Record<FirecrawlStatus, { label: string; color: string }> = {
+  success: { label: "scraped", color: "#48D4B8" },
+  failed: { label: "failed", color: "#ef4444" },
+  skipped: { label: "skipped", color: "#64748b" },
+  notAttempted: { label: "not attempted", color: "#f59e0b" },
+};
+
+// Per-link Serper title/snippet and Firecrawl outcome, so any link row anywhere
+// can expand to its metadata without threading props through every stage card.
+const ScanMetaContext = React.createContext<{
+  metaByUrl: Map<string, { title: string; snippet: string }>;
+  statusByUrl: Map<string, FirecrawlStatus>;
+}>({ metaByUrl: new Map(), statusByUrl: new Map() });
+
+function chunk<T>(arr: T[], size: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+  return out;
+}
 
 function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
@@ -95,6 +117,99 @@ function UrlRow({ url, chip, chipColor }: { url: string; chip?: string; chipColo
         {url}
       </a>
       <CopyButton text={url} />
+    </div>
+  );
+}
+
+function Chip({ label, color }: { label: string; color: string }) {
+  return (
+    <span
+      style={{
+        fontSize: "0.65rem",
+        fontWeight: 600,
+        color,
+        background: `${color}18`,
+        borderRadius: "0.375rem",
+        padding: "0.05rem 0.4rem",
+        flexShrink: 0,
+        whiteSpace: "nowrap",
+      }}
+    >
+      {label}
+    </span>
+  );
+}
+
+// Expandable link row: collapsed shows the URL plus its Firecrawl-status chip;
+// click reveals an Open link, title and Serper snippet — kept in the same small font.
+function LinkRow({ url, chip, chipColor }: { url: string; chip?: string; chipColor?: string }) {
+  const { metaByUrl, statusByUrl } = React.useContext(ScanMetaContext);
+  const [open, setOpen] = useState(false);
+  const meta = metaByUrl.get(url);
+  const status = statusByUrl.get(url);
+  const statusMeta = status ? FIRECRAWL_STATUS_META[status] : null;
+  return (
+    <div style={{ borderBottom: "1px solid #f1f5f9" }}>
+      <div
+        onClick={() => setOpen(!open)}
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: "0.375rem",
+          padding: "0.2rem 0",
+          minWidth: 0,
+          cursor: "pointer",
+          userSelect: "none",
+        }}
+      >
+        {statusMeta && <Chip label={statusMeta.label} color={statusMeta.color} />}
+        {chip && <Chip label={chip} color={chipColor ?? "#64748b"} />}
+        <span
+          style={{
+            fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+            fontSize: "0.72rem",
+            color: open ? "#4479DA" : "#475569",
+            whiteSpace: "nowrap",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            flex: 1,
+            minWidth: 0,
+          }}
+        >
+          {url}
+        </span>
+        <CopyButton text={url} />
+        <span
+          style={{
+            fontSize: "0.6rem",
+            color: "#94a3b8",
+            transform: open ? "rotate(180deg)" : "none",
+            transition: "transform 0.15s ease",
+            flexShrink: 0,
+          }}
+        >
+          ▼
+        </span>
+      </div>
+      {open && (
+        <div style={{ padding: "0.1rem 0 0.45rem 0.25rem", display: "flex", flexDirection: "column", gap: "0.2rem" }}>
+          <a
+            href={url}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={(e) => e.stopPropagation()}
+            style={{ fontSize: "0.72rem", fontWeight: 600, color: "#4479DA", textDecoration: "none", width: "fit-content" }}
+          >
+            open ↗
+          </a>
+          <p style={{ margin: 0, fontSize: "0.7rem", color: "#334155" }}>
+            <strong>Title:</strong> {meta?.title || "—"}
+          </p>
+          <p style={{ margin: 0, fontSize: "0.7rem", color: "#334155" }}>
+            <strong>Snippet:</strong> {meta?.snippet || "—"}
+          </p>
+        </div>
+      )}
     </div>
   );
 }
@@ -267,7 +382,33 @@ export function ScanLogPanel({ scanLog }: { scanLog: ScanLog }) {
     ? (prefilter?.dropped ?? []).filter((d) => d.reason !== "company_words_missing")
     : prefilter?.dropped ?? [];
 
+  const metaByUrl = useMemo(() => {
+    const m = new Map<string, { title: string; snippet: string }>();
+    for (const a of serper?.deduped?.articles ?? []) {
+      m.set(a.url, { title: a.title, snippet: a.snippet });
+    }
+    // Dropped articles carry their own title/snippet; backfill for older scans
+    // whose deduped trace predates the per-link `articles` field.
+    for (const a of companyNameFilter?.dropped.articles ?? []) {
+      if (!m.has(a.url)) m.set(a.url, { title: a.title, snippet: a.snippet });
+    }
+    for (const a of nameFilter?.dropped.articles ?? []) {
+      if (!m.has(a.url)) m.set(a.url, { title: a.title, snippet: a.snippet });
+    }
+    return m;
+  }, [serper, companyNameFilter, nameFilter]);
+
+  const statusByUrl = useMemo(() => {
+    const m = new Map<string, FirecrawlStatus>();
+    for (const u of firecrawl?.success.links ?? []) m.set(u, "success");
+    for (const u of firecrawl?.failed.links ?? []) m.set(u, "failed");
+    for (const l of firecrawl?.skipped.links ?? []) m.set(l.url, "skipped");
+    for (const u of firecrawl?.notAttempted.links ?? []) m.set(u, "notAttempted");
+    return m;
+  }, [firecrawl]);
+
   return (
+    <ScanMetaContext.Provider value={{ metaByUrl, statusByUrl }}>
     <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
       {serper && (
         <StageCard
@@ -286,14 +427,14 @@ export function ScanLogPanel({ scanLog }: { scanLog: ScanLog }) {
                 {q.query} · {q.country ?? "—"} · {q.pages} page{q.pages === 1 ? "" : "s"}
               </p>
               {q.links.map((u, j) => (
-                <UrlRow key={j} url={u} />
+                <LinkRow key={j} url={u} />
               ))}
             </Collapse>
           ))}
           {serper.deduped && (
             <Collapse label="Deduped unique links" count={serper.deduped.count} color="#4479DA">
               {serper.deduped.links.map((u, i) => (
-                <UrlRow key={i} url={u} />
+                <LinkRow key={i} url={u} />
               ))}
             </Collapse>
           )}
@@ -304,7 +445,7 @@ export function ScanLogPanel({ scanLog }: { scanLog: ScanLog }) {
               color="#ef4444"
             >
               {prefilterShown.map((d, i) => (
-                <UrlRow key={i} url={d.url} chip={d.reason} chipColor="#ef4444" />
+                <LinkRow key={i} url={d.url} chip={d.reason} chipColor="#ef4444" />
               ))}
             </Collapse>
           )}
@@ -326,12 +467,16 @@ export function ScanLogPanel({ scanLog }: { scanLog: ScanLog }) {
           {companyNameFilter.dropped.count === 0 ? (
             <EmptyNote text="no links dropped by the company name filter" />
           ) : (
-            companyNameFilter.dropped.articles.map((a, i) => (
-              <Collapse key={i} label={a.title || a.url} color="#ef4444">
-                <UrlRow url={a.url} />
-                <p style={{ margin: "0.35rem 0 0.2rem", fontSize: "0.72rem", color: "#334155" }}>
-                  <strong>Snippet:</strong> {a.snippet || "—"}
-                </p>
+            chunk(companyNameFilter.dropped.articles, 100).map((batch, bi) => (
+              <Collapse
+                key={bi}
+                label={`${bi * 100 + 1}–${bi * 100 + batch.length}`}
+                count={batch.length}
+                color="#ef4444"
+              >
+                {batch.map((a, i) => (
+                  <LinkRow key={i} url={a.url} />
+                ))}
               </Collapse>
             ))
           )}
@@ -373,14 +518,14 @@ export function ScanLogPanel({ scanLog }: { scanLog: ScanLog }) {
             {firecrawl.success.links.length === 0 ? (
               <EmptyNote text="none" />
             ) : (
-              firecrawl.success.links.map((u, i) => <UrlRow key={i} url={u} />)
+              firecrawl.success.links.map((u, i) => <LinkRow key={i} url={u} />)
             )}
           </Collapse>
           <Collapse label="Failed (classified from snippet)" count={firecrawl.failed.count} color="#ef4444">
             {firecrawl.failed.links.length === 0 ? (
               <EmptyNote text="no failures" />
             ) : (
-              firecrawl.failed.links.map((u, i) => <UrlRow key={i} url={u} />)
+              firecrawl.failed.links.map((u, i) => <LinkRow key={i} url={u} />)
             )}
           </Collapse>
           <Collapse label="Skipped" count={firecrawl.skipped.count} color="#64748b">
@@ -388,14 +533,14 @@ export function ScanLogPanel({ scanLog }: { scanLog: ScanLog }) {
               <EmptyNote text="nothing skipped" />
             ) : (
               firecrawl.skipped.links.map((l, i) => (
-                <UrlRow key={i} url={l.url} chip={l.reason} chipColor="#f59e0b" />
+                <LinkRow key={i} url={l.url} chip={l.reason} chipColor="#f59e0b" />
               ))
             )}
           </Collapse>
           {firecrawl.notAttempted.count > 0 && (
             <Collapse label="Not attempted" count={firecrawl.notAttempted.count} color="#f59e0b">
               {firecrawl.notAttempted.links.map((u, i) => (
-                <UrlRow key={i} url={u} />
+                <LinkRow key={i} url={u} />
               ))}
             </Collapse>
           )}
@@ -459,7 +604,7 @@ export function ScanLogPanel({ scanLog }: { scanLog: ScanLog }) {
                 {b.sentCount} sent · {b.returnedCount} returned
               </p>
               {b.returned.map((r, i) => (
-                <UrlRow
+                <LinkRow
                   key={`r${i}`}
                   url={r.url ?? "(no url)"}
                   chip={`${r.sentiment ?? "?"} / ${r.risk ?? "?"}`}
@@ -468,7 +613,7 @@ export function ScanLogPanel({ scanLog }: { scanLog: ScanLog }) {
               ))}
               <Collapse label="All sent in this batch" count={b.sentCount}>
                 {b.sent.map((u, i) => (
-                  <UrlRow key={i} url={u} />
+                  <LinkRow key={i} url={u} />
                 ))}
               </Collapse>
             </Collapse>
@@ -481,11 +626,12 @@ export function ScanLogPanel({ scanLog }: { scanLog: ScanLog }) {
             {claude.dropped.links.length === 0 ? (
               <EmptyNote text="nothing dropped" />
             ) : (
-              claude.dropped.links.map((u, i) => <UrlRow key={i} url={u} />)
+              claude.dropped.links.map((u, i) => <LinkRow key={i} url={u} />)
             )}
           </Collapse>
         </StageCard>
       )}
     </div>
+    </ScanMetaContext.Provider>
   );
 }
