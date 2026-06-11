@@ -1792,25 +1792,22 @@ export function EaluminateResultsPanel({
               }}
             >
               <div
+                onClick={() => setTrashOpen((o) => !o)}
                 style={{
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "space-between",
                   gap: "0.75rem",
                   padding: "0.75rem 0.875rem",
+                  cursor: "pointer",
+                  userSelect: "none",
                 }}
               >
-                <button
-                  type="button"
-                  onClick={() => setTrashOpen((o) => !o)}
+                <span
                   style={{
                     display: "flex",
                     alignItems: "center",
                     gap: "0.5rem",
-                    background: "none",
-                    border: "none",
-                    padding: 0,
-                    cursor: "pointer",
                     color: "#64748b",
                     fontSize: "0.8125rem",
                     fontWeight: 600,
@@ -1847,11 +1844,14 @@ export function EaluminateResultsPanel({
                   >
                     <path d="M6 9l6 6 6-6" />
                   </svg>
-                </button>
+                </span>
                 {trashOpen && (
                   <button
                     type="button"
-                    onClick={onRestoreAll}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onRestoreAll();
+                    }}
                     style={{
                       background: "none",
                       border: "1px solid #d1d9e0",
