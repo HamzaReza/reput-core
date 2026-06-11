@@ -1443,22 +1443,25 @@ function EaluminatePageInner() {
         const scoreToUse = scanScore ?? lead.score ?? undefined;
         const summaryToUse = scanSummary ?? lead.summary ?? undefined;
 
-        if (linksToUse && linksToUse.length > 0) {
-          const negative = linksToUse.filter(
+        // Render whenever a scan ran — even a 0-link scan — so its Scan Log
+        // (which explains why nothing survived) stays reachable.
+        const linksResolved = linksToUse ?? [];
+        if (linksResolved.length > 0 || scanJobId) {
+          const negative = linksResolved.filter(
             (l) =>
               l.sentiment === "negative" ||
               l.risk === "high" ||
               l.risk === "medium",
           );
-          const positive = linksToUse.filter(
+          const positive = linksResolved.filter(
             (l) =>
               l.sentiment === "positive" ||
               l.risk === "low" ||
               l.risk === "none",
           );
-          const neutral = linksToUse.filter((l) => l.sentiment === "neutral");
+          const neutral = linksResolved.filter((l) => l.sentiment === "neutral");
           setResult({
-            links: linksToUse,
+            links: linksResolved,
             negative,
             positive,
             neutral,
