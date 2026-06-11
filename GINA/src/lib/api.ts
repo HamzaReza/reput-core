@@ -650,6 +650,7 @@ export interface WebLink {
   keyword?: string;   // legacy: old saved leads
   keywords?: string[]; // current: array of all matched keywords
   country?: string;
+  deletedAt?: string | null; // ISO timestamp when soft-deleted; absent/null = active
 }
 
 export interface FullLead {

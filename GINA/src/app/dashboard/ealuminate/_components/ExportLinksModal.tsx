@@ -4,18 +4,29 @@ import type { WebLink } from "@/lib/api";
 
 interface ExportLinksModalProps {
   links: WebLink[];
+  initialSelectedUrls?: string[];
   onConfirm: (selected: WebLink[]) => void;
   onClose: () => void;
 }
 
 export default function ExportLinksModal({
   links,
+  initialSelectedUrls,
   onConfirm,
   onClose,
 }: ExportLinksModalProps) {
-  const [selected, setSelected] = useState<Set<number>>(
-    () => new Set(links.map((_, i) => i)),
-  );
+  const [selected, setSelected] = useState<Set<number>>(() => {
+    if (initialSelectedUrls) {
+      const urls = new Set(initialSelectedUrls);
+      return new Set(
+        links.reduce<number[]>((acc, l, i) => {
+          if (urls.has(l.url)) acc.push(i);
+          return acc;
+        }, []),
+      );
+    }
+    return new Set(links.map((_, i) => i));
+  });
   const [query, setQuery] = useState("");
 
   const toggle = (i: number) => {

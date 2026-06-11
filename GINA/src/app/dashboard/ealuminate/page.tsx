@@ -1439,8 +1439,22 @@ function EaluminatePageInner() {
           setPreAnalysisDone(true);
         }
 
+        // Soft-deletes persist on lead.links; overlay that state by URL onto the
+        // scan event's frozen snapshot so deletions survive reloads via ?event=.
+        const deletedByUrl = new Map(
+          (lead.links ?? [])
+            .filter((l) => l.deletedAt)
+            .map((l) => [l.url, l.deletedAt as string]),
+        );
+        const scanLinksResolved =
+          scanLinks && deletedByUrl.size > 0
+            ? scanLinks.map((l) =>
+                deletedByUrl.has(l.url) ? { ...l, deletedAt: deletedByUrl.get(l.url) } : l,
+              )
+            : scanLinks;
+
         const linksToUse =
-          (scanLinks && scanLinks.length > 0 ? scanLinks : null) ??
+          (scanLinksResolved && scanLinksResolved.length > 0 ? scanLinksResolved : null) ??
           (lead.links as WebLink[] | undefined);
         const scoreToUse = scanScore ?? lead.score ?? undefined;
         const summaryToUse = scanSummary ?? lead.summary ?? undefined;
@@ -1513,10 +1527,16 @@ function EaluminatePageInner() {
   const [exportSummaryModalOpen, setExportSummaryModalOpen] = useState(false);
   const [exportReportModalOpen, setExportReportModalOpen] = useState(false);
   const [exportLinksModalOpen, setExportLinksModalOpen] = useState(false);
+  const [xlsxPreselectedUrls, setXlsxPreselectedUrls] = useState<
+    string[] | null
+  >(null);
 
   const handleExportSummaryPdf = () => setExportSummaryModalOpen(true);
   const handleExportReportMaster = () => setExportReportModalOpen(true);
-  const handleExportXlsx = () => setExportLinksModalOpen(true);
+  const handleExportXlsx = (preselected?: WebLink[]) => {
+    setXlsxPreselectedUrls(preselected ? preselected.map((l) => l.url) : null);
+    setExportLinksModalOpen(true);
+  };
 
   const handleConfirmXlsxExport = (selectedLinks: WebLink[]) => {
     setExportLinksModalOpen(false);
@@ -1539,7 +1559,8 @@ function EaluminatePageInner() {
       country,
       webAnalystName,
       score,
-      result,
+      // exclude soft-deleted links from the rendered link list
+      result: result ? { ...result, links: (result.links ?? []).filter((l) => !l.deletedAt) } : result,
       selectedFields,
     });
   };
@@ -1922,7 +1943,57 @@ function EaluminatePageInner() {
     }
   };
 
-  const allLinks = result?.links ?? [];
+  // result.links is the complete set; split into active vs soft-deleted
+  const allLinks = (result?.links ?? []).filter((l) => !l.deletedAt);
+  const trashedLinks = (result?.links ?? []).filter((l) => l.deletedAt);
+
+  // Optimistic link-array edit; persists to the lead and rolls back on failure
+  const persistLinks = (next: WebLink[]) => {
+    const prev = result;
+    setResult((p) => (p ? { ...p, links: next } : p));
+    if (leadId) {
+      leads.update(leadId, { links: next as unknown[] }).catch((err) => {
+        console.error("Failed to persist link change", err);
+        setResult(prev);
+        alert("Failed to save change. Please try again.");
+      });
+    }
+  };
+
+  const handleDeleteLink = (target: WebLink) => {
+    const now = new Date().toISOString();
+    persistLinks(
+      (result?.links ?? []).map((l) =>
+        l.url === target.url ? { ...l, deletedAt: now } : l,
+      ),
+    );
+  };
+
+  const handleDeleteLinks = (targets: WebLink[]) => {
+    const urls = new Set(targets.map((t) => t.url));
+    const now = new Date().toISOString();
+    persistLinks(
+      (result?.links ?? []).map((l) =>
+        urls.has(l.url) && !l.deletedAt ? { ...l, deletedAt: now } : l,
+      ),
+    );
+  };
+
+  const handleRestoreLink = (target: WebLink) => {
+    persistLinks(
+      (result?.links ?? []).map((l) =>
+        l.url === target.url ? { ...l, deletedAt: null } : l,
+      ),
+    );
+  };
+
+  const handleRestoreAllLinks = () => {
+    persistLinks(
+      (result?.links ?? []).map((l) =>
+        l.deletedAt ? { ...l, deletedAt: null } : l,
+      ),
+    );
+  };
 
   // 0=idle, 1=researching, 2=research done, 3=scan running, 4=scan complete
   const pipelineStep = result
@@ -2142,6 +2213,11 @@ function EaluminatePageInner() {
           tipIdx={tipIdx}
           tips={DID_YOU_KNOW}
           allLinks={allLinks}
+          trashedLinks={trashedLinks}
+          onDeleteLink={handleDeleteLink}
+          onDeleteLinks={handleDeleteLinks}
+          onRestoreLink={handleRestoreLink}
+          onRestoreAll={handleRestoreAllLinks}
           expandedLinkIndex={expandedLinkIndex}
           setExpandedLinkIndex={setExpandedLinkIndex}
           apiRiskToUi={apiRiskToUi}
@@ -2175,7 +2251,8 @@ function EaluminatePageInner() {
       )}
       {exportLinksModalOpen && (
         <ExportLinksModal
-          links={result?.links ?? []}
+          links={allLinks}
+          initialSelectedUrls={xlsxPreselectedUrls ?? undefined}
           onConfirm={handleConfirmXlsxExport}
           onClose={() => setExportLinksModalOpen(false)}
         />
