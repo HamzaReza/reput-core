@@ -9,6 +9,7 @@ import { EaluminatePipelinePanel } from "./_components/EaluminatePipelinePanel";
 import { EaluminateResultsPanel } from "./_components/EaluminateResultsPanel";
 import { ScanLogPanel } from "./_components/ScanLogPanel";
 import ExportFieldsModal from "./_components/ExportFieldsModal";
+import ExportLinksModal from "./_components/ExportLinksModal";
 import type {
   KeywordFocus,
   MeetingSummary,
@@ -18,6 +19,7 @@ import type {
   ScanResult,
 } from "./_components/types";
 import { exportReportMasterPdf, exportSummaryPdf } from "./_utils/pdfExports";
+import { exportLinksXlsx } from "./_utils/xlsxExport";
 
 const RESEARCH_SUMMARY_FIELDS = [
   { key: "identity", label: "Identity", color: "#4479DA" },
@@ -1510,9 +1512,21 @@ function EaluminatePageInner() {
 
   const [exportSummaryModalOpen, setExportSummaryModalOpen] = useState(false);
   const [exportReportModalOpen, setExportReportModalOpen] = useState(false);
+  const [exportLinksModalOpen, setExportLinksModalOpen] = useState(false);
 
   const handleExportSummaryPdf = () => setExportSummaryModalOpen(true);
   const handleExportReportMaster = () => setExportReportModalOpen(true);
+  const handleExportXlsx = () => setExportLinksModalOpen(true);
+
+  const handleConfirmXlsxExport = (selectedLinks: WebLink[]) => {
+    setExportLinksModalOpen(false);
+    exportLinksXlsx({
+      fullName,
+      country,
+      keywords: editableKeywords,
+      links: selectedLinks,
+    });
+  };
 
   const handleConfirmSummaryExport = (selectedFields: string[]) => {
     setExportSummaryModalOpen(false);
@@ -2130,6 +2144,7 @@ function EaluminatePageInner() {
           apiRiskToUi={apiRiskToUi}
           riskColors={RISK_COLORS}
           onExportSummary={handleExportSummaryPdf}
+          onExportXlsx={handleExportXlsx}
           GaugeComponent={RepuGauge}
           isResuming={isResuming}
           scanDuration={scanDuration}
@@ -2153,6 +2168,13 @@ function EaluminatePageInner() {
           fields={RESEARCH_SUMMARY_FIELDS}
           onConfirm={handleConfirmReportExport}
           onClose={() => setExportReportModalOpen(false)}
+        />
+      )}
+      {exportLinksModalOpen && (
+        <ExportLinksModal
+          links={result?.links ?? []}
+          onConfirm={handleConfirmXlsxExport}
+          onClose={() => setExportLinksModalOpen(false)}
         />
       )}
     </div>
