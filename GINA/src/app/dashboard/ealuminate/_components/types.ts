@@ -40,7 +40,11 @@ export interface ScanLog {
   serper?: {
     queries: ScanLogSerperQuery[];
     totalRaw: number;
-    deduped?: { count: number; links: string[] };
+    deduped?: {
+      count: number;
+      links: string[];
+      articles?: { url: string; title: string; snippet: string }[];
+    };
   };
   prefilter?: {
     count: number;
@@ -66,6 +70,16 @@ export interface ScanLog {
     dropped: {
       count: number;
       articles: { url: string; title: string; snippet: string; content: string }[];
+    };
+  };
+  companyNameFilter?: {
+    searchSubject: string;
+    matchTokens: string[];
+    abbreviations?: string[];
+    keptCount: number;
+    dropped: {
+      count: number;
+      articles: { url: string; title: string; snippet: string }[];
     };
   };
   llm?: {

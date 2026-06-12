@@ -3,6 +3,7 @@
 import type { WebLink } from "@/lib/api";
 import type { ComponentType } from "react";
 import React, { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import type { RiskLevel, ScanResult } from "./types";
 
 const BRIEF_SECTION_COLORS: Record<string, string> = {
@@ -150,11 +151,17 @@ interface EaluminateResultsPanelProps {
   tipIdx: number;
   tips: readonly string[];
   allLinks: WebLink[];
+  trashedLinks: WebLink[];
+  onDeleteLink: (link: WebLink) => void;
+  onDeleteLinks: (links: WebLink[]) => void;
+  onRestoreLink: (link: WebLink) => void;
+  onRestoreAll: () => void;
   expandedLinkIndex: string | null;
   setExpandedLinkIndex: (value: string | null) => void;
   apiRiskToUi: (risk: string) => RiskLevel;
   riskColors: Record<RiskLevel, { bg: string; color: string; border: string }>;
   onExportSummary: () => void;
+  onExportXlsx: (preselected?: WebLink[]) => void;
   GaugeComponent: ComponentType<{ score: number }>;
   useKeywords: boolean;
   isResuming?: boolean;
@@ -182,11 +189,17 @@ export function EaluminateResultsPanel({
   scoreLabel,
   usedKeywords,
   allLinks,
+  trashedLinks,
+  onDeleteLink,
+  onDeleteLinks,
+  onRestoreLink,
+  onRestoreAll,
   expandedLinkIndex,
   setExpandedLinkIndex,
   apiRiskToUi,
   riskColors,
   onExportSummary,
+  onExportXlsx,
   GaugeComponent,
   useKeywords,
   scanDuration,
@@ -197,6 +210,38 @@ export function EaluminateResultsPanel({
   const [openBriefSection, setOpenBriefSection] = useState<string | null>(null);
   const [aborting, setAborting] = useState(false);
   const [showAllKeywords, setShowAllKeywords] = useState(false);
+  const [trashOpen, setTrashOpen] = useState(false);
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedUrls, setSelectedUrls] = useState<Set<string>>(new Set());
+  // Confirm dialog target: 1 link = single delete, >1 = bulk
+  const [confirmDelete, setConfirmDelete] = useState<WebLink[] | null>(null);
+
+  const selectedLinks = allLinks.filter((l) => selectedUrls.has(l.url));
+  const allSelected =
+    allLinks.length > 0 && allLinks.every((l) => selectedUrls.has(l.url));
+
+  const toggleSelect = (url: string) =>
+    setSelectedUrls((prev) => {
+      const next = new Set(prev);
+      if (next.has(url)) next.delete(url);
+      else next.add(url);
+      return next;
+    });
+
+  const toggleSelectAll = () =>
+    setSelectedUrls(
+      allSelected ? new Set() : new Set(allLinks.map((l) => l.url)),
+    );
+
+  const enterSelection = () => {
+    setSelectionMode(true);
+    setExpandedLinkIndex(null);
+  };
+
+  const exitSelection = () => {
+    setSelectionMode(false);
+    setSelectedUrls(new Set());
+  };
 
   useEffect(() => {
     if (loading) setAborting(false);
@@ -696,6 +741,59 @@ export function EaluminateResultsPanel({
             >
               Reputation Result
             </h2>
+            <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+            {allLinks.length > 0 && (
+              <button
+                type="button"
+                onClick={selectionMode ? exitSelection : enterSelection}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "0.375rem",
+                  padding: "0.45rem clamp(0.75rem, 2vw, 1rem)",
+                  borderRadius: "0.625rem",
+                  border: `1px solid ${selectionMode ? "#4479DA" : "#d1d9e0"}`,
+                  backgroundColor: selectionMode ? "#eef3fc" : "#ffffff",
+                  color: selectionMode ? "#4479DA" : "#475569",
+                  fontSize: "clamp(0.75rem, 1.5vw, 0.8125rem)",
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  transition: "border-color 0.15s, color 0.15s",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {selectionMode ? (
+                  <svg
+                    width="13"
+                    height="13"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <line x1="18" y1="6" x2="6" y2="18" />
+                    <line x1="6" y1="6" x2="18" y2="18" />
+                  </svg>
+                ) : (
+                  <svg
+                    width="13"
+                    height="13"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <polyline points="9 11 12 14 22 4" />
+                    <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+                  </svg>
+                )}
+                {selectionMode ? "Cancel" : "Multi-select"}
+              </button>
+            )}
             <button
               type="button"
               onClick={onExportSummary}
@@ -735,12 +833,61 @@ export function EaluminateResultsPanel({
                 strokeLinecap="round"
                 strokeLinejoin="round"
               >
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                <polyline points="7 10 12 15 17 10" />
-                <line x1="12" y1="15" x2="12" y2="3" />
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                <polyline points="14 2 14 8 20 8" />
+                <line x1="9" y1="13" x2="15" y2="13" />
+                <line x1="9" y1="17" x2="15" y2="17" />
               </svg>
-              Export Report
+              Export PDF
             </button>
+            <button
+              type="button"
+              onClick={() => onExportXlsx()}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "0.375rem",
+                padding: "0.45rem clamp(0.75rem, 2vw, 1rem)",
+                borderRadius: "0.625rem",
+                border: "1px solid #d1d9e0",
+                backgroundColor: "#ffffff",
+                color: "#475569",
+                fontSize: "clamp(0.75rem, 1.5vw, 0.8125rem)",
+                fontWeight: 600,
+                cursor: "pointer",
+                transition: "border-color 0.15s, color 0.15s",
+                whiteSpace: "nowrap",
+              }}
+              onMouseEnter={(e) => {
+                (e.currentTarget as HTMLButtonElement).style.borderColor =
+                  "#4479DA";
+                (e.currentTarget as HTMLButtonElement).style.color = "#4479DA";
+              }}
+              onMouseLeave={(e) => {
+                (e.currentTarget as HTMLButtonElement).style.borderColor =
+                  "#d1d9e0";
+                (e.currentTarget as HTMLButtonElement).style.color = "#475569";
+              }}
+            >
+              <svg
+                width="13"
+                height="13"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <rect x="3" y="3" width="18" height="18" rx="2" />
+                <line x1="3" y1="9" x2="21" y2="9" />
+                <line x1="3" y1="15" x2="21" y2="15" />
+                <line x1="9" y1="3" x2="9" y2="21" />
+                <line x1="15" y1="3" x2="15" y2="21" />
+              </svg>
+              Export XLSX
+            </button>
+            </div>
           </div>
 
           {/* Two-column body */}
@@ -1285,26 +1432,33 @@ export function EaluminateResultsPanel({
                     }
                   })();
                   const isExpanded = expandedLinkIndex === String(i);
+                  const isSelected = selectedUrls.has(item.url);
                   return (
                     <div
                       key={item.url}
                       onClick={() =>
-                        setExpandedLinkIndex(isExpanded ? null : String(i))
+                        selectionMode
+                          ? toggleSelect(item.url)
+                          : setExpandedLinkIndex(isExpanded ? null : String(i))
                       }
                       style={{
                         display: "flex",
                         borderRadius: "0.875rem",
                         overflow: "hidden",
-                        background: "#fff",
-                        border: "1px solid #e2e8f0",
+                        background: isSelected ? "#f5f8ff" : "#fff",
+                        border: `1px solid ${isSelected ? "#4479DA" : "#e2e8f0"}`,
                         cursor: "pointer",
                         transition: "border-color 0.15s ease",
                       }}
                       onMouseEnter={(e) =>
-                        (e.currentTarget.style.borderColor = "#b6c4d4")
+                        (e.currentTarget.style.borderColor = isSelected
+                          ? "#4479DA"
+                          : "#b6c4d4")
                       }
                       onMouseLeave={(e) =>
-                        (e.currentTarget.style.borderColor = "#e2e8f0")
+                        (e.currentTarget.style.borderColor = isSelected
+                          ? "#4479DA"
+                          : "#e2e8f0")
                       }
                     >
                       <div
@@ -1314,6 +1468,27 @@ export function EaluminateResultsPanel({
                           backgroundColor: risk.color,
                         }}
                       />
+                      {selectionMode && (
+                        <div
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            paddingLeft: "0.875rem",
+                          }}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            readOnly
+                            style={{
+                              width: 16,
+                              height: 16,
+                              accentColor: "#4479DA",
+                              pointerEvents: "none",
+                            }}
+                          />
+                        </div>
+                      )}
                       <div
                         style={{
                           flex: 1,
@@ -1384,6 +1559,49 @@ export function EaluminateResultsPanel({
                                 <line x1="10" y1="14" x2="21" y2="3" />
                               </svg>
                             </a>
+                            {!selectionMode && (
+                            <>
+                            <button
+                              type="button"
+                              title="Delete link"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setConfirmDelete([item]);
+                              }}
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                background: "none",
+                                border: "none",
+                                padding: 0,
+                                cursor: "pointer",
+                                color: "#94a3b8",
+                                lineHeight: 1,
+                                transition: "color 0.15s ease",
+                              }}
+                              onMouseEnter={(e) =>
+                                (e.currentTarget.style.color = "#ef4444")
+                              }
+                              onMouseLeave={(e) =>
+                                (e.currentTarget.style.color = "#94a3b8")
+                              }
+                            >
+                              <svg
+                                width="12"
+                                height="12"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="2.5"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              >
+                                <polyline points="3 6 5 6 21 6" />
+                                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                                <line x1="10" y1="11" x2="10" y2="17" />
+                                <line x1="14" y1="11" x2="14" y2="17" />
+                              </svg>
+                            </button>
                             <svg
                               width="12"
                               height="12"
@@ -1403,6 +1621,8 @@ export function EaluminateResultsPanel({
                             >
                               <path d="M6 9l6 6 6-6" />
                             </svg>
+                            </>
+                            )}
                           </div>
                         </div>
 
@@ -1559,7 +1779,473 @@ export function EaluminateResultsPanel({
                 })}
             </div>
           )}
+
+          {/* Trash — soft-deleted links, restorable */}
+          {trashedLinks.length > 0 && (
+            <div
+              style={{
+                margin: "0 1.75rem 1.75rem",
+                borderRadius: "0.875rem",
+                border: "1px solid #e2e8f0",
+                background: "#f8fafc",
+                overflow: "hidden",
+              }}
+            >
+              <div
+                onClick={() => setTrashOpen((o) => !o)}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: "0.75rem",
+                  padding: "0.75rem 0.875rem",
+                  cursor: "pointer",
+                  userSelect: "none",
+                }}
+              >
+                <span
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "0.5rem",
+                    color: "#64748b",
+                    fontSize: "0.8125rem",
+                    fontWeight: 600,
+                  }}
+                >
+                  <svg
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <polyline points="3 6 5 6 21 6" />
+                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                  </svg>
+                  Trash ({trashedLinks.length})
+                  <svg
+                    width="13"
+                    height="13"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    style={{
+                      color: "#cbd5e1",
+                      transform: trashOpen ? "rotate(180deg)" : "rotate(0deg)",
+                      transition: "transform 0.2s ease",
+                    }}
+                  >
+                    <path d="M6 9l6 6 6-6" />
+                  </svg>
+                </span>
+                {trashOpen && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onRestoreAll();
+                    }}
+                    style={{
+                      background: "none",
+                      border: "1px solid #d1d9e0",
+                      borderRadius: "999px",
+                      padding: "0.3rem 0.75rem",
+                      cursor: "pointer",
+                      color: "#475569",
+                      fontSize: "0.75rem",
+                      fontWeight: 600,
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    Restore all
+                  </button>
+                )}
+              </div>
+
+              {trashOpen && (
+                <div
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "0.5rem",
+                    padding: "0 0.875rem 0.875rem",
+                  }}
+                >
+                  {[...trashedLinks]
+                    .sort((a, b) =>
+                      (b.deletedAt ?? "").localeCompare(a.deletedAt ?? ""),
+                    )
+                    .map((item) => {
+                      const domain = (() => {
+                        try {
+                          return new URL(item.url).hostname.replace("www.", "");
+                        } catch {
+                          return item.source ?? "";
+                        }
+                      })();
+                      return (
+                        <div
+                          key={item.url}
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "0.625rem",
+                            padding: "0.625rem 0.75rem",
+                            borderRadius: "0.625rem",
+                            background: "#fff",
+                            border: "1px solid #e2e8f0",
+                          }}
+                        >
+                          <span style={{ minWidth: 0, flex: 1 }}>
+                            <span
+                              style={{
+                                display: "block",
+                                fontSize: "0.8125rem",
+                                fontWeight: 600,
+                                color: "#64748b",
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                                whiteSpace: "nowrap",
+                              }}
+                            >
+                              {item.title}
+                            </span>
+                            <span
+                              style={{
+                                display: "block",
+                                fontSize: "0.6875rem",
+                                color: "#94a3b8",
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                                whiteSpace: "nowrap",
+                              }}
+                            >
+                              {domain}
+                            </span>
+                          </span>
+                          <a
+                            href={item.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            title="Open link in new tab"
+                            style={{
+                              display: "flex",
+                              color: "#94a3b8",
+                              flexShrink: 0,
+                            }}
+                          >
+                            <svg
+                              width="13"
+                              height="13"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="2.5"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            >
+                              <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                              <polyline points="15 3 21 3 21 9" />
+                              <line x1="10" y1="14" x2="21" y2="3" />
+                            </svg>
+                          </a>
+                          <button
+                            type="button"
+                            onClick={() => onRestoreLink(item)}
+                            title="Restore link"
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "0.3rem",
+                              background: "none",
+                              border: "1px solid #d1d9e0",
+                              borderRadius: "999px",
+                              padding: "0.25rem 0.625rem",
+                              cursor: "pointer",
+                              color: "#4479DA",
+                              fontSize: "0.7rem",
+                              fontWeight: 600,
+                              flexShrink: 0,
+                            }}
+                          >
+                            <svg
+                              width="12"
+                              height="12"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="2.5"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            >
+                              <path d="M3 7v6h6" />
+                              <path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13" />
+                            </svg>
+                            Restore
+                          </button>
+                        </div>
+                      );
+                    })}
+                </div>
+              )}
+            </div>
+          )}
         </div>
+      )}
+
+      {/* Selection action bar — portaled so it floats above page content */}
+      {selectionMode &&
+        createPortal(
+          <div
+            style={{
+              position: "fixed",
+              bottom: "1.5rem",
+              left: "50%",
+              transform: "translateX(-50%)",
+              zIndex: 9998,
+              display: "flex",
+              alignItems: "center",
+              gap: "0.75rem",
+              background: "#ffffff",
+              border: "1px solid #e2e8f0",
+              borderRadius: "999px",
+              boxShadow: "0 12px 32px rgba(15,23,42,0.18)",
+              padding: "0.5rem 0.6rem 0.5rem 1.1rem",
+            }}
+          >
+            <span
+              style={{
+                fontSize: "0.8125rem",
+                fontWeight: 600,
+                color: "#475569",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {selectedUrls.size} selected
+            </span>
+            <button
+              type="button"
+              onClick={toggleSelectAll}
+              style={{
+                background: "none",
+                border: "none",
+                padding: "0.3rem 0.4rem",
+                cursor: "pointer",
+                color: "#4479DA",
+                fontSize: "0.8125rem",
+                fontWeight: 600,
+                whiteSpace: "nowrap",
+              }}
+            >
+              {allSelected ? "Clear" : "Select all"}
+            </button>
+            <button
+              type="button"
+              disabled={selectedUrls.size === 0}
+              onClick={() =>
+                selectedUrls.size > 0 && onExportXlsx(selectedLinks)
+              }
+              title="Export selected links to XLSX"
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "0.4rem",
+                padding: "0.45rem 0.85rem",
+                borderRadius: "999px",
+                border: "1px solid #e2e8f0",
+                background: "#ffffff",
+                color: selectedUrls.size === 0 ? "#cbd5e1" : "#475569",
+                fontSize: "0.8125rem",
+                fontWeight: 600,
+                cursor: selectedUrls.size === 0 ? "not-allowed" : "pointer",
+                whiteSpace: "nowrap",
+              }}
+            >
+              <svg
+                width="13"
+                height="13"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <rect x="3" y="3" width="18" height="18" rx="2" />
+                <line x1="3" y1="9" x2="21" y2="9" />
+                <line x1="3" y1="15" x2="21" y2="15" />
+                <line x1="9" y1="3" x2="9" y2="21" />
+                <line x1="15" y1="3" x2="15" y2="21" />
+              </svg>
+              Export XLSX
+            </button>
+            <button
+              type="button"
+              onClick={exitSelection}
+              style={{
+                padding: "0.45rem 1rem",
+                borderRadius: "999px",
+                border: "1px solid #e2e8f0",
+                background: "transparent",
+                color: "#64748b",
+                fontSize: "0.8125rem",
+                fontWeight: 600,
+                cursor: "pointer",
+                whiteSpace: "nowrap",
+              }}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              disabled={selectedUrls.size === 0}
+              onClick={() =>
+                selectedUrls.size > 0 && setConfirmDelete(selectedLinks)
+              }
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "0.4rem",
+                padding: "0.45rem 1.1rem",
+                borderRadius: "999px",
+                border: "none",
+                background: selectedUrls.size === 0 ? "#fca5a5" : "#ef4444",
+                color: "#ffffff",
+                fontSize: "0.8125rem",
+                fontWeight: 600,
+                cursor: selectedUrls.size === 0 ? "not-allowed" : "pointer",
+                whiteSpace: "nowrap",
+              }}
+            >
+              <svg
+                width="13"
+                height="13"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <polyline points="3 6 5 6 21 6" />
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+              </svg>
+              Delete{selectedUrls.size > 0 ? ` (${selectedUrls.size})` : ""}
+            </button>
+          </div>,
+          document.body,
+        )}
+
+      {/* Soft-delete confirmation — portaled to body so position:fixed escapes
+          any transformed ancestor and covers the full viewport */}
+      {confirmDelete &&
+        createPortal(
+        <div
+          onClick={() => setConfirmDelete(null)}
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 9999,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            background: "rgba(15,23,42,0.55)",
+            backdropFilter: "blur(4px)",
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: "#ffffff",
+              borderRadius: "1rem",
+              boxShadow:
+                "0 20px 60px rgba(0,0,0,0.18), 0 4px 16px rgba(0,0,0,0.08)",
+              width: "100%",
+              maxWidth: "min(92vw, 420px)",
+              margin: "1rem",
+              padding: "1.5rem",
+            }}
+          >
+            <p
+              style={{
+                fontSize: "0.9375rem",
+                fontWeight: 700,
+                color: "#1e293b",
+                margin: 0,
+              }}
+            >
+              {confirmDelete.length === 1
+                ? "Delete this link?"
+                : `Delete ${confirmDelete.length} links?`}
+            </p>
+            <p
+              style={{
+                fontSize: "0.8125rem",
+                color: "#64748b",
+                margin: "0.5rem 0 0",
+                lineHeight: 1.5,
+              }}
+            >
+              {confirmDelete.length === 1
+                ? `“${confirmDelete[0].title}” will move to the Trash. You can restore it anytime.`
+                : `${confirmDelete.length} links will move to the Trash. You can restore them anytime.`}
+            </p>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "flex-end",
+                gap: "0.625rem",
+                marginTop: "1.25rem",
+              }}
+            >
+              <button
+                type="button"
+                onClick={() => setConfirmDelete(null)}
+                style={{
+                  padding: "0.45rem 1rem",
+                  borderRadius: "999px",
+                  border: "1px solid #e2e8f0",
+                  background: "transparent",
+                  color: "#64748b",
+                  fontSize: "0.8125rem",
+                  fontWeight: 600,
+                  cursor: "pointer",
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (confirmDelete.length === 1) onDeleteLink(confirmDelete[0]);
+                  else onDeleteLinks(confirmDelete);
+                  if (selectionMode) exitSelection();
+                  setConfirmDelete(null);
+                }}
+                style={{
+                  padding: "0.45rem 1.1rem",
+                  borderRadius: "999px",
+                  border: "none",
+                  background: "#ef4444",
+                  color: "#ffffff",
+                  fontSize: "0.8125rem",
+                  fontWeight: 600,
+                  cursor: "pointer",
+                }}
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body,
       )}
     </div>
   );

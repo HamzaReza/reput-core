@@ -34,6 +34,35 @@ def create_access_token(subject: str, expires_delta: timedelta | None = None) ->
     return jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_algorithm)
 
 
+def create_refresh_token(subject: str, expires_delta: timedelta | None = None) -> str:
+    expire = datetime.now(timezone.utc) + (
+        expires_delta or timedelta(minutes=settings.refresh_token_expire_minutes)
+    )
+    payload = {"sub": subject, "exp": expire, "type": "refresh"}
+    return jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_algorithm)
+
+
+def decode_refresh_token(token: str) -> str:
+    """Validate a refresh token and return its subject (the principal's id).
+
+    Raises 401 if the token is invalid/expired, lacks a subject, or is not a
+    refresh token — the ``type`` claim stops an access token being replayed here.
+    """
+    credentials_exc = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate refresh token",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    try:
+        payload = jwt.decode(token, settings.jwt_secret, algorithms=[settings.jwt_algorithm])
+    except JWTError:
+        raise credentials_exc
+    subject: str | None = payload.get("sub")
+    if subject is None or payload.get("type") != "refresh":
+        raise credentials_exc
+    return subject
+
+
 async def get_current_user(
     token: str = Depends(oauth2_scheme),
     db: AsyncSession = Depends(get_db),

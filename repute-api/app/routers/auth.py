@@ -8,12 +8,22 @@ from app.database import get_db
 from app.models.user import User, UserProfile
 from app.models.lead import WebAnalyst
 from app.schemas.user import UserCreate, UserOut, UserWithToken
-from app.utils.auth import create_access_token, hash_password, verify_password, get_current_user
+from app.utils.auth import (
+    create_access_token,
+    create_refresh_token,
+    decode_refresh_token,
+    hash_password,
+    verify_password,
+    get_current_user,
+)
 from pydantic import BaseModel as _BaseModel
 
 class WebAnalystLoginPayload(_BaseModel):
     email: str
     password: str
+
+class RefreshTokenPayload(_BaseModel):
+    refresh_token: str
 
 class WebAnalystRegisterPayload(_BaseModel):
     name: str | None = None
@@ -97,10 +107,33 @@ async def login_web_analyst(payload: WebAnalystLoginPayload, db: AsyncSession = 
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Your account has been temporarily blocked. Please contact an administrator.",
         )
-    token = create_access_token(str(wa.id))
     return {
-        "access_token": token,
+        "access_token": create_access_token(str(wa.id)),
+        "refresh_token": create_refresh_token(str(wa.id)),
         "web_analyst": {"id": str(wa.id), "name": wa.name, "email": wa.email, "role": wa.role},
+    }
+
+
+@router.post("/refresh-web-analyst")
+async def refresh_web_analyst(payload: RefreshTokenPayload, db: AsyncSession = Depends(get_db)):
+    wa_id = decode_refresh_token(payload.refresh_token)
+    result = await db.execute(select(WebAnalyst).where(WebAnalyst.id == wa_id))
+    wa = result.scalar_one_or_none()
+    if wa is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Could not validate refresh token",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    if wa.is_blocked:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Your account has been temporarily blocked. Please contact an administrator.",
+        )
+    # Rotate the refresh token too so active sessions slide forward indefinitely.
+    return {
+        "access_token": create_access_token(str(wa.id)),
+        "refresh_token": create_refresh_token(str(wa.id)),
     }
 
 

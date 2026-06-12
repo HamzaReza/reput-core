@@ -405,6 +405,30 @@ def _strip_diacritics(s: str) -> str:
     )
 
 
+def _normalize_name_tokens(s: str) -> list[str]:
+    return re.findall(r"[a-z0-9]+", _strip_diacritics(s))
+
+
+def _has_token_sequence(tokens: list[str], sequence: list[str]) -> bool:
+    if not tokens or not sequence or len(sequence) > len(tokens):
+        return False
+    return any(
+        tokens[i : i + len(sequence)] == sequence
+        for i in range(len(tokens) - len(sequence) + 1)
+    )
+
+
+def _token_matches_name_part(token: str, expected_parts: list[str]) -> bool:
+    for part in expected_parts:
+        if token == part:
+            return True
+        if len(token) == 1 and part.startswith(token):
+            return True
+        if len(part) == 1 and token.startswith(part):
+            return True
+    return False
+
+
 _NAME_PARTICLES = {
     "the",
     "and",
@@ -426,7 +450,7 @@ _NAME_PARTICLES = {
 }
 
 
-def _passes_name_filter(article: dict, first_name: str, last_name: str) -> bool:
+def _passes_name_filter_legacy(article: dict, first_name: str, last_name: str) -> bool:
     raw = " ".join(
         [
             article.get("title", ""),
@@ -466,6 +490,146 @@ def _passes_name_filter(article: dict, first_name: str, last_name: str) -> bool:
             return False
 
     return True
+
+
+def _passes_name_filter(article: dict, first_name: str, last_name: str) -> bool:
+    raw = " ".join(
+        [
+            article.get("title", ""),
+            article.get("snippet", ""),
+            article.get("content", ""),
+        ]
+    )
+    text_tokens = _normalize_name_tokens(raw)
+    first_tokens = _normalize_name_tokens(first_name)
+    last_tokens = _normalize_name_tokens(last_name)
+    if not text_tokens or not first_tokens or not last_tokens:
+        return True
+
+    full_name_tokens = first_tokens + last_tokens
+    if _has_token_sequence(text_tokens, full_name_tokens):
+        return True
+
+    surname_first_tokens = [last_tokens[-1], *first_tokens, *last_tokens[:-1]]
+    if _has_token_sequence(text_tokens, surname_first_tokens):
+        return True
+
+    headline_tokens = _normalize_name_tokens(
+        " ".join([article.get("title", ""), article.get("snippet", "")])
+    )
+    last_word = last_tokens[-1]
+    expected_leading_parts = first_tokens + last_tokens[:-1]
+    # Recall guard: drop on a surname-adjacency mismatch only when none of the
+    # subject's given names (first + middle) appear anywhere — otherwise it's
+    # plausibly them (e.g. a middle name the query omitted), so keep.
+    subject_given_present = bool(set(expected_leading_parts) & set(text_tokens))
+    for idx, token in enumerate(headline_tokens):
+        if token != last_word or idx == 0:
+            continue
+        found = headline_tokens[idx - 1]
+        if len(found) <= 2 or found in _NAME_PARTICLES:
+            continue
+        if not _token_matches_name_part(found, expected_leading_parts):
+            if subject_given_present:
+                continue
+            return False
+
+    return True
+
+
+# --- Company-subject matching -------------------------------------------------
+# Trailing legal-form suffixes, stripped before a company name becomes a search
+# query. Applied repeatedly so stacked forms (e.g. "...Ltd SAC") all come off.
+_COMPANY_SUFFIX_RE = re.compile(
+    r",?\s*\b("
+    r"LLC|L\.L\.C|Inc|Corp|Corporation|Ltd|Limited|Co|LLP|LP|PLC|GmbH|"
+    r"S\.A\.?|S\.L\.?|SAC|S\.A\.C|SAS|S\.A\.S|SRL|S\.R\.L|SARL|"
+    r"BV|AG|NV|Pte|Pty|Sdn|Bhd"
+    r")\.?\s*$",
+    re.IGNORECASE,
+)
+
+# Legal-form and ultra-generic descriptor words that must never be *required*
+# when matching company articles: short Serper snippets routinely omit them, so
+# demanding every one of them dropped almost all genuinely relevant results.
+_COMPANY_STOPWORDS = {
+    "llc", "inc", "corp", "corporation", "ltd", "limited", "co", "llp", "lp",
+    "plc", "gmbh", "sac", "sas", "srl", "sarl", "spa", "bv", "ag", "nv",
+    "pte", "pty", "sdn", "bhd", "holding", "holdings", "group", "groupe",
+    "grupo", "company", "fund", "funds", "capital", "partners", "partner",
+    "management", "ventures", "venture", "global", "international", "advisors",
+    "advisers", "asset", "assets", "investment", "investments", "trust",
+    "associates", "consulting", "consultancy", "enterprises", "enterprise",
+    "services", "solutions",
+}
+
+
+def _strip_company_suffixes(name: str) -> str:
+    out = name.strip()
+    prev = ""
+    while out and out != prev:
+        prev = out
+        out = _COMPANY_SUFFIX_RE.sub("", out).strip()
+    return out
+
+
+def _company_match_tokens(search_subject: str) -> list[str]:
+    return [t for t in _normalize_name_tokens(search_subject) if len(t) > 2]
+
+
+def _company_name_phrases(search_subject: str) -> list[str]:
+    tokens = _company_match_tokens(search_subject)
+    n = len(tokens)
+    if n == 0:
+        return []
+    if n == 1:
+        return tokens
+    # All contiguous subsequences of length >= 2, longest first.
+    phrases: list[str] = []
+    for length in range(n, 1, -1):
+        for start in range(n - length + 1):
+            phrases.append(" ".join(tokens[start : start + length]))
+    return phrases
+
+
+def _company_abbreviations(name: str) -> list[str]:
+    """Return candidate abbreviations to use as fallback matches in the company filter.
+
+    Two patterns:
+    - Short tokens (2–4 chars) already in the name are likely pre-existing abbreviations
+      (e.g. "bsf" in "BSF Enterprise" — press writes "BSF" alone).
+    - First-letter acronym of all tokens, if it comes out 3–6 chars
+      (e.g. "bmg" for "Blackstone Mercantile Group").
+    """
+    tokens = re.findall(r"[a-z0-9]+", _strip_diacritics(name))
+    candidates: list[str] = []
+    for t in tokens:
+        if 2 <= len(t) <= 4 and t not in _COMPANY_STOPWORDS:
+            candidates.append(t)
+    acronym = "".join(t[0] for t in tokens if t)
+    if 3 <= len(acronym) <= 6 and acronym not in candidates:
+        candidates.append(acronym)
+    return candidates
+
+
+def _passes_company_filter(
+    article: dict,
+    search_subject: str,
+    abbreviations: list[str] | None = None,
+) -> bool:
+    phrases = _company_name_phrases(search_subject)
+    if not phrases:
+        return True
+    hay = _strip_diacritics(
+        " ".join([article.get("title", ""), article.get("snippet", "")])
+    )
+    if any(phrase in hay for phrase in phrases):
+        return True
+    if abbreviations:
+        for abbr in abbreviations:
+            if re.search(rf"\b{re.escape(abbr)}\b", hay):
+                return True
+    return False
 
 
 def _derive_score(neg_count: int, pos_count: int) -> int:
@@ -1160,19 +1324,21 @@ async def _execute_generate_lead(
             if all(len(p.rstrip(".")) == 1 for p in _middle):
                 _search_subject = f"{_sname_parts[0]} {_sname_parts[-1]}"
         elif body.subjectType == "company":
-            _COMPANY_SUFFIXES = re.compile(
-                r",?\s*\b(LLC|Inc|Corp|Ltd|Co|LLP|LP|PLC|GmbH|S\.A\.?|S\.L\.?|BV|AG|NV)\.?\s*$",
-                re.IGNORECASE,
-            )
-            _search_subject = _COMPANY_SUFFIXES.sub("", _search_subject).strip()
-        quoted_subject = (
-            f'"{_search_subject}"'
-            if body.subjectType != "company"
-            else _search_subject
+            _search_subject = _strip_company_suffixes(_search_subject)
+        # Companies run quoted+unquoted variants: quoted surfaces exact entity, unquoted keeps broad recall.
+        # Company prefilter drops namesake noise; query_keywords tracks source keyword for attribution.
+        _subject_variants = (
+            [f'"{_search_subject}"', _search_subject]
+            if body.subjectType == "company"
+            else [f'"{_search_subject}"']
         )
-        search_queries = [quoted_subject]
+        search_queries = list(_subject_variants)
+        query_keywords: list[str | None] = [None] * len(_subject_variants)
         if body.useKeywords:
-            search_queries += [f"{quoted_subject} {kw}" for kw in body.keywords]
+            for kw in body.keywords:
+                for variant in _subject_variants:
+                    search_queries.append(f"{variant} {kw}")
+                    query_keywords.append(kw)
 
         country_configs = [
             {
@@ -1215,9 +1381,8 @@ async def _execute_generate_lead(
             "queries": [
                 {
                     "keyword": (
-                        body.keywords[(i // _num_countries) - 1]
-                        if body.useKeywords
-                        and 1 <= (i // _num_countries) <= len(body.keywords)
+                        query_keywords[i // _num_countries]
+                        if i // _num_countries < len(query_keywords)
                         else None
                     ),
                     "query": all_searches[i]["q"],
@@ -1248,12 +1413,7 @@ async def _execute_generate_lead(
         for kw_idx, results in enumerate(all_organic):
             country_idx = kw_idx % num_countries
             query_idx = kw_idx // num_countries
-            kw_keyword_idx = query_idx - 1
-            kw = (
-                body.keywords[kw_keyword_idx]
-                if body.useKeywords and 0 <= kw_keyword_idx < len(body.keywords)
-                else None
-            )
+            kw = query_keywords[query_idx] if query_idx < len(query_keywords) else None
             for r in results:
                 url = r.get("link", "")
                 if not url:
@@ -1280,6 +1440,16 @@ async def _execute_generate_lead(
         scan_log["serper"]["deduped"] = {
             "count": len(articles),
             "links": [a["url"] for a in articles],
+            # Per-link title+snippet for the scan-log UI; deduped is the full
+            # unique set every later list (firecrawl, claude, dropped) draws from.
+            "articles": [
+                {
+                    "url": a["url"],
+                    "title": a.get("title", ""),
+                    "snippet": a.get("snippet", ""),
+                }
+                for a in articles
+            ],
         }
 
         # Track everything removed between dedupe and the scrape phase so
@@ -1288,24 +1458,40 @@ async def _execute_generate_lead(
 
         _name_parts = sanitized_subject.split()
         if body.subjectType == "company":
-            _company_words = [
-                w
-                for w in re.findall(r"[a-z0-9]+", _strip_diacritics(_search_subject))
-                if len(w) > 2
-            ]
+            _company_words = _company_match_tokens(_search_subject)
+            _abbreviations = _company_abbreviations(_search_subject)
             if _company_words:
                 _pf_kept: list[dict] = []
+                _company_dropped: list[dict] = []
                 for a in articles:
-                    if all(
-                        w in _strip_diacritics(a["title"] + " " + a["snippet"])
-                        for w in _company_words
-                    ):
+                    if _passes_company_filter(a, _search_subject, _abbreviations):
                         _pf_kept.append(a)
                     else:
+                        _company_dropped.append(a)
                         _prefilter_dropped.append(
                             {"url": a["url"], "reason": "company_words_missing"}
                         )
                 articles = _pf_kept
+                # Dedicated company-name-filter trace (the company analogue of
+                # nameFilter). Runs pre-scrape, so dropped items carry only the
+                # Serper title+snippet, never scraped content.
+                scan_log["companyNameFilter"] = {
+                    "searchSubject": _search_subject,
+                    "matchTokens": _company_words,
+                    "abbreviations": _abbreviations,
+                    "keptCount": len(_pf_kept),
+                    "dropped": {
+                        "count": len(_company_dropped),
+                        "articles": [
+                            {
+                                "url": a["url"],
+                                "title": a.get("title", ""),
+                                "snippet": a.get("snippet", ""),
+                            }
+                            for a in _company_dropped
+                        ],
+                    },
+                }
         else:
             _fn = _strip_diacritics(_name_parts[0]) if _name_parts else ""
             _ln = _strip_diacritics(_name_parts[-1]) if len(_name_parts) > 1 else ""
@@ -1426,6 +1612,14 @@ async def _execute_generate_lead(
             _nf_first = (body.firstName or "").strip()
             _middle = (body.middleName or "").strip()
             _last_only = (body.lastName or "").strip()
+            # Fallback: derive names from the subject string when the structured
+            # firstName/lastName fields are not provided by the caller.
+            if not (_nf_first and _last_only):
+                _parts = sanitized_subject.split()
+                if len(_parts) > 1:
+                    _nf_first = _parts[0]
+                    _last_only = " ".join(_parts[1:])
+                    _middle = ""
             _nf_last_full = f"{_middle} {_last_only}".strip() if _middle else _last_only
             _nf_last = _nf_last_full
             if _nf_first and _last_only:
@@ -1597,10 +1791,9 @@ async def _execute_generate_lead(
         "_serper": [
             {
                 "keyword": (
-                    body.keywords[kw_idx - 1]
-                    if body.useKeywords
-                    and kw_idx >= 1
-                    and kw_idx - 1 < len(body.keywords)
+                    query_keywords[kw_idx]
+                    if kw_idx < len(query_keywords)
+                    and query_keywords[kw_idx] is not None
                     else all_searches[i]["q"]
                 ),
                 "country": (
