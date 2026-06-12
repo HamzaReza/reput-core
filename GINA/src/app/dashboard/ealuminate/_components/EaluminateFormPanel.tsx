@@ -9,7 +9,7 @@ import type {
 } from "react";
 import { useState } from "react";
 import MultiSelectPicker, { SingleSelectPicker } from "./MultiSelectPicker";
-import type { KeywordFocus, PreAnalysisProfile } from "./types";
+import type { KeywordFocus, PreAnalysisProfile, ScanTier } from "./types";
 
 interface KeywordsEditorProps {
   keywords: string[];
@@ -116,8 +116,8 @@ interface EaluminateFormPanelProps {
   scanFocus: KeywordFocus;
   setScanFocus: (value: KeywordFocus) => void;
   pipeline: ReactNode;
-  scanTier: "standard" | "advanced";
-  setScanTier: (value: "standard" | "advanced") => void;
+  scanTier: ScanTier;
+  setScanTier: (value: ScanTier) => void;
   keywordLength: null | 1 | 2 | 3;
   setKeywordLength: (value: null | 1 | 2 | 3) => void;
   keywordLengthOptions: readonly { value: null | 1 | 2 | 3; label: string }[];
@@ -874,7 +874,7 @@ export function EaluminateFormPanel(props: EaluminateFormPanelProps) {
                 <div
                   style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}
                 >
-                  {(["standard", "advanced"] as const).map((tier) => (
+                  {(["basic", "standard", "advanced"] as const).map((tier) => (
                     <button
                       key={tier}
                       type="button"
@@ -886,7 +886,21 @@ export function EaluminateFormPanel(props: EaluminateFormPanelProps) {
                         gap: "0.375rem",
                       }}
                     >
-                      {tier === "standard" ? (
+                      {tier === "basic" ? (
+                        <svg
+                          width="13"
+                          height="13"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        >
+                          <circle cx="12" cy="12" r="5" />
+                          <path d="M12 9v6M9 12h6" />
+                        </svg>
+                      ) : tier === "standard" ? (
                         <svg
                           width="13"
                           height="13"
@@ -914,7 +928,11 @@ export function EaluminateFormPanel(props: EaluminateFormPanelProps) {
                           <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
                         </svg>
                       )}
-                      {tier === "standard" ? "Standard" : "Advanced"}
+                      {tier === "basic"
+                        ? "Basic"
+                        : tier === "standard"
+                          ? "Standard"
+                          : "Advanced"}
                     </button>
                   ))}
                 </div>
@@ -925,7 +943,8 @@ export function EaluminateFormPanel(props: EaluminateFormPanelProps) {
                     color: "#94a3b8",
                   }}
                 >
-                  Advanced enables deeper scanning and classification.
+                  Basic is lighter, Standard uses GPT-5 mini, and Advanced runs
+                  the deepest scan.
                 </p>
               </div>
 

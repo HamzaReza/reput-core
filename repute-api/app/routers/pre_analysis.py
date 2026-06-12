@@ -10,6 +10,10 @@ from pydantic import BaseModel
 from app.config import get_settings
 from app.models.lead import WebAnalyst
 from app.utils.auth import get_current_web_analyst
+from app.utils.llm import (
+    resolve_pre_analysis_provider,
+    summarize_usage,
+)
 
 router = APIRouter(prefix="/pre-analysis", tags=["pre-analysis"])
 
@@ -248,10 +252,8 @@ class PreAnalysisRequest(BaseModel):
     keywordLength: int | None = None  # 1, 2, or 3 words; None = no constraint
     subjectType: Literal["individual", "company"] = "individual"
     reportLanguage: str | None = None
-    keywordLanguages: list[str] | None = (
-        None  # ISO codes; keywords generated per language
-    )
-    scanTier: Literal["standard", "advanced"] = "standard"
+    keywordLanguages: list[str] | None = None  # ISO codes; keywords generated per language
+    scanTier: Literal["basic", "standard", "advanced"] = "standard"
 
 
 @router.post("")
@@ -260,6 +262,8 @@ async def pre_analysis(
     _analyst: WebAnalyst = Depends(get_current_web_analyst),
 ) -> dict:
     settings = get_settings()
+    # Pre-analysis runs on Claude only: basic + standard → Haiku, advanced → Sonnet.
+    model = resolve_pre_analysis_provider(body.scanTier)
     if not settings.anthropic_api_key:
         raise HTTPException(status_code=500, detail="ANTHROPIC_API_KEY not configured")
 
@@ -280,11 +284,6 @@ async def pre_analysis(
             status_code=400, detail="company is required for company subjects."
         )
 
-    model = (
-        "claude-haiku-4-5-20251001"
-        if body.scanTier == "standard"
-        else "claude-sonnet-4-6"
-    )
     # web_search_tool = "web_search_20250305" if body.scanTier == "standard" else "web_search_20260209"
     web_search_tool = "web_search_20250305"
 
@@ -326,6 +325,7 @@ async def pre_analysis(
         "if a concept does not fit the preferred length in a language, use a natural phrase "
         "of up to 3 words instead of compressing it."
     )
+
     if body.keywordLength == 1:
         word_count_instruction = (
             "each keyword should be 1 word where possible." + no_underscore_instruction
@@ -339,7 +339,7 @@ async def pre_analysis(
             "each keyword should be 3 words where possible." + no_underscore_instruction
         )
     else:
-        word_count_instruction = "1-3 words each." + no_underscore_instruction
+        word_count_instruction = "1-3 words each."
 
     if kw_lang_names:
         keyword_count_clause = (
@@ -471,6 +471,8 @@ async def pre_analysis(
             f"[pre-analysis] starting parallel calls for: {subject_label!r} | countries={countries}"
         )
 
+        # Claude web_search caps at max_uses 12 (search) / 10 (neg) to bound the
+        # web_search_tool_result tokens pulled into context.
         search_result, neg_result = await asyncio.gather(
             client.messages.create(
                 model=model,
@@ -505,6 +507,8 @@ async def pre_analysis(
             else:
                 print(f"[pre-analysis] non-text block[{i}]: type={block.type!r}")
 
+        print(f"[pre-analysis] search usage — {summarize_usage(getattr(search_msg, 'usage', None))}")
+
         research_summary = "\n".join(
             block.text for block in search_msg.content if block.type == "text"
         ).strip()
@@ -534,6 +538,7 @@ async def pre_analysis(
             print(
                 f"[pre-analysis] neg estimation done — stop_reason={neg_msg.stop_reason!r}"
             )
+            print(f"[pre-analysis] neg usage — {summarize_usage(getattr(neg_msg, 'usage', None))}")
             neg_text = "\n".join(
                 block.text for block in neg_msg.content if block.type == "text"
             ).strip()
@@ -626,6 +631,8 @@ async def pre_analysis(
                 }
             ],
         )
+
+        print(f"[pre-analysis] format usage — {summarize_usage(getattr(format_msg, 'usage', None))}")
 
         text_block = next((b for b in format_msg.content if b.type == "text"), None)
         if text_block:

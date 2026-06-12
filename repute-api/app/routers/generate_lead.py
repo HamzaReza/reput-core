@@ -12,6 +12,7 @@ from urllib.parse import unquote, urlparse
 import anthropic
 import httpx
 from fastapi import APIRouter, Depends, HTTPException
+from openai import AsyncOpenAI
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -19,6 +20,14 @@ from app.config import get_settings
 from app.database import AsyncSessionLocal, get_db
 from app.models.lead import GenerateLeadJob, WebAnalyst
 from app.utils.auth import get_current_web_analyst
+from app.utils.llm import (
+    OPENAI_STANDARD_MODEL,
+    OPENAI_STANDARD_REASONING,
+    extract_openai_text,
+    is_transient_openai_error,
+    resolve_provider,
+    safe_error_message,
+)
 
 router = APIRouter(prefix="/generate-lead", tags=["generate-lead"])
 
@@ -663,7 +672,7 @@ def _is_youtube(url: str) -> bool:
     """
     Detect YouTube URLs. Scraping them returns no useful content (player chrome
     only, no transcript) and risks 5-credit stealth retries, so we skip Firecrawl
-    and let Claude classify them from the Serper title + snippet instead.
+    and let the LLM classify them from the Serper title + snippet instead.
     """
     try:
         host = urlparse(unquote(url)).netloc.lower()
@@ -841,8 +850,17 @@ async def _scrape_firecrawl(
         return None
 
 
-async def _classify_with_claude(
-    client: anthropic.AsyncAnthropic,
+def _parse_classification_items(text: str) -> list | None:
+    """Parse an LLM classification result. Accepts {"items": [...]} (preferred)
+    or a bare [...] array. Returns the list (possibly empty) or None if no
+    parseable JSON structure was found (caller decides how to handle None)."""
+    obj = _parse_json_object(text)
+    if obj is not None and isinstance(obj.get("items"), list):
+        return obj["items"]
+    return _parse_json_array(text)
+
+
+def _build_classification_prompt(
     articles: list[dict],
     name: str,
     countries: list[str],
@@ -850,24 +868,18 @@ async def _classify_with_claude(
     subject_type: str,
     language_name: str,
     scan_focus: str | None,
-    model: str = "claude-haiku-4-5-20251001",
     background: str | None = None,
     pre_analysis_profile: dict | None = None,
-) -> list[dict]:
-    if not articles:
-        return []
-
+) -> str:
+    """Shared classification prompt for BOTH providers (Claude's rich content,
+    output as a {"items": [...]} object). Optional subject context + homonym
+    disambiguation from the pre-analysis profile / analyst background."""
     article_list = "\n\n---\n\n".join(
         f"[{i+1}] URL: {a['url']}\nTitle: {a['title']}\nSnippet: {a['snippet']}\nContent: {a['content']}"
         for i, a in enumerate(articles)
     )
-
-    name_parts = name.split()
-    first_name = name_parts[0] if name_parts else name
-    last_name = " ".join(name_parts[1:])
     countries_label = ", ".join(countries)
     keyword_list = ", ".join(keywords) if keywords else "general reputation"
-
     country_line = ""
     if countries:
         country_line = (
@@ -910,8 +922,6 @@ async def _classify_with_claude(
         else ""
     )
 
-    name_filter = ""
-
     scan_focus_rules: dict[str, str] = {
         "negative": "\nSCAN FOCUS: Return ONLY articles with NEGATIVE sentiment or HIGH/MEDIUM risk. Exclude all positive and neutral articles from the output entirely.\n",
         "positive": "\nSCAN FOCUS: Return ONLY articles with POSITIVE sentiment. Exclude all negative and neutral articles from the output entirely.\n",
@@ -923,7 +933,7 @@ async def _classify_with_claude(
         else ""
     )
 
-    prompt = (
+    return (
         f'You are a reputation intelligence analyst. Classify the following {len(articles)} articles about "{name}".\n\n'
         f"{country_line}\n{subject_context_block}{homonym_rule}Search context keywords used: {keyword_list}\n{scan_focus_rule}\n"
         f"CLASSIFICATION RULES:\n\nNEGATIVE sentiment — classify if the article contains ANY of:\n"
@@ -947,15 +957,38 @@ async def _classify_with_claude(
         f'- "medium": accidents, controversies, allegations, complaints\n'
         f'- "low": minor criticism or weak negative mentions\n'
         f'- "none": positive or neutral content\n\n'
-        f"{name_filter}\n\nARTICLES TO CLASSIFY:\n{article_list}\n\n"
-        f"Return a JSON array only — no explanation, no markdown code fences. Each element must have:\n"
+        f"ARTICLES TO CLASSIFY:\n{article_list}\n\n"
+        f'Return a JSON object with an "items" array — no explanation, no markdown code fences. '
+        f"Each item must have:\n"
         f'{{\n  "url": "...",\n  "title": "...",\n'
         f'  "snippet": "3 sentence explanation of the reputational significance of this article, written in your own words based on the title and content — not copied from the source. Write the snippet in {language_name}.",\n'
         f'  "sentiment": "negative" | "positive" | "neutral",\n'
         f'  "risk": "high" | "medium" | "low" | "none",\n'
         f'  "source": "domain.com",\n'
         f'  "type": "criminal" | "legal" | "news" | "complaint" | "regulatory" | "social" | "award" | "achievement" | "profile" | "wiki" | "directory"\n'
-        f"}}\n\nReturn ONLY the JSON array. If no valid articles, return []."
+        f'}}\n\nReturn ONLY the JSON object with the "items" array. If no valid articles, return {{"items": []}}.'
+    )
+
+
+async def _classify_with_claude(
+    client: anthropic.AsyncAnthropic,
+    articles: list[dict],
+    name: str,
+    countries: list[str],
+    keywords: list[str],
+    subject_type: str,
+    language_name: str,
+    scan_focus: str | None,
+    model: str = "claude-haiku-4-5-20251001",
+    background: str | None = None,
+    pre_analysis_profile: dict | None = None,
+) -> list[dict]:
+    if not articles:
+        return []
+
+    prompt = _build_classification_prompt(
+        articles, name, countries, keywords, subject_type, language_name, scan_focus,
+        background=background, pre_analysis_profile=pre_analysis_profile,
     )
 
     async with client.messages.stream(
@@ -966,18 +999,76 @@ async def _classify_with_claude(
         response = await stream.get_final_message()
 
     if response.stop_reason == "max_tokens":
-        print("[classify] Claude hit max_tokens — JSON may be truncated")
+        print("[classify] Anthropic hit max_tokens; JSON may be truncated")
 
     text_block = next((b for b in response.content if b.type == "text"), None)
     if not text_block:
         return []
-    json_match = re.search(r"\[[\s\S]*\]", text_block.text.strip())
-    if not json_match:
-        return []
-    try:
-        return json.loads(json_match.group())
-    except Exception:
-        return []
+    return _parse_classification_items(text_block.text) or []
+
+
+def _build_meeting_summary_prompt(
+    name: str,
+    score: int,
+    links: list[dict],
+    language_name: str,
+) -> tuple[str, str]:
+    """Shared meeting-summary prompt (Claude's rich version) for both providers.
+    Returns (system_prompt, user_prompt)."""
+    neg_links = [
+        l
+        for l in links
+        if l.get("sentiment") == "negative" or l.get("risk") in ("high", "medium")
+    ]
+    pos_links = [l for l in links if l.get("sentiment") == "positive"]
+    high_links = [l for l in links if l.get("risk") == "high"]
+    med_links = [l for l in links if l.get("risk") == "medium"]
+    neutral_links = [l for l in links if l.get("sentiment") == "neutral"]
+
+    score_breakdown = f"Score: {score}/100 | High-risk: {len(high_links)} | Medium-risk: {len(med_links)} | Positive: {len(pos_links)} | Neutral: {len(neutral_links)}"
+
+    neg_summary = (
+        "Negative/Risk findings:\n"
+        + "\n".join(
+            f"- [{(l.get('risk') or 'none').upper()}] \"{l.get('title', '')}\" — {l.get('source', '')}"
+            + (f" ({l['date']})" if l.get("date") else "")
+            + f"\n  {l.get('snippet', '')}"
+            for l in neg_links[:8]
+        )
+        if neg_links
+        else "No negative results found."
+    )
+
+    pos_summary = (
+        "Positive findings:\n"
+        + "\n".join(
+            f"- \"{l.get('title', '')}\" — {l.get('source', '')}"
+            + (f" ({l['date']})" if l.get("date") else "")
+            for l in pos_links[:4]
+        )
+        if pos_links
+        else "No positive results found."
+    )
+
+    user_prompt = (
+        f"Analyze the following publicly available web search findings about a prospective client and produce an internal sales brief.\n\n"
+        f'Subject: "{name}"\n{score_breakdown}\n\n{neg_summary}\n\n{pos_summary}\n\n'
+        f"Return ONLY a JSON object with these 5 fields (no markdown, no explanation):\n"
+        f'{{\n  "headline": "one sharp sentence summarising the reputational situation for the sales team",\n'
+        f'  "issues": ["5-8 specific key reputation points — cite article titles or sources where relevant"],\n'
+        f'  "talkingPoints": ["4-6 opening lines for the client meeting — reference their actual situation, not generic phrases"],\n'
+        f'  "riskIndicators": ["4-6 concrete risk flags drawn from the findings above — include source name and date where available"],\n'
+        f'  "objectionHandlers": ["4-5 sharp, specific rebuttals for when the prospect says they don\'t need reputation management — reference their actual findings"]\n'
+        f"}}\n\nWrite all output in {language_name}."
+    )
+    system_prompt = (
+        "You are an AI assistant embedded in a professional reputation intelligence platform used by "
+        "reputation management firms. Your task is to analyze publicly available web search results "
+        "about a prospective client and produce structured internal sales briefing notes. "
+        "The findings below are summaries of news articles and web sources retrieved from public search engines. "
+        "Respond only with the requested JSON object."
+    )
+    return system_prompt, user_prompt
 
 
 async def _generate_meeting_summary(
@@ -989,60 +1080,7 @@ async def _generate_meeting_summary(
     model: str = "claude-haiku-4-5-20251001",
 ) -> dict:
     try:
-        neg_links = [
-            l
-            for l in links
-            if l.get("sentiment") == "negative" or l.get("risk") in ("high", "medium")
-        ]
-        pos_links = [l for l in links if l.get("sentiment") == "positive"]
-        high_links = [l for l in links if l.get("risk") == "high"]
-        med_links = [l for l in links if l.get("risk") == "medium"]
-        neutral_links = [l for l in links if l.get("sentiment") == "neutral"]
-
-        score_breakdown = f"Score: {score}/100 | High-risk: {len(high_links)} | Medium-risk: {len(med_links)} | Positive: {len(pos_links)} | Neutral: {len(neutral_links)}"
-
-        neg_summary = (
-            "Negative/Risk findings:\n"
-            + "\n".join(
-                f"- [{(l.get('risk') or 'none').upper()}] \"{l.get('title', '')}\" — {l.get('source', '')}"
-                + (f" ({l['date']})" if l.get("date") else "")
-                + f"\n  {l.get('snippet', '')}"
-                for l in neg_links[:8]
-            )
-            if neg_links
-            else "No negative results found."
-        )
-
-        pos_summary = (
-            "Positive findings:\n"
-            + "\n".join(
-                f"- \"{l.get('title', '')}\" — {l.get('source', '')}"
-                + (f" ({l['date']})" if l.get("date") else "")
-                for l in pos_links[:4]
-            )
-            if pos_links
-            else "No positive results found."
-        )
-
-        prompt = (
-            f"Analyze the following publicly available web search findings about a prospective client and produce an internal sales brief.\n\n"
-            f'Subject: "{name}"\n{score_breakdown}\n\n{neg_summary}\n\n{pos_summary}\n\n'
-            f"Return ONLY a JSON object with these 5 fields (no markdown, no explanation):\n"
-            f'{{\n  "headline": "one sharp sentence summarising the reputational situation for the sales team",\n'
-            f'  "issues": ["5-8 specific key reputation points — cite article titles or sources where relevant"],\n'
-            f'  "talkingPoints": ["4-6 opening lines for the client meeting — reference their actual situation, not generic phrases"],\n'
-            f'  "riskIndicators": ["4-6 concrete risk flags drawn from the findings above — include source name and date where available"],\n'
-            f'  "objectionHandlers": ["4-5 sharp, specific rebuttals for when the prospect says they don\'t need reputation management — reference their actual findings"]\n'
-            f"}}\n\nWrite all output in {language_name}."
-        )
-
-        system_prompt = (
-            "You are an AI assistant embedded in a professional reputation intelligence platform used by "
-            "reputation management firms. Your task is to analyze publicly available web search results "
-            "about a prospective client and produce structured internal sales briefing notes. "
-            "The findings below are summaries of news articles and web sources retrieved from public search engines. "
-            "Respond only with the requested JSON object."
-        )
+        system_prompt, prompt = _build_meeting_summary_prompt(name, score, links, language_name)
         for attempt in range(3):
             try:
                 response = await client.messages.create(
@@ -1071,6 +1109,142 @@ async def _generate_meeting_summary(
     return _fallback_summary(score)
 
 
+def _parse_json_object(text: str) -> dict | None:
+    try:
+        parsed = json.loads(text)
+        return parsed if isinstance(parsed, dict) else None
+    except json.JSONDecodeError:
+        match = re.search(r"\{[\s\S]*\}", text.strip())
+        if not match:
+            return None
+        try:
+            parsed = json.loads(match.group())
+            return parsed if isinstance(parsed, dict) else None
+        except Exception:
+            return None
+
+
+def _parse_json_array(text: str) -> list | None:
+    try:
+        parsed = json.loads(text)
+        return parsed if isinstance(parsed, list) else None
+    except json.JSONDecodeError:
+        match = re.search(r"\[[\s\S]*\]", text.strip())
+        if not match:
+            return None
+        try:
+            parsed = json.loads(match.group())
+            return parsed if isinstance(parsed, list) else None
+        except Exception:
+            return None
+
+
+class OpenAIIncompleteError(RuntimeError):
+    """Raised when an OpenAI classification response is incomplete or
+    unparseable, so the batch is failed loud instead of silently dropped."""
+
+
+async def _classify_with_openai(
+    client: AsyncOpenAI,
+    articles: list[dict],
+    name: str,
+    countries: list[str],
+    keywords: list[str],
+    subject_type: str,
+    language_name: str,
+    scan_focus: str | None,
+    background: str | None = None,
+    pre_analysis_profile: dict | None = None,
+    max_attempts: int = 3,
+) -> list[dict]:
+    if not articles:
+        return []
+
+    prompt = _build_classification_prompt(
+        articles, name, countries, keywords, subject_type, language_name, scan_focus,
+        background=background, pre_analysis_profile=pre_analysis_profile,
+    )
+
+    last_error: Exception | None = None
+    for attempt in range(max_attempts):
+        try:
+            response = await client.responses.create(
+                model=OPENAI_STANDARD_MODEL,
+                reasoning=OPENAI_STANDARD_REASONING,
+                max_output_tokens=64000,
+                input=prompt,
+            )
+        except Exception as e:
+            # Retry only genuine transient API errors; non-transient errors and
+            # an exhausted retry budget fall through to the loud raise below.
+            if not is_transient_openai_error(e):
+                raise
+            last_error = e
+            if attempt < max_attempts - 1:
+                await asyncio.sleep(1.5 * (attempt + 1))
+                continue
+            break
+
+        # Token budget exhausted — retrying will not help. Fail loud so the
+        # whole batch is never silently dropped (C2).
+        if getattr(response, "status", None) == "incomplete":
+            details = getattr(response, "incomplete_details", None)
+            raise OpenAIIncompleteError(
+                f"OpenAI classification incomplete for {len(articles)} articles: {details}"
+            )
+
+        items = _parse_classification_items(extract_openai_text(response))
+        if items is None:
+            # Completed but no parseable JSON — do not silently drop the batch.
+            raise OpenAIIncompleteError(
+                f"OpenAI classification returned unparseable output for {len(articles)} articles"
+            )
+        return items
+
+    raise OpenAIIncompleteError(
+        f"OpenAI classification failed after {max_attempts} attempts: {last_error}"
+    )
+
+
+async def _generate_meeting_summary_with_openai(
+    client: AsyncOpenAI,
+    name: str,
+    score: int,
+    links: list[dict],
+    language_name: str,
+    max_attempts: int = 3,
+) -> dict:
+    system_prompt, prompt = _build_meeting_summary_prompt(name, score, links, language_name)
+    for attempt in range(max_attempts):
+        try:
+            response = await client.responses.create(
+                model=OPENAI_STANDARD_MODEL,
+                reasoning=OPENAI_STANDARD_REASONING,
+                max_output_tokens=16000,
+                instructions=system_prompt,
+                input=prompt,
+            )
+            # Token-budget incomplete won't improve on retry — fall back now.
+            if getattr(response, "status", None) == "incomplete":
+                print(f"[meeting-summary] OpenAI incomplete: {getattr(response, 'incomplete_details', None)}")
+                break
+            parsed = _parse_json_object(extract_openai_text(response))
+            if parsed:
+                return parsed
+            print(f"[meeting-summary] OpenAI no JSON (attempt {attempt + 1})")
+        except Exception as e:
+            # B1: retry only genuine transient API errors (Claude parity).
+            if not is_transient_openai_error(e):
+                print(f"[meeting-summary] OpenAI non-transient error: {e}")
+                break
+            print(f"[meeting-summary] OpenAI transient error (attempt {attempt + 1}): {e}")
+        if attempt < max_attempts - 1:
+            await asyncio.sleep(1.5 * (attempt + 1))
+    return _fallback_summary(score)
+
+
+
+
 # ── Request model ────────────────────────────────────────────────────────────
 
 
@@ -1087,7 +1261,7 @@ class GenerateLeadRequest(BaseModel):
     reportLanguage: str | None = None
     useKeywords: bool = True
     scanFocus: str | None = None
-    scanTier: Literal["standard", "advanced"] = "standard"
+    scanTier: Literal["basic", "standard", "advanced"] = "standard"
     background: str | None = None
     preAnalysisProfile: dict | None = None
 
@@ -1106,11 +1280,7 @@ async def _execute_generate_lead(
     if not countries or (body.useKeywords and not body.keywords):
         raise ValueError("Required fields missing")
 
-    tier_model = (
-        "claude-haiku-4-5-20251001"
-        if body.scanTier == "standard"
-        else "claude-sonnet-4-6"
-    )
+    use_openai, tier_model = resolve_provider(body.scanTier)
 
     search_subject = (
         (body.company or "").strip()
@@ -1133,7 +1303,11 @@ async def _execute_generate_lead(
         else LANG_CODE_TO_NAME.get(language_code or "", "English")
     )
 
-    client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
+    client = (
+        AsyncOpenAI(api_key=settings.openai_api_key)
+        if use_openai
+        else anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
+    )
 
     # Structured per-stage pipeline trace returned as result["scanLog"].
     # Schema: docs/plans/2026-06-07-scan-log-design.md
@@ -1490,16 +1664,29 @@ async def _execute_generate_lead(
                 },
             }
 
-        urls_sent_to_claude = [a["url"] for a in articles]
+        urls_sent_to_llm = [a["url"] for a in articles]
 
-    # ── Phase 3: Claude classification (batched to stay under 200K token limit) ──
+    # ── Phase 3: LLM classification (batched to stay within provider context limits) ──
     if job_id:
-        await _set_step(job_id, "claude_classification")
+        await _set_step(job_id, "llm_classification")
     CLASSIFY_BATCH_SIZE = 20
-    _claude_sem = asyncio.Semaphore(3)
+    _llm_sem = asyncio.Semaphore(3)
 
     async def _classify_batch(batch: list[dict]) -> list[dict]:
-        async with _claude_sem:
+        async with _llm_sem:
+            if use_openai:
+                return await _classify_with_openai(
+                    client,
+                    batch,
+                    sanitized_subject,
+                    countries,
+                    body.keywords,
+                    body.subjectType,
+                    output_language_name,
+                    body.scanFocus,
+                    background=body.background,
+                    pre_analysis_profile=body.preAnalysisProfile,
+                )
             return await _classify_with_claude(
                 client,
                 batch,
@@ -1522,9 +1709,11 @@ async def _execute_generate_lead(
     classified: list[dict] = [item for result in batch_results for item in result]
 
     _all_returned_urls = {item.get("url") for item in classified}
-    _claude_dropped = [u for u in urls_sent_to_claude if u not in _all_returned_urls]
-    scan_log["claude"] = {
-        "model": tier_model,
+    _llm_dropped = [u for u in urls_sent_to_llm if u not in _all_returned_urls]
+    scan_log["llm"] = {
+        "provider": "openai" if use_openai else "anthropic",
+        "model": OPENAI_STANDARD_MODEL if use_openai else tier_model,
+        "reasoningEffort": "high" if use_openai else None,
         "scanFocus": body.scanFocus,
         "batches": [
             {
@@ -1543,7 +1732,7 @@ async def _execute_generate_lead(
             }
             for bi, batch in enumerate(batches)
         ],
-        "dropped": {"count": len(_claude_dropped), "links": _claude_dropped},
+        "dropped": {"count": len(_llm_dropped), "links": _llm_dropped},
     }
 
     if body.scanFocus == "negative":
@@ -1581,9 +1770,14 @@ async def _execute_generate_lead(
 
     if job_id:
         await _set_step(job_id, "generating_brief")
-    summary = await _generate_meeting_summary(
-        client, sanitized_subject, score, deduped, output_language_name, tier_model
-    )
+    if use_openai:
+        summary = await _generate_meeting_summary_with_openai(
+            client, sanitized_subject, score, deduped, output_language_name
+        )
+    else:
+        summary = await _generate_meeting_summary(
+            client, sanitized_subject, score, deduped, output_language_name, tier_model
+        )
 
     return {
         "links": deduped,
@@ -1650,18 +1844,18 @@ async def _execute_generate_lead(
                 }
             ]
         ),
-        "_claude": (
+        "_llm": (
             [
                 {
                     "keyword": kw,
                     "sent": [
-                        u for u in urls_sent_to_claude if kw in keyword_map.get(u, [])
+                        u for u in urls_sent_to_llm if kw in keyword_map.get(u, [])
                     ],
                 }
                 for kw in body.keywords
             ]
             if body.useKeywords
-            else [{"keyword": None, "sent": urls_sent_to_claude}]
+            else [{"keyword": None, "sent": urls_sent_to_llm}]
         ),
         "_name_filter": {
             "applied": body.subjectType != "company" and bool(_nf_first and _nf_last),
@@ -1716,7 +1910,9 @@ async def _run_job(job_id: uuid.UUID, body: GenerateLeadRequest) -> None:
     except asyncio.CancelledError:
         raise  # DB already updated to "cancelled" by DELETE route
     except BaseException as e:
-        await _update_job_status(job_id, "failed", error=f"{type(e).__name__}: {e}")
+        # Full detail server-side only; clients get a sanitized message (S1.1).
+        print(f"[generate_lead] job {job_id} failed: {type(e).__name__}: {e}")
+        await _update_job_status(job_id, "failed", error=safe_error_message(e))
         raise
 
 
@@ -1730,7 +1926,10 @@ async def generate_lead(
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     settings = get_settings()
-    if not settings.anthropic_api_key:
+    if body.scanTier == "standard":
+        if not settings.openai_api_key:
+            raise HTTPException(status_code=500, detail="OPENAI_API_KEY not configured")
+    elif not settings.anthropic_api_key:
         raise HTTPException(status_code=500, detail="ANTHROPIC_API_KEY not configured")
     if not settings.serper_api_key:
         raise HTTPException(status_code=500, detail="SERPER_API_KEY not configured")

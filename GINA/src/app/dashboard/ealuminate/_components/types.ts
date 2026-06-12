@@ -82,8 +82,10 @@ export interface ScanLog {
       articles: { url: string; title: string; snippet: string }[];
     };
   };
-  claude?: {
+  llm?: {
+    provider?: string | null;
     model: string;
+    reasoningEffort?: string | null;
     scanFocus: string | null;
     batches: {
       batch: number;
@@ -111,3 +113,4 @@ export interface ScanResult {
 
 export type RiskLevel = "Negative" | "Poor" | "Mediocre" | "Good";
 export type KeywordFocus = "all" | "negative" | "neutral" | "positive";
+export type ScanTier = "basic" | "standard" | "advanced";
