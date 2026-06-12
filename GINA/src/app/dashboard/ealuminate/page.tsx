@@ -9,6 +9,7 @@ import { EaluminatePipelinePanel } from "./_components/EaluminatePipelinePanel";
 import { EaluminateResultsPanel } from "./_components/EaluminateResultsPanel";
 import { ScanLogPanel } from "./_components/ScanLogPanel";
 import ExportFieldsModal from "./_components/ExportFieldsModal";
+import ExportLinksModal from "./_components/ExportLinksModal";
 import type {
   KeywordFocus,
   MeetingSummary,
@@ -18,6 +19,7 @@ import type {
   ScanResult,
 } from "./_components/types";
 import { exportReportMasterPdf, exportSummaryPdf } from "./_utils/pdfExports";
+import { exportLinksXlsx } from "./_utils/xlsxExport";
 
 const RESEARCH_SUMMARY_FIELDS = [
   { key: "identity", label: "Identity", color: "#4479DA" },
@@ -715,6 +717,16 @@ function EaluminatePageInner() {
     keywordsCap,
     pagesCap,
   });
+  // Link-persistence refs: latest committed links, last server-confirmed array,
+  // a serialized PATCH queue, and prior soft-deletes that survive a re-scan.
+  const linksRef = useRef<WebLink[]>([]);
+  const confirmedLinksRef = useRef<WebLink[]>([]);
+  const pendingLinksRef = useRef<WebLink[] | null>(null);
+  const savingLinksRef = useRef(false);
+  const deletedLinksRef = useRef<{ leadId: string | null; map: Map<string, string> }>({
+    leadId: null,
+    map: new Map(),
+  });
 
   const stopCycles = () => {
     if (statusIntervalRef.current) clearInterval(statusIntervalRef.current);
@@ -798,8 +810,25 @@ function EaluminatePageInner() {
                       l.risk === "none",
                   ).length,
                 );
+          // Preserve soft-deletes across a re-scan of the SAME lead (clean slate otherwise)
+          const priorDeleted =
+            deletedLinksRef.current.leadId &&
+            deletedLinksRef.current.leadId === persistContextRef.current.leadId
+              ? deletedLinksRef.current.map
+              : null;
+          const mergedLinks =
+            priorDeleted && priorDeleted.size > 0
+              ? scanResult.links.map((l) =>
+                  priorDeleted.has(l.url)
+                    ? { ...l, deletedAt: priorDeleted.get(l.url) }
+                    : l,
+                )
+              : scanResult.links;
+
           setScore(finalScore);
-          setResult(scanResult);
+          setResult({ ...scanResult, links: mergedLinks });
+          confirmedLinksRef.current = mergedLinks;
+          linksRef.current = mergedLinks;
           setResultsTab("results");
           setScanComplete(true);
           setIsResuming(false);
@@ -836,7 +865,7 @@ function EaluminatePageInner() {
           if (currentLeadId) {
             try {
               await leads.update(currentLeadId, {
-                links: scanResult.links as unknown[],
+                links: mergedLinks as unknown[],
                 summary: scanResult.summary
                   ? ({ ...scanResult.summary } as Record<string, unknown>)
                   : undefined,
@@ -951,6 +980,16 @@ function EaluminatePageInner() {
     keywordsCap,
     pagesCap,
   ]);
+
+  // Mirror committed links; remember soft-deletes (kept when result is nulled mid-scan)
+  useEffect(() => {
+    linksRef.current = result?.links ?? [];
+    if (result?.links) {
+      const map = new Map<string, string>();
+      for (const l of result.links) if (l.deletedAt) map.set(l.url, l.deletedAt);
+      deletedLinksRef.current = { leadId, map };
+    }
+  }, [result, leadId]);
 
   // Resume an in-progress job if one was saved before navigating away
   useEffect(() => {
@@ -1437,8 +1476,22 @@ function EaluminatePageInner() {
           setPreAnalysisDone(true);
         }
 
+        // Soft-deletes persist on lead.links; overlay that state by URL onto the
+        // scan event's frozen snapshot so deletions survive reloads via ?event=.
+        const deletedByUrl = new Map(
+          (lead.links ?? [])
+            .filter((l) => l.deletedAt)
+            .map((l) => [l.url, l.deletedAt as string]),
+        );
+        const scanLinksResolved =
+          scanLinks && deletedByUrl.size > 0
+            ? scanLinks.map((l) =>
+                deletedByUrl.has(l.url) ? { ...l, deletedAt: deletedByUrl.get(l.url) } : l,
+              )
+            : scanLinks;
+
         const linksToUse =
-          (scanLinks && scanLinks.length > 0 ? scanLinks : null) ??
+          (scanLinksResolved && scanLinksResolved.length > 0 ? scanLinksResolved : null) ??
           (lead.links as WebLink[] | undefined);
         const scoreToUse = scanScore ?? lead.score ?? undefined;
         const summaryToUse = scanSummary ?? lead.summary ?? undefined;
@@ -1467,6 +1520,8 @@ function EaluminatePageInner() {
             neutral,
             summary: summaryToUse,
           });
+          confirmedLinksRef.current = linksResolved;
+          linksRef.current = linksResolved;
           setUsedKeywords(lead.keywords_suggested);
 
           // Re-attach the persistent scan log from the original job — the
@@ -1510,9 +1565,30 @@ function EaluminatePageInner() {
 
   const [exportSummaryModalOpen, setExportSummaryModalOpen] = useState(false);
   const [exportReportModalOpen, setExportReportModalOpen] = useState(false);
+  const [exportLinksModalOpen, setExportLinksModalOpen] = useState(false);
+  const [xlsxPreselectedUrls, setXlsxPreselectedUrls] = useState<
+    string[] | null
+  >(null);
 
   const handleExportSummaryPdf = () => setExportSummaryModalOpen(true);
   const handleExportReportMaster = () => setExportReportModalOpen(true);
+  const handleExportXlsx = (preselected?: WebLink[]) => {
+    setXlsxPreselectedUrls(preselected ? preselected.map((l) => l.url) : null);
+    setExportLinksModalOpen(true);
+  };
+
+  const handleConfirmXlsxExport = (selectedLinks: WebLink[]) => {
+    setExportLinksModalOpen(false);
+    exportLinksXlsx({
+      fullName,
+      country,
+      keywords: editableKeywords,
+      links: selectedLinks,
+    }).catch((err) => {
+      console.error("XLSX export failed", err);
+      alert("Failed to export XLSX. Please try again.");
+    });
+  };
 
   const handleConfirmSummaryExport = (selectedFields: string[]) => {
     setExportSummaryModalOpen(false);
@@ -1522,7 +1598,8 @@ function EaluminatePageInner() {
       country,
       webAnalystName,
       score,
-      result,
+      // exclude soft-deleted links from the rendered link list
+      result: result ? { ...result, links: (result.links ?? []).filter((l) => !l.deletedAt) } : result,
       selectedFields,
     });
   };
@@ -1905,7 +1982,77 @@ function EaluminatePageInner() {
     }
   };
 
-  const allLinks = result?.links ?? [];
+  // result.links is the complete set; split into active vs soft-deleted
+  const allLinks = (result?.links ?? []).filter((l) => !l.deletedAt);
+  const trashedLinks = (result?.links ?? []).filter((l) => l.deletedAt);
+
+  // One PATCH in flight at a time; rapid edits coalesce to the latest full array
+  // so out-of-order responses can't persist stale links. Rolls back to the last
+  // server-confirmed array on failure.
+  const flushPendingLinks = async () => {
+    if (savingLinksRef.current) return;
+    const id = persistContextRef.current.leadId;
+    if (!id) {
+      pendingLinksRef.current = null;
+      return;
+    }
+    savingLinksRef.current = true;
+    try {
+      while (pendingLinksRef.current) {
+        const toSave = pendingLinksRef.current;
+        pendingLinksRef.current = null;
+        await leads.update(id, { links: toSave as unknown[] });
+        confirmedLinksRef.current = toSave;
+      }
+    } catch (err) {
+      console.error("Failed to persist link change", err);
+      pendingLinksRef.current = null;
+      linksRef.current = confirmedLinksRef.current;
+      setResult((p) => (p ? { ...p, links: confirmedLinksRef.current } : p));
+      alert("Failed to save change. Please try again.");
+    } finally {
+      savingLinksRef.current = false;
+    }
+  };
+
+  // Optimistic edit computed from the latest committed array (never a stale closure)
+  const mutateLinks = (mutate: (links: WebLink[]) => WebLink[]) => {
+    if (!result) return;
+    const next = mutate(linksRef.current);
+    linksRef.current = next;
+    setResult((p) => (p ? { ...p, links: next } : p));
+    pendingLinksRef.current = next;
+    void flushPendingLinks();
+  };
+
+  const handleDeleteLink = (target: WebLink) => {
+    const now = new Date().toISOString();
+    mutateLinks((links) =>
+      links.map((l) => (l.url === target.url ? { ...l, deletedAt: now } : l)),
+    );
+  };
+
+  const handleDeleteLinks = (targets: WebLink[]) => {
+    const urls = new Set(targets.map((t) => t.url));
+    const now = new Date().toISOString();
+    mutateLinks((links) =>
+      links.map((l) =>
+        urls.has(l.url) && !l.deletedAt ? { ...l, deletedAt: now } : l,
+      ),
+    );
+  };
+
+  const handleRestoreLink = (target: WebLink) => {
+    mutateLinks((links) =>
+      links.map((l) => (l.url === target.url ? { ...l, deletedAt: null } : l)),
+    );
+  };
+
+  const handleRestoreAllLinks = () => {
+    mutateLinks((links) =>
+      links.map((l) => (l.deletedAt ? { ...l, deletedAt: null } : l)),
+    );
+  };
 
   // 0=idle, 1=researching, 2=research done, 3=scan running, 4=scan complete
   const pipelineStep = result
@@ -2125,11 +2272,17 @@ function EaluminatePageInner() {
           tipIdx={tipIdx}
           tips={DID_YOU_KNOW}
           allLinks={allLinks}
+          trashedLinks={trashedLinks}
+          onDeleteLink={handleDeleteLink}
+          onDeleteLinks={handleDeleteLinks}
+          onRestoreLink={handleRestoreLink}
+          onRestoreAll={handleRestoreAllLinks}
           expandedLinkIndex={expandedLinkIndex}
           setExpandedLinkIndex={setExpandedLinkIndex}
           apiRiskToUi={apiRiskToUi}
           riskColors={RISK_COLORS}
           onExportSummary={handleExportSummaryPdf}
+          onExportXlsx={handleExportXlsx}
           GaugeComponent={RepuGauge}
           isResuming={isResuming}
           scanDuration={scanDuration}
@@ -2153,6 +2306,14 @@ function EaluminatePageInner() {
           fields={RESEARCH_SUMMARY_FIELDS}
           onConfirm={handleConfirmReportExport}
           onClose={() => setExportReportModalOpen(false)}
+        />
+      )}
+      {exportLinksModalOpen && (
+        <ExportLinksModal
+          links={allLinks}
+          initialSelectedUrls={xlsxPreselectedUrls ?? undefined}
+          onConfirm={handleConfirmXlsxExport}
+          onClose={() => setExportLinksModalOpen(false)}
         />
       )}
     </div>
