@@ -22,10 +22,12 @@ from app.models.lead import GenerateLeadJob, WebAnalyst
 from app.utils.auth import get_current_web_analyst
 from app.utils.llm import (
     extract_openai_text,
+    extract_usage,
     is_transient_openai_error,
     resolve_provider,
     safe_error_message,
 )
+from app.utils.usage_tracking import record_llm_usage
 
 router = APIRouter(prefix="/generate-lead", tags=["generate-lead"])
 
@@ -980,6 +982,7 @@ async def _classify_with_claude(
     model: str = "claude-haiku-4-5-20251001",
     background: str | None = None,
     pre_analysis_profile: dict | None = None,
+    usage_sink: list | None = None,
 ) -> list[dict]:
     if not articles:
         return []
@@ -995,6 +998,9 @@ async def _classify_with_claude(
         messages=[{"role": "user", "content": prompt}],
     ) as stream:
         response = await stream.get_final_message()
+
+    if usage_sink is not None:
+        usage_sink.append(extract_usage(getattr(response, "usage", None)))
 
     if response.stop_reason == "max_tokens":
         print("[classify] Anthropic hit max_tokens; JSON may be truncated")
@@ -1076,6 +1082,7 @@ async def _generate_meeting_summary(
     links: list[dict],
     language_name: str,
     model: str = "claude-haiku-4-5-20251001",
+    usage_sink: list | None = None,
 ) -> dict:
     try:
         system_prompt, prompt = _build_meeting_summary_prompt(name, score, links, language_name)
@@ -1087,6 +1094,8 @@ async def _generate_meeting_summary(
                     system=system_prompt,
                     messages=[{"role": "user", "content": prompt}],
                 )
+                if usage_sink is not None:
+                    usage_sink.append(extract_usage(getattr(response, "usage", None)))
                 text_block = next(
                     (b for b in response.content if b.type == "text"), None
                 )
@@ -1156,6 +1165,7 @@ async def _classify_with_openai(
     background: str | None = None,
     pre_analysis_profile: dict | None = None,
     max_attempts: int = 3,
+    usage_sink: list | None = None,
 ) -> list[dict]:
     if not articles:
         return []
@@ -1184,6 +1194,9 @@ async def _classify_with_openai(
                 await asyncio.sleep(1.5 * (attempt + 1))
                 continue
             break
+
+        if usage_sink is not None:
+            usage_sink.append(extract_usage(getattr(response, "usage", None)))
 
         # Token budget exhausted — retrying will not help. Fail loud so the
         # whole batch is never silently dropped (C2).
@@ -1215,6 +1228,7 @@ async def _generate_meeting_summary_with_openai(
     model: str,
     reasoning: dict[str, str] | None,
     max_attempts: int = 3,
+    usage_sink: list | None = None,
 ) -> dict:
     system_prompt, prompt = _build_meeting_summary_prompt(name, score, links, language_name)
     for attempt in range(max_attempts):
@@ -1226,6 +1240,8 @@ async def _generate_meeting_summary_with_openai(
                 instructions=system_prompt,
                 input=prompt,
             )
+            if usage_sink is not None:
+                usage_sink.append(extract_usage(getattr(response, "usage", None)))
             # Token-budget incomplete won't improve on retry — fall back now.
             if getattr(response, "status", None) == "incomplete":
                 print(f"[meeting-summary] OpenAI incomplete: {getattr(response, 'incomplete_details', None)}")
@@ -1286,6 +1302,12 @@ async def _execute_generate_lead(
     use_openai = tier_cfg.provider == "openai"
     tier_model = tier_cfg.model
     tier_reasoning = {"effort": tier_cfg.reasoning_effort} if tier_cfg.reasoning_effort else None
+
+    analyst_id: uuid.UUID | None = None
+    if job_id:
+        async with AsyncSessionLocal() as _usage_db:
+            _job = await _usage_db.get(GenerateLeadJob, job_id)
+            analyst_id = _job.created_by_id if _job else None
 
     search_subject = (
         (body.company or "").strip()
@@ -1679,8 +1701,9 @@ async def _execute_generate_lead(
 
     async def _classify_batch(batch: list[dict]) -> list[dict]:
         async with _llm_sem:
+            _usage: list = []
             if use_openai:
-                return await _classify_with_openai(
+                items = await _classify_with_openai(
                     client,
                     batch,
                     sanitized_subject,
@@ -1693,20 +1716,34 @@ async def _execute_generate_lead(
                     tier_reasoning,
                     background=body.background,
                     pre_analysis_profile=body.preAnalysisProfile,
+                    usage_sink=_usage,
                 )
-            return await _classify_with_claude(
-                client,
-                batch,
-                sanitized_subject,
-                countries,
-                body.keywords,
-                body.subjectType,
-                output_language_name,
-                body.scanFocus,
-                tier_model,
-                background=body.background,
-                pre_analysis_profile=body.preAnalysisProfile,
-            )
+            else:
+                items = await _classify_with_claude(
+                    client,
+                    batch,
+                    sanitized_subject,
+                    countries,
+                    body.keywords,
+                    body.subjectType,
+                    output_language_name,
+                    body.scanFocus,
+                    tier_model,
+                    background=body.background,
+                    pre_analysis_profile=body.preAnalysisProfile,
+                    usage_sink=_usage,
+                )
+            for _u in _usage:
+                await record_llm_usage(
+                    web_analyst_id=analyst_id,
+                    job_id=job_id,
+                    operation="classification",
+                    provider=tier_cfg.provider,
+                    model=tier_model,
+                    scan_tier=body.scanTier,
+                    usage=_u,
+                )
+            return items
 
     batches = [
         articles[i : i + CLASSIFY_BATCH_SIZE]
@@ -1777,14 +1814,27 @@ async def _execute_generate_lead(
 
     if job_id:
         await _set_step(job_id, "generating_brief")
+    _summary_usage: list = []
     if use_openai:
         summary = await _generate_meeting_summary_with_openai(
             client, sanitized_subject, score, deduped, output_language_name,
-            tier_model, tier_reasoning,
+            tier_model, tier_reasoning, usage_sink=_summary_usage,
         )
     else:
         summary = await _generate_meeting_summary(
-            client, sanitized_subject, score, deduped, output_language_name, tier_model
+            client, sanitized_subject, score, deduped, output_language_name, tier_model,
+            usage_sink=_summary_usage,
+        )
+    # One row per billed call; a retried summary records each attempt it paid for.
+    for _u in _summary_usage:
+        await record_llm_usage(
+            web_analyst_id=analyst_id,
+            job_id=job_id,
+            operation="meeting_summary",
+            provider=tier_cfg.provider,
+            model=tier_model,
+            scan_tier=body.scanTier,
+            usage=_u,
         )
 
     return {

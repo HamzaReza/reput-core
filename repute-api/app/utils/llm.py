@@ -119,6 +119,32 @@ def summarize_usage(usage: Any) -> str:
     return f"in={in_tok} out={out_tok} total={total}"
 
 
+@dataclass(frozen=True)
+class UsageTokens:
+    """Normalized token counts for one LLM call. reasoning is already counted
+    inside output (both OpenAI Responses and Anthropic report it that way)."""
+    input: int
+    output: int
+    reasoning: int
+    total: int
+
+
+def extract_usage(usage: Any) -> UsageTokens:
+    """Normalize an OpenAI Responses or Anthropic usage object into token counts.
+    Both expose input_tokens/output_tokens; OpenAI nests reasoning under
+    output_tokens_details (Responses) or completion_tokens_details (Chat)."""
+    if usage is None:
+        return UsageTokens(0, 0, 0, 0)
+    in_tok = int(getattr(usage, "input_tokens", 0) or 0)
+    out_tok = int(getattr(usage, "output_tokens", 0) or 0)
+    total = int(getattr(usage, "total_tokens", 0) or 0) or (in_tok + out_tok)
+    details = getattr(usage, "output_tokens_details", None) or getattr(
+        usage, "completion_tokens_details", None
+    )
+    reasoning = int(getattr(details, "reasoning_tokens", 0) or 0) if details else 0
+    return UsageTokens(input=in_tok, output=out_tok, reasoning=reasoning, total=total)
+
+
 def is_transient_openai_error(error: BaseException) -> bool:
     """True for network / transient server errors that are safe to retry."""
     return isinstance(error, _TRANSIENT_OPENAI_ERRORS)
