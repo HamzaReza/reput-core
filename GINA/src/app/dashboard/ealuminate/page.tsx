@@ -1718,6 +1718,8 @@ function EaluminatePageInner() {
           pagesCap,
           reportLanguage,
           countries,
+          scanTier,
+          researchTier,
         },
       });
       if (cl.id) setClientId(cl.id);

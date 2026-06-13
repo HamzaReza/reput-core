@@ -4,8 +4,6 @@ from types import SimpleNamespace
 import openai
 
 from app.utils.llm import (
-    OPENAI_STANDARD_MODEL,
-    OPENAI_STANDARD_REASONING,
     extract_openai_text,
     as_text_message,
     resolve_provider,
