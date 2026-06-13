@@ -9,7 +9,65 @@ import type {
 } from "react";
 import { useState } from "react";
 import MultiSelectPicker, { SingleSelectPicker } from "./MultiSelectPicker";
-import type { KeywordFocus, PreAnalysisProfile, ScanTier } from "./types";
+import type {
+  KeywordFocus,
+  PreAnalysisProfile,
+  ResearchTier,
+  ScanTier,
+} from "./types";
+
+const TIER_ICON_PATHS: Record<ScanTier, ReactNode> = {
+  basic: (
+    <>
+      <circle cx="12" cy="12" r="5" />
+      <path d="M12 9v6M9 12h6" />
+    </>
+  ),
+  standard: (
+    <>
+      <circle cx="12" cy="12" r="3" />
+      <path d="M19.07 4.93l-1.41 1.41M4.93 4.93l1.41 1.41M19.07 19.07l-1.41-1.41M4.93 19.07l1.41-1.41M12 2v2M12 20v2M2 12h2M20 12h2" />
+    </>
+  ),
+  advanced: <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />,
+  pro: <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />,
+  max: (
+    <>
+      <circle cx="12" cy="8" r="6" />
+      <path d="M15.477 12.89 17 22l-5-3-5 3 1.523-9.11" />
+    </>
+  ),
+};
+
+function TierIcon({ tier }: { tier: ScanTier }) {
+  return (
+    <svg
+      width="13"
+      height="13"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      {TIER_ICON_PATHS[tier]}
+    </svg>
+  );
+}
+
+const RESEARCH_TIER_META: { value: ResearchTier; label: string }[] = [
+  { value: "basic", label: "Basic" },
+  { value: "advanced", label: "Advanced" },
+];
+
+const SCAN_TIER_META: { value: ScanTier; label: string }[] = [
+  { value: "basic", label: "Basic" },
+  { value: "standard", label: "Standard" },
+  { value: "advanced", label: "Advanced" },
+  { value: "pro", label: "Pro" },
+  { value: "max", label: "Max" },
+];
 
 interface KeywordsEditorProps {
   keywords: string[];
@@ -118,6 +176,8 @@ interface EaluminateFormPanelProps {
   pipeline: ReactNode;
   scanTier: ScanTier;
   setScanTier: (value: ScanTier) => void;
+  researchTier: ResearchTier;
+  setResearchTier: (value: ResearchTier) => void;
   keywordLength: null | 1 | 2 | 3;
   setKeywordLength: (value: null | 1 | 2 | 3) => void;
   keywordLengthOptions: readonly { value: null | 1 | 2 | 3; label: string }[];
@@ -281,6 +341,8 @@ export function EaluminateFormPanel(props: EaluminateFormPanelProps) {
     pipeline,
     scanTier,
     setScanTier,
+    researchTier,
+    setResearchTier,
     keywordLength,
     setKeywordLength,
     keywordLengthOptions,
@@ -868,71 +930,26 @@ export function EaluminateFormPanel(props: EaluminateFormPanelProps) {
                 </p>
               </div>
 
-              {/* Scan Mode */}
+              {/* Research Mode — tier for the pre-analysis step */}
               <div>
-                <label style={labelStyle}>Scan Mode</label>
+                <label style={labelStyle}>Research Mode</label>
                 <div
                   style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}
                 >
-                  {(["basic", "standard", "advanced"] as const).map((tier) => (
+                  {RESEARCH_TIER_META.map(({ value, label }) => (
                     <button
-                      key={tier}
+                      key={value}
                       type="button"
-                      onClick={() => setScanTier(tier)}
+                      onClick={() => setResearchTier(value)}
                       style={{
-                        ...pillBtn(scanTier === tier),
+                        ...pillBtn(researchTier === value),
                         display: "flex",
                         alignItems: "center",
                         gap: "0.375rem",
                       }}
                     >
-                      {tier === "basic" ? (
-                        <svg
-                          width="13"
-                          height="13"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="2"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        >
-                          <circle cx="12" cy="12" r="5" />
-                          <path d="M12 9v6M9 12h6" />
-                        </svg>
-                      ) : tier === "standard" ? (
-                        <svg
-                          width="13"
-                          height="13"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="2"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        >
-                          <circle cx="12" cy="12" r="3" />
-                          <path d="M19.07 4.93l-1.41 1.41M4.93 4.93l1.41 1.41M19.07 19.07l-1.41-1.41M4.93 19.07l1.41-1.41M12 2v2M12 20v2M2 12h2M20 12h2" />
-                        </svg>
-                      ) : (
-                        <svg
-                          width="13"
-                          height="13"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="2"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        >
-                          <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
-                        </svg>
-                      )}
-                      {tier === "basic"
-                        ? "Basic"
-                        : tier === "standard"
-                          ? "Standard"
-                          : "Advanced"}
+                      <TierIcon tier={value} />
+                      {label}
                     </button>
                   ))}
                 </div>
@@ -943,8 +960,43 @@ export function EaluminateFormPanel(props: EaluminateFormPanelProps) {
                     color: "#94a3b8",
                   }}
                 >
-                  Basic is lighter, Standard uses GPT-5 mini, and Advanced runs
-                  the deepest scan.
+                  Model for the pre-analysis step. Basic uses Haiku, Advanced
+                  uses Sonnet.
+                </p>
+              </div>
+
+              {/* Scan Mode — tier for the full lead-generation scan */}
+              <div>
+                <label style={labelStyle}>Scan Mode</label>
+                <div
+                  style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}
+                >
+                  {SCAN_TIER_META.map(({ value, label }) => (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() => setScanTier(value)}
+                      style={{
+                        ...pillBtn(scanTier === value),
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "0.375rem",
+                      }}
+                    >
+                      <TierIcon tier={value} />
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                <p
+                  style={{
+                    margin: "0.375rem 0 0",
+                    fontSize: "0.75rem",
+                    color: "#94a3b8",
+                  }}
+                >
+                  Basic uses Haiku, Standard GPT-5 mini, Advanced Sonnet, Pro
+                  GPT-5.4, and Max GPT-5.5 for the deepest scan.
                 </p>
               </div>
 

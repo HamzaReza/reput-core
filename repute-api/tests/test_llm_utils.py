@@ -4,8 +4,6 @@ from types import SimpleNamespace
 import openai
 
 from app.utils.llm import (
-    OPENAI_STANDARD_MODEL,
-    OPENAI_STANDARD_REASONING,
     extract_openai_text,
     as_text_message,
     resolve_provider,
@@ -16,19 +14,39 @@ from app.utils.llm import (
 
 class ResolveProviderTests(unittest.TestCase):
     def test_standard_uses_openai(self):
-        use_openai, model = resolve_provider("standard")
-        self.assertTrue(use_openai)
-        self.assertEqual(model, "claude-haiku-4-5-20251001")
+        cfg = resolve_provider("standard")
+        self.assertEqual(cfg.provider, "openai")
+        self.assertEqual(cfg.model, "gpt-5-mini")
+        self.assertEqual(cfg.reasoning_effort, "high")
 
     def test_advanced_uses_sonnet(self):
-        use_openai, model = resolve_provider("advanced")
-        self.assertFalse(use_openai)
-        self.assertEqual(model, "claude-sonnet-4-6")
+        cfg = resolve_provider("advanced")
+        self.assertEqual(cfg.provider, "anthropic")
+        self.assertEqual(cfg.model, "claude-sonnet-4-6")
+        self.assertIsNone(cfg.reasoning_effort)
 
     def test_basic_uses_haiku(self):
-        use_openai, model = resolve_provider("basic")
-        self.assertFalse(use_openai)
-        self.assertEqual(model, "claude-haiku-4-5-20251001")
+        cfg = resolve_provider("basic")
+        self.assertEqual(cfg.provider, "anthropic")
+        self.assertEqual(cfg.model, "claude-haiku-4-5-20251001")
+        self.assertIsNone(cfg.reasoning_effort)
+
+    def test_pro_uses_gpt54_medium(self):
+        cfg = resolve_provider("pro")
+        self.assertEqual(cfg.provider, "openai")
+        self.assertEqual(cfg.model, "gpt-5.4")
+        self.assertEqual(cfg.reasoning_effort, "medium")
+
+    def test_max_uses_gpt55_high(self):
+        cfg = resolve_provider("max")
+        self.assertEqual(cfg.provider, "openai")
+        self.assertEqual(cfg.model, "gpt-5.5")
+        self.assertEqual(cfg.reasoning_effort, "high")
+
+    def test_unknown_falls_back_to_basic(self):
+        cfg = resolve_provider("nonsense")
+        self.assertEqual(cfg.provider, "anthropic")
+        self.assertEqual(cfg.model, "claude-haiku-4-5-20251001")
 
 
 class ExtractOpenAITextTests(unittest.TestCase):

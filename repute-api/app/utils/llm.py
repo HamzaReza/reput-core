@@ -8,6 +8,7 @@ importable in unit tests without the full app stack.
 from __future__ import annotations
 
 import re as _re
+from dataclasses import dataclass
 from types import SimpleNamespace
 from typing import Any
 
@@ -17,7 +18,7 @@ import openai
 OPENAI_STANDARD_MODEL = "gpt-5-mini"
 OPENAI_STANDARD_REASONING: dict[str, str] = {"effort": "high"}
 
-# Claude model per tier (standard never uses these — OpenAI handles it).
+# Claude model per tier (OpenAI-backed tiers never use these).
 _CLAUDE_ADVANCED_MODEL = "claude-sonnet-4-6"
 _CLAUDE_DEFAULT_MODEL = "claude-haiku-4-5-20251001"
 
@@ -40,15 +41,30 @@ _SECRET_PATTERNS: list[_re.Pattern[str]] = [
 ]
 
 
-def resolve_provider(scan_tier: str) -> tuple[bool, str]:
-    """Single source of truth for tier → (use_openai, claude_model).
+@dataclass(frozen=True)
+class TierConfig:
+    """Resolved provider/model for one scan tier."""
+    provider: str            # "openai" | "anthropic"
+    model: str
+    reasoning_effort: str | None   # OpenAI reasoning effort; None for Claude
 
-    standard → OpenAI (gpt-5-mini); advanced → claude-sonnet-4-6;
-    basic / anything else → claude-haiku-4-5-20251001.
+
+# Scan Mode tier → provider/model. basic/advanced are Claude; standard/pro/max are OpenAI.
+SCAN_TIERS: dict[str, TierConfig] = {
+    "basic": TierConfig("anthropic", _CLAUDE_DEFAULT_MODEL, None),
+    "standard": TierConfig("openai", OPENAI_STANDARD_MODEL, "high"),
+    "advanced": TierConfig("anthropic", _CLAUDE_ADVANCED_MODEL, None),
+    "pro": TierConfig("openai", "gpt-5.4", "medium"),
+    "max": TierConfig("openai", "gpt-5.5", "high"),
+}
+
+
+def resolve_provider(scan_tier: str) -> TierConfig:
+    """Single source of truth for Scan Mode tier → provider/model/effort.
+
+    Unknown tiers fall back to basic (Haiku).
     """
-    use_openai = scan_tier == "standard"
-    model = _CLAUDE_ADVANCED_MODEL if scan_tier == "advanced" else _CLAUDE_DEFAULT_MODEL
-    return use_openai, model
+    return SCAN_TIERS.get(scan_tier, SCAN_TIERS["basic"])
 
 
 def resolve_pre_analysis_provider(scan_tier: str) -> str:

@@ -21,8 +21,6 @@ from app.database import AsyncSessionLocal, get_db
 from app.models.lead import GenerateLeadJob, WebAnalyst
 from app.utils.auth import get_current_web_analyst
 from app.utils.llm import (
-    OPENAI_STANDARD_MODEL,
-    OPENAI_STANDARD_REASONING,
     extract_openai_text,
     is_transient_openai_error,
     resolve_provider,
@@ -1153,6 +1151,8 @@ async def _classify_with_openai(
     subject_type: str,
     language_name: str,
     scan_focus: str | None,
+    model: str,
+    reasoning: dict[str, str] | None,
     background: str | None = None,
     pre_analysis_profile: dict | None = None,
     max_attempts: int = 3,
@@ -1169,8 +1169,8 @@ async def _classify_with_openai(
     for attempt in range(max_attempts):
         try:
             response = await client.responses.create(
-                model=OPENAI_STANDARD_MODEL,
-                reasoning=OPENAI_STANDARD_REASONING,
+                model=model,
+                reasoning=reasoning,
                 max_output_tokens=64000,
                 input=prompt,
             )
@@ -1212,14 +1212,16 @@ async def _generate_meeting_summary_with_openai(
     score: int,
     links: list[dict],
     language_name: str,
+    model: str,
+    reasoning: dict[str, str] | None,
     max_attempts: int = 3,
 ) -> dict:
     system_prompt, prompt = _build_meeting_summary_prompt(name, score, links, language_name)
     for attempt in range(max_attempts):
         try:
             response = await client.responses.create(
-                model=OPENAI_STANDARD_MODEL,
-                reasoning=OPENAI_STANDARD_REASONING,
+                model=model,
+                reasoning=reasoning,
                 max_output_tokens=16000,
                 instructions=system_prompt,
                 input=prompt,
@@ -1261,7 +1263,7 @@ class GenerateLeadRequest(BaseModel):
     reportLanguage: str | None = None
     useKeywords: bool = True
     scanFocus: str | None = None
-    scanTier: Literal["basic", "standard", "advanced"] = "standard"
+    scanTier: Literal["basic", "standard", "advanced", "pro", "max"] = "standard"
     background: str | None = None
     preAnalysisProfile: dict | None = None
 
@@ -1280,7 +1282,10 @@ async def _execute_generate_lead(
     if not countries or (body.useKeywords and not body.keywords):
         raise ValueError("Required fields missing")
 
-    use_openai, tier_model = resolve_provider(body.scanTier)
+    tier_cfg = resolve_provider(body.scanTier)
+    use_openai = tier_cfg.provider == "openai"
+    tier_model = tier_cfg.model
+    tier_reasoning = {"effort": tier_cfg.reasoning_effort} if tier_cfg.reasoning_effort else None
 
     search_subject = (
         (body.company or "").strip()
@@ -1684,6 +1689,8 @@ async def _execute_generate_lead(
                     body.subjectType,
                     output_language_name,
                     body.scanFocus,
+                    tier_model,
+                    tier_reasoning,
                     background=body.background,
                     pre_analysis_profile=body.preAnalysisProfile,
                 )
@@ -1711,9 +1718,9 @@ async def _execute_generate_lead(
     _all_returned_urls = {item.get("url") for item in classified}
     _llm_dropped = [u for u in urls_sent_to_llm if u not in _all_returned_urls]
     scan_log["llm"] = {
-        "provider": "openai" if use_openai else "anthropic",
-        "model": OPENAI_STANDARD_MODEL if use_openai else tier_model,
-        "reasoningEffort": "high" if use_openai else None,
+        "provider": tier_cfg.provider,
+        "model": tier_cfg.model,
+        "reasoningEffort": tier_cfg.reasoning_effort,
         "scanFocus": body.scanFocus,
         "batches": [
             {
@@ -1772,7 +1779,8 @@ async def _execute_generate_lead(
         await _set_step(job_id, "generating_brief")
     if use_openai:
         summary = await _generate_meeting_summary_with_openai(
-            client, sanitized_subject, score, deduped, output_language_name
+            client, sanitized_subject, score, deduped, output_language_name,
+            tier_model, tier_reasoning,
         )
     else:
         summary = await _generate_meeting_summary(
@@ -1926,7 +1934,7 @@ async def generate_lead(
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     settings = get_settings()
-    if body.scanTier == "standard":
+    if resolve_provider(body.scanTier).provider == "openai":
         if not settings.openai_api_key:
             raise HTTPException(status_code=500, detail="OPENAI_API_KEY not configured")
     elif not settings.anthropic_api_key:

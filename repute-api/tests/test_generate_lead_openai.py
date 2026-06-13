@@ -125,7 +125,10 @@ class ClassifyFailModeTests(unittest.TestCase):
 
     def _run(self, client):
         return asyncio.run(
-            self.fn(client, ARTS, "n", ["US"], [], "individual", "English", None)
+            self.fn(
+                client, ARTS, "n", ["US"], [], "individual", "English", None,
+                "gpt-5-mini", {"effort": "high"},
+            )
         )
 
     def test_incomplete_raises_no_retry(self):
@@ -181,14 +184,14 @@ class MeetingRetryTests(unittest.TestCase):
         good = SimpleNamespace(status="completed", output_text='{"headline": "OK"}')
         client = SimpleNamespace(responses=SimpleNamespace(create=AsyncMock(
             side_effect=[openai.APITimeoutError(request=SimpleNamespace()), good])))
-        out = asyncio.run(self.fn(client, "n", 40, [], "English"))
+        out = asyncio.run(self.fn(client, "n", 40, [], "English", "gpt-5-mini", {"effort": "high"}))
         self.assertEqual(out["headline"], "OK")
         self.assertEqual(client.responses.create.call_count, 2)
 
     def test_incomplete_goes_straight_to_fallback_no_retry(self):
         client = SimpleNamespace(responses=SimpleNamespace(create=AsyncMock(
             return_value=SimpleNamespace(status="incomplete", incomplete_details=None, output_text=""))))
-        out = asyncio.run(self.fn(client, "n", 40, [], "English"))
+        out = asyncio.run(self.fn(client, "n", 40, [], "English", "gpt-5-mini", {"effort": "high"}))
         self.assertEqual(out["headline"], "FALLBACK")
         self.assertEqual(client.responses.create.call_count, 1)
 
