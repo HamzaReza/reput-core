@@ -14,6 +14,7 @@ import type {
   KeywordFocus,
   MeetingSummary,
   PreAnalysisProfile,
+  ResearchTier,
   RiskLevel,
   ScanTier,
   ScanLog,
@@ -82,7 +83,11 @@ const SCAN_TIER_VALUES: readonly ScanTier[] = [
   "basic",
   "standard",
   "advanced",
+  "pro",
+  "max",
 ];
+
+const RESEARCH_TIER_VALUES: readonly ResearchTier[] = ["basic", "advanced"];
 
 const KEYWORD_FOCUS_OPTIONS = [
   { value: "all", label: "All Coverage" },
@@ -274,6 +279,13 @@ function isScanTier(value: unknown): value is ScanTier {
   return (
     typeof value === "string" &&
     SCAN_TIER_VALUES.includes(value as ScanTier)
+  );
+}
+
+function isResearchTier(value: unknown): value is ResearchTier {
+  return (
+    typeof value === "string" &&
+    RESEARCH_TIER_VALUES.includes(value as ResearchTier)
   );
 }
 
@@ -670,6 +682,7 @@ function EaluminatePageInner() {
   const [useKeywords, setUseKeywords] = useState(true);
   const [scanFocus, setScanFocus] = useState<KeywordFocus>("all");
   const [scanTier, setScanTier] = useState<ScanTier>("standard");
+  const [researchTier, setResearchTier] = useState<ResearchTier>("basic");
 
   const [editableKeywords, setEditableKeywords] = useState<string[]>([]);
   const [keywordsReady, setKeywordsReady] = useState(false);
@@ -726,6 +739,7 @@ function EaluminatePageInner() {
     useKeywords,
     scanFocus,
     scanTier,
+    researchTier,
     countries,
     keywordsCap,
     pagesCap,
@@ -913,6 +927,7 @@ function EaluminatePageInner() {
                     keywordsCap: ctx.keywordsCap,
                     pagesCap: ctx.pagesCap,
                     scanTier: ctx.scanTier,
+                    researchTier: ctx.researchTier,
                   },
                 });
               } catch {
@@ -972,6 +987,7 @@ function EaluminatePageInner() {
       useKeywords,
       scanFocus,
       scanTier,
+      researchTier,
       countries,
       keywordsCap,
       pagesCap,
@@ -990,6 +1006,7 @@ function EaluminatePageInner() {
     useKeywords,
     scanFocus,
     scanTier,
+    researchTier,
     keywordsCap,
     pagesCap,
   ]);
@@ -1020,6 +1037,7 @@ function EaluminatePageInner() {
       pagesCap?: number;
       scanFocus?: string;
       scanTier?: ScanTier;
+      researchTier?: ResearchTier;
       keywords?: string[];
       keywordsReady?: boolean;
       preAnalysisDone?: boolean;
@@ -1048,6 +1066,7 @@ function EaluminatePageInner() {
     if (stored.scanFocus !== undefined)
       setScanFocus(stored.scanFocus as KeywordFocus);
     if (stored.scanTier !== undefined) setScanTier(stored.scanTier);
+    if (stored.researchTier !== undefined) setResearchTier(stored.researchTier);
     if (stored.keywords?.length) setEditableKeywords(stored.keywords);
     if (stored.keywordsReady) setKeywordsReady(true);
     if (stored.preAnalysisDone) setPreAnalysisDone(true);
@@ -1413,6 +1432,7 @@ function EaluminatePageInner() {
               else if (typeof d.country === "string" && d.country)
                 setCountries([d.country as string]);
               if (isScanTier(d.scanTier)) setScanTier(d.scanTier);
+              if (isResearchTier(d.researchTier)) setResearchTier(d.researchTier);
               if (d.keywordLength === null || d.keywordLength === 1 || d.keywordLength === 2 || d.keywordLength === 3)
                 setKeywordLength(d.keywordLength as KeywordLength);
               if (
@@ -1466,6 +1486,8 @@ function EaluminatePageInner() {
               setPagesCap(scanEvent.data.pagesCap as number);
             if (isScanTier(scanEvent?.data?.scanTier))
               setScanTier(scanEvent.data.scanTier);
+            if (isResearchTier(scanEvent?.data?.researchTier))
+              setResearchTier(scanEvent.data.researchTier);
           }
         } catch {
           /* non-fatal */
@@ -1787,7 +1809,8 @@ function EaluminatePageInner() {
             keywordLanguages.length > 0 ? keywordLanguages : undefined,
           subjectType,
           reportLanguage,
-          scanTier,
+          // Pre-analysis is the "research" phase — drive it with the research tier.
+          scanTier: researchTier,
         }),
       });
       if (res.status === 401) {
@@ -1847,6 +1870,7 @@ function EaluminatePageInner() {
             reportLanguage,
             countries,
             scanTier,
+            researchTier,
           },
         });
         if (cl.id) setClientId(cl.id);
@@ -1976,6 +2000,7 @@ function EaluminatePageInner() {
           pagesCap,
           scanFocus: scanFocus !== "all" ? scanFocus : undefined,
           scanTier,
+          researchTier,
           keywords: editableKeywords,
           keywordsReady: true,
           preAnalysisDone: true,
@@ -2230,6 +2255,8 @@ function EaluminatePageInner() {
           setScanFocus={setScanFocus}
           scanTier={scanTier}
           setScanTier={setScanTier}
+          researchTier={researchTier}
+          setResearchTier={setResearchTier}
           pipeline={
             <EaluminatePipelinePanel
               pipelineStep={pipelineStep}
