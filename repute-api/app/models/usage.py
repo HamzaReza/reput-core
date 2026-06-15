@@ -46,6 +46,8 @@ class LLMUsage(Base):
     provider: Mapped[str] = mapped_column(String(20), nullable=False)
     model: Mapped[str] = mapped_column(String(100), nullable=False)
     scan_tier: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    # who/what was researched (person or company); null for pre-drilldown rows
+    subject_label: Mapped[str | None] = mapped_column(String(255), nullable=True)
     input_tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     output_tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     # OpenAI reasoning tokens; informational only — already counted in output_tokens
