@@ -9,10 +9,20 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 def _split_allowed_origins(raw: str) -> list[str]:
     """Comma-separated URLs, or a JSON array string. Empty → localhost defaults."""
     if raw is None:
-        return ["http://localhost:3000", "http://127.0.0.1:3000"]
+        return [
+            "http://localhost:3000",
+            "http://127.0.0.1:3000",
+            "http://localhost:3001",
+            "http://127.0.0.1:3001",
+        ]
     s = str(raw).strip()
     if not s:
-        return ["http://localhost:3000", "http://127.0.0.1:3000"]
+        return [
+            "http://localhost:3000",
+            "http://127.0.0.1:3000",
+            "http://localhost:3001",
+            "http://127.0.0.1:3001",
+        ]
     if s.startswith("["):
         try:
             parsed = json.loads(s)
@@ -32,21 +42,26 @@ class Settings(BaseSettings):
     debug: bool = False
     #: Maps env ALLOWED_ORIGINS. Must be str — list[str] would make pydantic-settings call json.loads on the value (breaks on "" or comma-separated text).
     allowed_origins_raw: str = Field(
-        default="http://localhost:3000,http://127.0.0.1:3000",
+        default="http://localhost:3000,http://127.0.0.1:3000,http://localhost:3001,http://127.0.0.1:3001",
         validation_alias="ALLOWED_ORIGINS",
     )
     #: When True, allow any https://*.vercel.app origin (preview deploys). Use on staging only.
     cors_allow_vercel_previews: bool = True
 
     _allowed_origins: list[str] = PrivateAttr(
-        default_factory=lambda: ["http://localhost:3000", "http://127.0.0.1:3000"]
+        default_factory=lambda: [
+            "http://localhost:3000",
+            "http://127.0.0.1:3000",
+            "http://localhost:3001",
+            "http://127.0.0.1:3001",
+        ]
     )
 
     @field_validator("allowed_origins_raw", mode="before")
     @classmethod
     def empty_allowed_origins_raw(cls, v: Any) -> Any:
         if v is None or (isinstance(v, str) and not v.strip()):
-            return "http://localhost:3000,http://127.0.0.1:3000"
+            return "http://localhost:3000,http://127.0.0.1:3000,http://localhost:3001,http://127.0.0.1:3001"
         return v
 
     @model_validator(mode="after")
