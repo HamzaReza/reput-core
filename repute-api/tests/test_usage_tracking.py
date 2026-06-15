@@ -3,7 +3,7 @@ import unittest
 from types import SimpleNamespace
 
 from app.utils.llm import UsageTokens, extract_usage
-from app.utils.usage_tracking import compute_cost
+from app.utils.usage_tracking import compute_cost, normalize_subject
 
 
 class ExtractUsageTests(unittest.TestCase):
@@ -54,6 +54,20 @@ class ComputeCostTests(unittest.TestCase):
         # reasoning lives inside output; cost depends only on the output total
         u = UsageTokens(input=0, output=1_000_000, reasoning=600_000, total=1_000_000)
         self.assertAlmostEqual(compute_cost(u, 0.0, 30.0), 30.0)
+
+
+class NormalizeSubjectTests(unittest.TestCase):
+    def test_trims_whitespace(self):
+        self.assertEqual(normalize_subject("  Jane Doe  "), "Jane Doe")
+
+    def test_empty_blank_and_none_become_none(self):
+        self.assertIsNone(normalize_subject(""))
+        self.assertIsNone(normalize_subject("   "))
+        self.assertIsNone(normalize_subject(None))
+
+    def test_truncates_to_column_width(self):
+        result = normalize_subject("x" * 300)
+        self.assertEqual(len(result), 255)
 
 
 if __name__ == "__main__":

@@ -5,7 +5,7 @@ from types import SimpleNamespace
 
 from fastapi import HTTPException
 
-from app.routers.usage import _parse_range, _require_admin
+from app.routers.usage import _clamp_limit, _parse_range, _require_admin
 
 
 class RequireAdminTests(unittest.TestCase):
@@ -32,6 +32,18 @@ class ParseRangeTests(unittest.TestCase):
         start, end = _parse_range(None, "2026-06-30T00:00:00+00:00")
         self.assertEqual(end, datetime(2026, 6, 30, tzinfo=timezone.utc))
         self.assertEqual(start, end - timedelta(days=30))
+
+
+class ClampLimitTests(unittest.TestCase):
+    def test_within_range_unchanged(self):
+        self.assertEqual(_clamp_limit(200), 200)
+
+    def test_below_floor_clamped(self):
+        self.assertEqual(_clamp_limit(0), 1)
+        self.assertEqual(_clamp_limit(-5), 1)
+
+    def test_above_ceiling_clamped(self):
+        self.assertEqual(_clamp_limit(99999), 1000)
 
 
 if __name__ == "__main__":

@@ -1,3 +1,4 @@
+import uuid
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -29,6 +30,11 @@ def _parse_range(frm: str | None, to: str | None) -> tuple[datetime, datetime]:
     end = _utc(to) if to else now
     start = _utc(frm) if frm else end - timedelta(days=30)
     return start, end
+
+
+def _clamp_limit(limit: int, lo: int = 1, hi: int = 1000) -> int:
+    """Bound the call-log page size to a safe range."""
+    return max(lo, min(limit, hi))
 
 
 @router.get("/summary")
@@ -151,6 +157,112 @@ async def usage_by_analyst(
             }
             for (wid, name, email, cost, tokens, scans, calls) in rows
         ]
+    }
+
+
+@router.get("/by-analyst/{analyst_id}")
+async def usage_by_analyst_detail(
+    analyst_id: uuid.UUID,
+    frm: str | None = Query(None, alias="from"),
+    to: str | None = Query(None, alias="to"),
+    limit: int = Query(200),
+    db: AsyncSession = Depends(get_db),
+    current_web_analyst: WebAnalyst = Depends(get_current_web_analyst),
+) -> dict:
+    """Per-analyst drill-down: spend grouped by researched subject + a call log."""
+    _require_admin(current_web_analyst)
+    analyst = await db.get(WebAnalyst, analyst_id)
+    if analyst is None:
+        raise HTTPException(status_code=404, detail="Analyst not found")
+    start, end = _parse_range(frm, to)
+    limit = _clamp_limit(limit)
+    window = (
+        LLMUsage.web_analyst_id == analyst_id,
+        LLMUsage.created_at >= start,
+        LLMUsage.created_at <= end,
+    )
+
+    totals = (
+        await db.execute(
+            select(
+                func.coalesce(func.sum(LLMUsage.total_tokens), 0),
+                func.coalesce(func.sum(LLMUsage.cost_usd), 0),
+                func.count(LLMUsage.id),
+                func.count(func.distinct(LLMUsage.job_id)),
+            ).where(*window)
+        )
+    ).one()
+
+    by_subject = (
+        await db.execute(
+            select(
+                LLMUsage.subject_label,
+                func.sum(LLMUsage.cost_usd),
+                func.sum(LLMUsage.total_tokens),
+                func.count(LLMUsage.id),
+            )
+            .where(*window)
+            .group_by(LLMUsage.subject_label)
+            .order_by(func.sum(LLMUsage.cost_usd).desc())
+        )
+    ).all()
+
+    calls = (
+        await db.execute(
+            select(
+                LLMUsage.created_at,
+                LLMUsage.subject_label,
+                LLMUsage.operation,
+                LLMUsage.provider,
+                LLMUsage.model,
+                LLMUsage.scan_tier,
+                LLMUsage.total_tokens,
+                LLMUsage.cost_usd,
+                LLMUsage.job_id,
+            )
+            .where(*window)
+            .order_by(LLMUsage.created_at.desc())
+            .limit(limit)
+        )
+    ).all()
+
+    return {
+        "analyst": {
+            "id": str(analyst.id),
+            "name": analyst.name,
+            "email": analyst.email,
+        },
+        "from": start.isoformat(),
+        "to": end.isoformat(),
+        "totals": {
+            "totalTokens": int(totals[0]),
+            "costUsd": float(totals[1]),
+            "calls": int(totals[2]),
+            "scans": int(totals[3]),
+        },
+        "bySubject": [
+            {
+                "subject": subj,
+                "costUsd": float(cost),
+                "totalTokens": int(tokens),
+                "calls": int(n),
+            }
+            for (subj, cost, tokens, n) in by_subject
+        ],
+        "calls": [
+            {
+                "createdAt": created.isoformat(),
+                "subject": subj,
+                "operation": op,
+                "provider": prov,
+                "model": model,
+                "scanTier": tier,
+                "totalTokens": int(tokens),
+                "costUsd": float(cost),
+                "jobId": str(job_id) if job_id else None,
+            }
+            for (created, subj, op, prov, model, tier, tokens, cost, job_id) in calls
+        ],
     }
 
 

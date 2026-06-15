@@ -664,6 +664,32 @@ export interface PricingRate {
   effectiveFrom: string;
 }
 
+export interface UsageSubjectRow {
+  subject: string | null;
+  costUsd: number;
+  totalTokens: number;
+  calls: number;
+}
+export interface UsageCallRow {
+  createdAt: string;
+  subject: string | null;
+  operation: string;
+  provider: string;
+  model: string;
+  scanTier: string | null;
+  totalTokens: number;
+  costUsd: number;
+  jobId: string | null;
+}
+export interface UsageAnalystDetail {
+  analyst: { id: string; name: string; email: string };
+  from: string;
+  to: string;
+  totals: { totalTokens: number; costUsd: number; calls: number; scans: number };
+  bySubject: UsageSubjectRow[];
+  calls: UsageCallRow[];
+}
+
 function usageQuery(from?: string, to?: string, extra?: Record<string, string>): string {
   const params = new URLSearchParams();
   if (from) params.set("from", from);
@@ -678,6 +704,12 @@ export const usage = {
     request<UsageSummary>(`/usage/summary${usageQuery(from, to)}`, {}, true),
   byAnalyst: (from?: string, to?: string) =>
     request<{ analysts: UsageAnalystRow[] }>(`/usage/by-analyst${usageQuery(from, to)}`, {}, true),
+  byAnalystDetail: (analystId: string, from?: string, to?: string, limit?: number) =>
+    request<UsageAnalystDetail>(
+      `/usage/by-analyst/${analystId}${usageQuery(from, to, limit ? { limit: String(limit) } : undefined)}`,
+      {},
+      true,
+    ),
   timeseries: (from?: string, to?: string, bucket: "day" | "week" = "day", tz = "UTC") =>
     request<UsageTimeseries>(`/usage/timeseries${usageQuery(from, to, { bucket, tz })}`, {}, true),
   pricing: {

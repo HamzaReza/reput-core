@@ -19,6 +19,7 @@ import {
   type UsageTimeseries,
   type PricingRate,
 } from "@/lib/api";
+import AnalystUsageModal from "./AnalystUsageModal";
 
 const RANGES = [
   { label: "7d", days: 7 },
@@ -75,6 +76,9 @@ export default function TokenUsageSection() {
   const [rates, setRates] = useState<PricingRate[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [selected, setSelected] = useState<UsageAnalystRow | null>(null);
+  // set synchronously in load() before any row is clickable, so the modal never opens with an empty range
+  const [range, setRange] = useState<{ from: string; to: string }>({ from: "", to: "" });
   const genRef = useRef(0);
 
   // Resolve the browser zone client-side only — avoids an SSR/hydration mismatch.
@@ -90,6 +94,7 @@ export default function TokenUsageSection() {
       const now = new Date();
       const to = now.toISOString();
       const from = new Date(now.getTime() - days * 86400000).toISOString();
+      setRange({ from, to });
       const [s, a, t, p] = await Promise.all([
         usage.summary(from, to),
         usage.byAnalyst(from, to),
@@ -203,6 +208,7 @@ export default function TokenUsageSection() {
       {/* ── Per-analyst accountability ── */}
       <div className="glass glow-border" style={{ ...cardStyle, marginBottom: "1rem" }}>
         <p style={labelStyle}>Usage by Analyst</p>
+        <p style={{ fontSize: "0.72rem", color: "#94a3b8", margin: "0.2rem 0 0" }}>Click a row to see what the tokens were spent on.</p>
         <div style={{ overflowX: "auto", marginTop: "0.75rem" }}>
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
             <thead>
@@ -219,7 +225,14 @@ export default function TokenUsageSection() {
                 <tr><td style={{ ...tdStyle, color: "#94a3b8" }} colSpan={5}>No usage recorded in this period.</td></tr>
               )}
               {analysts.map((a) => (
-                <tr key={a.webAnalystId}>
+                <tr
+                  key={a.webAnalystId}
+                  onClick={() => setSelected(a)}
+                  title="View what the tokens were spent on"
+                  style={{ cursor: "pointer" }}
+                  onMouseOver={(e) => (e.currentTarget.style.background = "#f8fafc")}
+                  onMouseOut={(e) => (e.currentTarget.style.background = "transparent")}
+                >
                   <td style={tdStyle}>
                     <div style={{ fontWeight: 600 }}>{a.name}</div>
                     <div style={{ fontSize: "0.7rem", color: "#94a3b8" }}>{a.email}</div>
@@ -237,6 +250,16 @@ export default function TokenUsageSection() {
 
       {/* ── Pricing editor ── */}
       <PricingEditor rates={rates} onChange={load} />
+
+      {selected && (
+        <AnalystUsageModal
+          analyst={selected}
+          from={range.from}
+          to={range.to}
+          tz={tz}
+          onClose={() => setSelected(null)}
+        />
+      )}
     </div>
   );
 }

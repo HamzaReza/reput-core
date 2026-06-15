@@ -39,6 +39,13 @@ def compute_cost(usage: UsageTokens, input_rate: float, output_rate: float) -> f
     return usage.input / 1_000_000 * input_rate + usage.output / 1_000_000 * output_rate
 
 
+def normalize_subject(subject_label: str | None) -> str | None:
+    """Trim and cap the researched-subject label to the column width; '' → None."""
+    if not subject_label:
+        return None
+    return subject_label.strip()[:255] or None
+
+
 async def record_llm_usage(
     *,
     web_analyst_id: uuid.UUID | None,
@@ -48,6 +55,7 @@ async def record_llm_usage(
     model: str,
     scan_tier: str | None,
     usage: UsageTokens | None,
+    subject_label: str | None = None,
 ) -> None:
     """Insert one llm_usage row with a cost snapshot priced at the effective rate.
     Never raises — a tracking failure must not break the scan it measures."""
@@ -70,6 +78,7 @@ async def record_llm_usage(
                     provider=provider,
                     model=model,
                     scan_tier=scan_tier,
+                    subject_label=normalize_subject(subject_label),
                     input_tokens=usage.input,
                     output_tokens=usage.output,
                     reasoning_tokens=usage.reasoning,
