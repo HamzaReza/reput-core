@@ -44,7 +44,7 @@ docker compose up --build
 ```
 
 This starts:
-- **PostgreSQL 16** on `localhost:5432`
+- **PostgreSQL 16** on `localhost:5433` (container port 5432, remapped to avoid clashing with a locally installed Postgres)
 - **repute-api** on `http://localhost:8000` (API docs at `/docs`)
 - **pgAdmin 4** on `http://localhost:5050`
 
