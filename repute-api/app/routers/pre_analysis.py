@@ -11,9 +11,11 @@ from app.config import get_settings
 from app.models.lead import WebAnalyst
 from app.utils.auth import get_current_web_analyst
 from app.utils.llm import (
+    extract_usage,
     resolve_pre_analysis_provider,
     summarize_usage,
 )
+from app.utils.usage_tracking import record_llm_usage
 
 router = APIRouter(prefix="/pre-analysis", tags=["pre-analysis"])
 
@@ -259,7 +261,7 @@ class PreAnalysisRequest(BaseModel):
 @router.post("")
 async def pre_analysis(
     body: PreAnalysisRequest,
-    _analyst: WebAnalyst = Depends(get_current_web_analyst),
+    analyst: WebAnalyst = Depends(get_current_web_analyst),
 ) -> dict:
     settings = get_settings()
     # Pre-analysis runs on Claude only: basic + standard → Haiku, advanced → Sonnet.
@@ -508,6 +510,25 @@ async def pre_analysis(
                 print(f"[pre-analysis] non-text block[{i}]: type={block.type!r}")
 
         print(f"[pre-analysis] search usage — {summarize_usage(getattr(search_msg, 'usage', None))}")
+        await record_llm_usage(
+            web_analyst_id=analyst.id,
+            job_id=None,
+            operation="pre_analysis_research",
+            provider="anthropic",
+            model=model,
+            scan_tier=body.scanTier,
+            usage=extract_usage(getattr(search_msg, "usage", None)),
+        )
+        if not isinstance(neg_result, Exception):
+            await record_llm_usage(
+                web_analyst_id=analyst.id,
+                job_id=None,
+                operation="pre_analysis_negative",
+                provider="anthropic",
+                model=model,
+                scan_tier=body.scanTier,
+                usage=extract_usage(getattr(neg_result, "usage", None)),
+            )
 
         research_summary = "\n".join(
             block.text for block in search_msg.content if block.type == "text"
@@ -633,6 +654,15 @@ async def pre_analysis(
         )
 
         print(f"[pre-analysis] format usage — {summarize_usage(getattr(format_msg, 'usage', None))}")
+        await record_llm_usage(
+            web_analyst_id=analyst.id,
+            job_id=None,
+            operation="pre_analysis_keywords",
+            provider="anthropic",
+            model=model,
+            scan_tier=body.scanTier,
+            usage=extract_usage(getattr(format_msg, "usage", None)),
+        )
 
         text_block = next((b for b in format_msg.content if b.type == "text"), None)
         if text_block:

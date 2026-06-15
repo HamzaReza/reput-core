@@ -8,6 +8,7 @@ import {
   ResponsiveContainer, PieChart, Pie, Cell, BarChart, Bar,
 } from "recharts";
 import { ComposableMap, Geographies, Geography } from "react-simple-maps";
+import TokenUsageSection from "./_components/TokenUsageSection";
 
 // ── Geo map ───────────────────────────────────────────────────────────────────
 const GEO_URL = "https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json";
@@ -475,6 +476,8 @@ export default function AnalyticsPage() {
           </button>
         </SectionCard>
       </div>
+
+      <TokenUsageSection />
 
     </div>
   );

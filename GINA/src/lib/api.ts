@@ -618,6 +618,81 @@ export const dashboard = {
   activityByRegion: () => request<ActivityByRegionData>("/dashboard/activity-by-region", {}, true),
 };
 
+// ── LLM usage & cost (admin-only) ─────────────────────────────────────────────
+
+export interface UsageTotals {
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+  costUsd: number;
+  calls: number;
+  scans: number;
+}
+export interface UsageSummary {
+  from: string;
+  to: string;
+  totals: UsageTotals;
+  byProvider: { provider: string; costUsd: number; totalTokens: number }[];
+  byModel: { model: string; provider: string; costUsd: number; totalTokens: number; calls: number }[];
+}
+export interface UsageAnalystRow {
+  webAnalystId: string;
+  name: string;
+  email: string;
+  costUsd: number;
+  totalTokens: number;
+  scans: number;
+  calls: number;
+}
+export interface UsageTimeseriesPoint {
+  bucket: string;
+  costUsd: number;
+  totalTokens: number;
+  calls: number;
+}
+export interface UsageTimeseries {
+  tz: string;
+  bucket: string;
+  points: UsageTimeseriesPoint[];
+}
+export interface PricingRate {
+  id: string;
+  model: string;
+  provider: string;
+  inputRate: number;
+  outputRate: number;
+  effectiveFrom: string;
+}
+
+function usageQuery(from?: string, to?: string, extra?: Record<string, string>): string {
+  const params = new URLSearchParams();
+  if (from) params.set("from", from);
+  if (to) params.set("to", to);
+  if (extra) for (const [k, v] of Object.entries(extra)) params.set(k, v);
+  const qs = params.toString();
+  return qs ? `?${qs}` : "";
+}
+
+export const usage = {
+  summary: (from?: string, to?: string) =>
+    request<UsageSummary>(`/usage/summary${usageQuery(from, to)}`, {}, true),
+  byAnalyst: (from?: string, to?: string) =>
+    request<{ analysts: UsageAnalystRow[] }>(`/usage/by-analyst${usageQuery(from, to)}`, {}, true),
+  timeseries: (from?: string, to?: string, bucket: "day" | "week" = "day", tz = "UTC") =>
+    request<UsageTimeseries>(`/usage/timeseries${usageQuery(from, to, { bucket, tz })}`, {}, true),
+  pricing: {
+    list: () => request<{ rates: PricingRate[] }>("/usage/pricing", {}, true),
+    add: (data: {
+      model: string;
+      provider: string;
+      inputRate: number;
+      outputRate: number;
+      effectiveFrom?: string;
+    }) =>
+      request<PricingRate>("/usage/pricing", { method: "POST", body: JSON.stringify(data) }, true),
+  },
+};
+
 // ── Leads types & endpoints ───────────────────────────────────────────────────
 
 export interface LeadCreatePayload {
