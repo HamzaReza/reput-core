@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
 from app.database import engine, Base
-from app.routers import auth, users, reputation, quotes, contracts, meetings, feedback, dashboard, leads, web_analysts, clients, pre_analysis, generate_lead, usage
+from app.routers import auth, users, reputation, quotes, contracts, meetings, feedback, dashboard, leads, web_analysts, clients, pre_analysis, generate_lead, usage, export_pdf
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
@@ -108,6 +108,7 @@ app.include_router(clients.router, prefix=API_PREFIX)
 app.include_router(pre_analysis.router, prefix=API_PREFIX)
 app.include_router(generate_lead.router, prefix=API_PREFIX)
 app.include_router(usage.router, prefix=API_PREFIX)
+app.include_router(export_pdf.router, prefix=API_PREFIX)
 
 
 @app.get("/health", tags=["health"])

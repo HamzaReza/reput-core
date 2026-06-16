@@ -1632,6 +1632,9 @@ function EaluminatePageInner() {
       // exclude soft-deleted links from the rendered link list
       result: result ? { ...result, links: (result.links ?? []).filter((l) => !l.deletedAt) } : result,
       selectedFields,
+    }).catch((err) => {
+      console.error("Summary export failed", err);
+      alert("Failed to export summary. Please try again.");
     });
   };
 
@@ -1646,6 +1649,9 @@ function EaluminatePageInner() {
       preAnalysisSummary,
       editableKeywords,
       selectedFields,
+    }).catch((err) => {
+      console.error("Report export failed", err);
+      alert("Failed to export report. Please try again.");
     });
   };
 

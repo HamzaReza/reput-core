@@ -1,4 +1,5 @@
 import type { PreAnalysisProfile, ScanResult } from "../_components/types";
+import { requestPdfExport, wrapHtmlDocument } from "@/lib/exportPdf";
 
 interface ExportSummaryPdfParams {
   fullName: string;
@@ -98,77 +99,6 @@ async function fetchLogoBase64(src: string): Promise<string> {
   });
 }
 
-async function downloadAsPdf(
-  css: string,
-  bodyHtml: string,
-  filename: string,
-): Promise<void> {
-  const { default: html2canvas } = await import("html2canvas");
-  const { jsPDF } = await import("jspdf");
-
-  const style = document.createElement("style");
-  style.textContent = css;
-  document.head.appendChild(style);
-
-  const container = document.createElement("div");
-  container.style.cssText =
-    "position:fixed;left:-9999px;top:0;z-index:-1;background:#f0f4f8;";
-  container.innerHTML = bodyHtml;
-  document.body.appendChild(container);
-
-  // Wait for all images to fully load before capturing
-  await Promise.all(
-    Array.from(container.querySelectorAll("img")).map((img) =>
-      img.complete
-        ? Promise.resolve()
-        : new Promise<void>((resolve) => {
-            img.onload = () => resolve();
-            img.onerror = () => resolve();
-          }),
-    ),
-  );
-
-  const page = container.querySelector(".page") as HTMLElement;
-
-  try {
-    const canvas = await html2canvas(page, {
-      scale: 2,
-      useCORS: true,
-      allowTaint: true,
-      logging: false,
-      backgroundColor: "#ffffff",
-    });
-
-    const imgData = canvas.toDataURL("image/jpeg", 0.95);
-    const pdf = new jsPDF({
-      orientation: "portrait",
-      unit: "mm",
-      format: "a4",
-    });
-    const pdfW = pdf.internal.pageSize.getWidth();
-    const pdfH = pdf.internal.pageSize.getHeight();
-    const imgH = (canvas.height / canvas.width) * pdfW;
-
-    let remaining = imgH;
-    let yOffset = 0;
-
-    pdf.addImage(imgData, "JPEG", 0, yOffset, pdfW, imgH);
-    remaining -= pdfH;
-
-    while (remaining > 0) {
-      yOffset -= pdfH;
-      pdf.addPage();
-      pdf.addImage(imgData, "JPEG", 0, yOffset, pdfW, imgH);
-      remaining -= pdfH;
-    }
-
-    pdf.save(filename);
-  } finally {
-    document.head.removeChild(style);
-    document.body.removeChild(container);
-  }
-}
-
 export async function exportSummaryPdf(
   params: ExportSummaryPdfParams,
 ): Promise<void> {
@@ -249,15 +179,18 @@ export async function exportSummaryPdf(
       : `<p style="color:#94a3b8;font-size:0.8125rem;">No links available.</p>`;
 
   const css = `
+  @page { size: A4; margin: 24px 0 0 0; }
+  @page :first { margin-top: 0; }
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   .page {
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
-    width: 794px;
+    width: 100%;
     background: #ffffff;
     color: #1e293b;
     display: flex;
     flex-direction: column;
   }
+  .link-row, .profile-field, .score-block { page-break-inside: avoid; }
   .header {
     background: #4479DA;
     padding: 2.5rem 2.5rem 2rem;
@@ -490,11 +423,10 @@ export async function exportSummaryPdf(
     </div>
   </div>`;
 
-  await downloadAsPdf(
-    css,
-    bodyHtml,
-    `ealuminate-report-${sanitize(fullName)}.pdf`,
-  );
+  await requestPdfExport({
+    html: wrapHtmlDocument(css, bodyHtml),
+    filename: `ealuminate-report-${sanitize(fullName)}.pdf`,
+  });
 }
 
 export async function exportReportMasterPdf(
@@ -558,15 +490,18 @@ export async function exportReportMasterPdf(
       : `<span style="color:#94a3b8;font-size:0.8125rem;">No keywords.</span>`;
 
   const css = `
+  @page { size: A4; margin: 24px 0 0 0; }
+  @page :first { margin-top: 0; }
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   .page {
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
-    width: 794px;
+    width: 100%;
     background: #ffffff;
     color: #1e293b;
     display: flex;
     flex-direction: column;
   }
+  .link-row, .profile-field, .score-block { page-break-inside: avoid; }
   .header {
     background: #4479DA;
     padding: 2.5rem 2.5rem 2rem;
@@ -790,5 +725,8 @@ export async function exportReportMasterPdf(
     </div>
   </div>`;
 
-  await downloadAsPdf(css, bodyHtml, `report-master-${sanitize(fullName)}.pdf`);
+  await requestPdfExport({
+    html: wrapHtmlDocument(css, bodyHtml),
+    filename: `report-master-${sanitize(fullName)}.pdf`,
+  });
 }

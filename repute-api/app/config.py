@@ -92,6 +92,7 @@ class Settings(BaseSettings):
     serper_api_key: str = Field(default="", validation_alias="SERPER_API_KEY")
     firecrawl_api_key: str = Field(default="", validation_alias="FIRECRAWL_API_KEY")
     openai_api_key: str = Field(default="", validation_alias="OPENAI_API_KEY")
+    browserless_api_key: str = Field(default="", validation_alias="BROWSERLESS_API_KEY")
 
     @property
     def async_database_url(self) -> str:
